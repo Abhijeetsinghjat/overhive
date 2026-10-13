@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Amc.Cli/Amc.Cli.csproj" />
+    <Project Path="src/Amc.Core/Amc.Core.csproj" />
+    <Project Path="src/Amc.Daemon/Amc.Daemon.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Amc.Tests/Amc.Tests.csproj" />
+  </Folder>
+</Solution>

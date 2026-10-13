@@ -1,0 +1,15 @@
+Overhive
+Copyright 2026 The Overhive Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes third-party software:
+
+- xterm.js and @xterm/addon-fit — MIT License — Copyright (c) 2017-2019 The xterm.js authors,
+  Copyright (c) 2014-2016 SourceLair Private Company. Licence texts: src/Amc.Daemon/wwwroot/vendor/*/LICENSE
+- .NET runtime, ASP.NET Core, Microsoft.Data.Sqlite — MIT License — Copyright (c) .NET Foundation and Contributors
+- SQLitePCLRaw — Apache License 2.0 — Copyright (c) Eric Sink
+- SQLite — public domain
+
+Product and tool names (Claude Code, Codex, Gemini CLI, Grok, Cursor, GitHub Copilot, Aider, OpenCode)
+are trademarks of their respective owners and are used only to describe compatibility.

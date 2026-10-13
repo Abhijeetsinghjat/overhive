@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="amc-token" content="__AMC_TOKEN__">
+<meta name="color-scheme" content="dark light">
+<title>Overhive</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/vendor/xterm/xterm.css">
+<link rel="stylesheet" href="/css/app.css">
+<script type="module" src="/js/main.js"></script>
+</head>
+<body>
+<div id="app">
+  <div id="sim-banner" class="sim-banner" hidden></div>
+  <header id="header" class="header"></header>
+  <div id="filterbar" class="filterbar"></div>
+  <div id="conflict-banner" class="conflict-banner" hidden></div>
+  <main id="main" class="main">
+    <aside id="left" class="left" aria-label="Agents"></aside>
+    <section id="center" class="center">
+      <div class="center-bar">
+        <button id="toggle-left" class="pane-toggle" type="button" title="Show/hide the agent tree" aria-label="Toggle agent tree">☰</button>
+        <nav id="tabs" class="tabs" role="tablist"></nav>
+        <button id="toggle-right" class="pane-toggle" type="button" title="Show/hide the details panel" aria-label="Toggle details">ⓘ</button>
+      </div>
+      <div id="views" class="views">
+        <div id="view-graph" class="view" data-tab="graph"></div>
+        <div id="view-worktrees" class="view" data-tab="worktrees"></div>
+        <div id="view-activity" class="view" data-tab="activity"></div>
+        <div id="view-timeline" class="view" data-tab="timeline"></div>
+        <div id="view-commits" class="view" data-tab="commits"></div>
+        <div id="view-processes" class="view" data-tab="processes"></div>
+        <div id="view-usage" class="view" data-tab="usage"></div>
+        <div id="view-health" class="view" data-tab="health"></div>
+      </div>
+    </section>
+    <aside id="right" class="right" aria-label="Details"></aside>
+  </main>
+  <div id="scrim" class="scrim" hidden></div>
+  <section id="drawer" class="drawer" aria-label="Drawer"></section>
+</div>
+<noscript>Overhive needs JavaScript (ES modules).</noscript>
+</body>
+</html>

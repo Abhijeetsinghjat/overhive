@@ -1,0 +1,8 @@
+bin/
+obj/
+*.db
+*.db-*
+.vs/
+.idea/
+TestResults/
+dist/

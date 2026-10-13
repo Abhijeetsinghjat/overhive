@@ -1,0 +1,23 @@
+# systemd user unit for the Overhive daemon.
+# Installed by scripts/install.sh into ~/.config/systemd/user/ and enabled for default.target,
+# so it starts when you log in. Logs: journalctl --user -u amcd -f
+[Unit]
+Description=Overhive daemon (mission control for local AI coding agents)
+Documentation=file://%h/dev/agent-mission-control/README.md
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/amcd
+Restart=on-failure
+RestartSec=3
+# Daemon sets umask 077 itself; this keeps any early files private too.
+UMask=0077
+# Graceful shutdown lets the pipeline flush and write a final snapshot.
+KillSignal=SIGTERM
+# Sessions started from the dashboard are children of the daemon: keep them running across daemon restarts.
+KillMode=process
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

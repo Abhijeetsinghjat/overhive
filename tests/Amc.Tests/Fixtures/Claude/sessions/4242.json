@@ -1,0 +1,1 @@
+{"pid": 4242, "sessionId": "5e55a0aa-0000-4000-8000-000000000001", "cwd": "/work/repo", "startedAt": 1791367200000, "procStart": "987654", "version": "2.1.292", "kind": "interactive", "entrypoint": "cli", "name": "greeting-session", "nameSource": "derived", "status": "busy", "updatedAt": 1791367260000, "statusUpdatedAt": 1791367260000}

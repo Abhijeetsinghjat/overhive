@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Overhive">
+  <title>Overhive</title>
+  <!-- Three hive cells; the centre cell holds the watching eye. -->
+  <g fill="none" stroke="#E8A33D" stroke-width="3.2" stroke-linejoin="round">
+    <path d="M32 6 L45 13.5 L45 28.5 L32 36 L19 28.5 L19 13.5 Z"/>
+    <path d="M17.5 31 L30.5 38.5 L30.5 53.5 L17.5 61 L4.5 53.5 L4.5 38.5 Z" opacity=".55"/>
+    <path d="M46.5 31 L59.5 38.5 L59.5 53.5 L46.5 61 L33.5 53.5 L33.5 38.5 Z" opacity=".55"/>
+  </g>
+  <ellipse cx="32" cy="21" rx="8.2" ry="5.2" fill="none" stroke="#E8A33D" stroke-width="2.6"/>
+  <circle cx="32" cy="21" r="2.6" fill="#E8A33D"/>
+</svg>
