@@ -12,7 +12,6 @@
   #b3 { background: radial-gradient(circle, #19b39b 0%, transparent 65%); opacity: .35; }
   #grid { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 28px 28px;
           mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%); }
-  #grain { position: absolute; inset: 0; opacity: .08; mix-blend-mode: overlay; }
 
   #window { position: absolute; left: 50%; top: 50px; width: 1504px; margin-left: -752px; border-radius: 16px; overflow: hidden;
             background: #12151c; border: 1px solid rgba(255,255,255,.12);
@@ -48,7 +47,7 @@
 </style></head>
 <body>
   <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div><div class="blob" id="b3"></div><div id="grid"></div>
-    <svg id="grain" width="1920" height="1080"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg></div>
+</div>
 
   <div class="card" id="intro">
     <img src="logo.svg" alt="">
@@ -95,7 +94,7 @@ function camFor(step) {
   const base = CONTENT_W / D.width; // fit the 1440 px screenshot to the window
   if (!step || !step.rect) return { z: base, x: 0, y: 0 };
   const r = step.rect, pad = 70;
-  const z = base * clamp(Math.min(D.width / (r.w + pad * 2), D.height / (r.h + pad * 2)), 1, 2.1);
+  const z = base * clamp(Math.min(D.width / (r.w + pad * 2), D.height / (r.h + pad * 2)), 1, 1.8);
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
   const x = clamp(CONTENT_W / 2 - cx * z, CONTENT_W - D.width * z, 0);
   const y = clamp(CONTENT_H / 2 - cy * z, CONTENT_H - D.height * z, 0);
@@ -118,10 +117,11 @@ function mouseAt(t) {
 
 window.render = async (T) => {
   const total = INTRO + D.duration + OUTRO, t = T - INTRO;
-  // background drift
-  $('b1').style.transform = `translate(${-200 + 180 * Math.sin(T * .23)}px, ${-300 + 120 * Math.cos(T * .19)}px)`;
-  $('b2').style.transform = `translate(${1100 + 160 * Math.cos(T * .21)}px, ${300 + 140 * Math.sin(T * .17)}px)`;
-  $('b3').style.transform = `translate(${400 + 200 * Math.sin(T * .15 + 1)}px, ${500 + 100 * Math.cos(T * .25)}px)`;
+  // background drift: only on the title and closing cards, frozen behind the app (keeps the video small and sharp)
+  const tb = T < INTRO ? T : T > INTRO + D.duration ? T - D.duration : INTRO;
+  $('b1').style.transform = `translate(${-200 + 180 * Math.sin(tb * .23)}px, ${-300 + 120 * Math.cos(tb * .19)}px)`;
+  $('b2').style.transform = `translate(${1100 + 160 * Math.cos(tb * .21)}px, ${300 + 140 * Math.sin(tb * .17)}px)`;
+  $('b3').style.transform = `translate(${400 + 200 * Math.sin(tb * .15 + 1)}px, ${500 + 100 * Math.cos(tb * .25)}px)`;
 
   // intro and outro cards
   const inK = easeOut(T / .9), outK = 1 - ease((T - 2.3) / .7);

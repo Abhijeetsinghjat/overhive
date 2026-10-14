@@ -31,10 +31,15 @@ const repo = path.resolve(__dirname, '../..');
   }
   await b.close();
 
-  const ff = (...a) => execFileSync(ffmpeg, ['-loglevel', 'error', '-y', ...a], { stdio: 'inherit' });
-  ff('-framerate', String(FPS), '-i', path.join(out, '%05d.jpg'), '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
-     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', path.join(DIR, 'overhive-demo.mp4'));
-  ff('-i', path.join(DIR, 'overhive-demo.mp4'), '-vf', 'fps=15,scale=1120:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '68',
-     '-compression_level', '2', '-loop', '0', '-an', path.join(DIR, 'overhive-demo.webp'));
+  const ff = (...a) => execFileSync(ffmpeg, ['-loglevel', 'error', '-y', ...a], { stdio: 'inherit', cwd: DIR });
+  const frames = ['-framerate', String(FPS), '-i', path.join(out, '%05d.jpg')];
+  // MP4: two-pass to just under 9.5 MB, the most quality that still fits GitHub's 10 MB video upload limit.
+  const kbps = Math.floor((9.5 * 8 * 1000) / total * 0.97);
+  const x264 = ['-c:v', 'libx264', '-preset', 'veryslow', '-b:v', `${kbps}k`, '-pix_fmt', 'yuv420p'];
+  ff(...frames, ...x264, '-pass', '1', '-an', '-f', 'mp4', '/dev/null');
+  ff(...frames, ...x264, '-pass', '2', '-movflags', '+faststart', path.join(DIR, 'overhive-demo.mp4'));
+  // Animated WebP for places that cannot play video, encoded from the frames (not from the MP4).
+  ff(...frames, '-vf', 'fps=15,scale=1280:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '80',
+     '-compression_level', '3', '-loop', '0', path.join(DIR, 'overhive-demo.webp'));
   console.log('done', n, 'frames');
 })().catch((e) => { console.error(e); process.exit(1); });

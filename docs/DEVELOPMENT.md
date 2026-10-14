@@ -79,7 +79,7 @@ through the open protocol and make real changes in a sample repository.
 ```bash
 cd scripts/demo && npm i --no-save puppeteer-core ffmpeg-static   # recording tools only; not shipped
 ./setup.sh                      # demo instance on http://127.0.0.1:47900 with a sample repo and agents
-node record.js /tmp/ovh-demo    # pass 1: scripted tour, timestamped 1.5x screenshots, mouse path, steps
+node record.js /tmp/ovh-demo    # pass 1: scripted tour, timestamped 2x screenshots, mouse path, steps
 node compose.js /tmp/ovh-demo   # pass 2: title, captions, zooms and pointer; writes overhive-demo.mp4/.webp
 ./setup.sh stop                 # stop the demo instance and delete its directory
 ```

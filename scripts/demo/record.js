@@ -1,4 +1,4 @@
-// Pass 1: records a scripted tour of the demo dashboard as timestamped 1.5x screenshots (frames/), so the
+// Pass 1: records a scripted tour of the demo dashboard as timestamped 2x screenshots (frames/), so the
 // zooms in pass 2 stay sharp, plus the mouse path (the pointer is drawn smoothly in pass 2), and logs, for each step, when it
 // starts, its caption and the screen area to zoom to (steps.json). Run scripts/demo/setup.sh first.
 // Needs: npm i puppeteer-core, and Chrome at $CHROME or /usr/bin/google-chrome.
@@ -22,7 +22,7 @@ const TRACK = `
 (async () => {
   const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--hide-scrollbars'] });
   const p = await b.newPage();
-  await p.setViewport({ width: W, height: H, deviceScaleFactor: 1.5 });
+  await p.setViewport({ width: W, height: H, deviceScaleFactor: 2 });
   await p.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
   await p.goto(URL, { waitUntil: 'networkidle2' });
   await p.evaluate(TRACK);
