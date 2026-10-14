@@ -1,0 +1,174 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=block">
+<style>
+  :root { --honey: #e8a33d; --ink: #f4f1ea; --muted: #a8adbb; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #090b10; font-family: Inter, "Ubuntu Sans", system-ui, sans-serif; color: var(--ink); }
+  #bg { position: absolute; inset: 0; overflow: hidden; }
+  .blob { position: absolute; width: 1100px; height: 1100px; border-radius: 50%; filter: blur(120px); opacity: .55; }
+  #b1 { background: radial-gradient(circle, #e8a33d 0%, transparent 65%); }
+  #b2 { background: radial-gradient(circle, #6d5dfc 0%, transparent 65%); }
+  #b3 { background: radial-gradient(circle, #19b39b 0%, transparent 65%); opacity: .35; }
+  #grid { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 28px 28px;
+          mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%); }
+  #grain { position: absolute; inset: 0; opacity: .08; mix-blend-mode: overlay; }
+
+  #window { position: absolute; left: 50%; top: 50px; width: 1504px; margin-left: -752px; border-radius: 16px; overflow: hidden;
+            background: #12151c; border: 1px solid rgba(255,255,255,.12);
+            box-shadow: 0 50px 120px -20px rgba(0,0,0,.75), 0 0 0 1px rgba(0,0,0,.4), 0 0 80px -10px rgba(232,163,61,.18); transform-origin: 50% 40%; }
+  #bar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: linear-gradient(#1c2029, #171a22); border-bottom: 1px solid rgba(255,255,255,.07); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  #url { margin: 0 auto; transform: translateX(-30px); font-size: 13px; color: var(--muted); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06);
+         padding: 4px 18px; border-radius: 8px; display: flex; gap: 8px; align-items: center; }
+  #url b { color: #d9dde6; font-weight: 500; }
+  #view { position: relative; width: 1504px; height: 940px; overflow: hidden; }
+  #cam { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; }
+  #shot { width: 1440px; height: 900px; display: block; }
+  #cursor { position: absolute; left: 0; top: 0; width: 26px; height: 26px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)); }
+  #ripple { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2.5px solid var(--honey); opacity: 0;
+            box-shadow: 0 0 18px rgba(232,163,61,.7); }
+  #progress { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #e8a33d, #ffcf7a); box-shadow: 0 0 12px rgba(232,163,61,.8); }
+
+  #caption { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; white-space: nowrap;
+             padding: 14px 26px 14px 14px; border-radius: 999px; font-size: 27px; font-weight: 600; letter-spacing: -.01em;
+             background: rgba(16,18,25,.72); backdrop-filter: blur(18px) saturate(140%); border: 1px solid rgba(255,255,255,.14);
+             box-shadow: 0 20px 50px -10px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08); }
+  #num { font-size: 15px; font-weight: 700; color: #1a1205; background: linear-gradient(135deg, #ffcf7a, #e8a33d); border-radius: 999px; padding: 6px 12px; letter-spacing: .04em; }
+
+  .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; }
+  .card img { width: 120px; height: 120px; filter: drop-shadow(0 10px 40px rgba(232,163,61,.55)); }
+  .title { font-size: 112px; font-weight: 800; letter-spacing: -.045em; line-height: 1;
+           background: linear-gradient(100deg, #fff 20%, #ffd58f 45%, #fff 60%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { font-size: 34px; font-weight: 500; color: #c9cdd6; letter-spacing: -.01em; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 1200px; }
+  .chip { font-size: 20px; font-weight: 500; padding: 8px 16px; border-radius: 999px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); color: #dfe2e8; }
+  .repo { font-size: 26px; font-weight: 600; color: var(--honey); background: rgba(232,163,61,.1); border: 1px solid rgba(232,163,61,.35); padding: 10px 22px; border-radius: 12px; }
+  .pills { font-size: 22px; color: var(--muted); letter-spacing: .02em; }
+</style></head>
+<body>
+  <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div><div class="blob" id="b3"></div><div id="grid"></div>
+    <svg id="grain" width="1920" height="1080"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg></div>
+
+  <div class="card" id="intro">
+    <img src="logo.svg" alt="">
+    <div class="title">Overhive</div>
+    <div class="tag">Mission control for every AI coding agent on your machine</div>
+  </div>
+
+  <div id="window">
+    <div id="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+      <div id="url">🔒 <b>127.0.0.1:47821</b> · Overhive</div></div>
+    <div id="view">
+      <div id="cam"><img id="shot" alt="">
+        <div id="ripple"></div>
+        <svg id="cursor" viewBox="0 0 26 26"><path d="M5 3l15.5 9-6.8 1.7-3.3 6.6z" fill="#fff" stroke="#0b0b0b" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </div>
+      <div id="progress"></div>
+    </div>
+  </div>
+  <div id="caption"><span id="num">01</span><span id="text"></span></div>
+
+  <div class="card" id="outro">
+    <img src="logo.svg" alt="">
+    <div class="title">Overhive</div>
+    <div class="pills">Free · Open source · Local only · No account</div>
+    <div class="chips"><span class="chip">Claude Code</span><span class="chip">Codex</span><span class="chip">Gemini CLI</span><span class="chip">Copilot</span><span class="chip">Cursor</span><span class="chip">Grok</span><span class="chip">Aider</span><span class="chip">your own tool</span></div>
+    <div class="repo">github.com/Abhijeetsinghjat/overhive</div>
+  </div>
+
+<script>
+// Pure function of time: render(T) draws the frame at T seconds. Driven frame by frame by compose.js.
+const INTRO = 3.0, OUTRO = 3.8, CONTENT_W = 1504, CONTENT_H = 940;
+let D; // steps.json
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (x) => { x = clamp(x, 0, 1); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+const spring = (x) => { x = clamp(x, 0, 1); return 1 - Math.exp(-6 * x) * Math.cos(9 * x); };
+const lerp = (a, b, k) => a + (b - a) * k;
+
+window.setup = (data) => { D = data; return INTRO + D.duration + OUTRO; };
+
+// Camera for a step: zoom to fit its area (with margin), centred on it, never showing past the edges.
+function camFor(step) {
+  const base = CONTENT_W / D.width; // fit the 1440 px screenshot to the window
+  if (!step || !step.rect) return { z: base, x: 0, y: 0 };
+  const r = step.rect, pad = 70;
+  const z = base * clamp(Math.min(D.width / (r.w + pad * 2), D.height / (r.h + pad * 2)), 1, 2.1);
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  const x = clamp(CONTENT_W / 2 - cx * z, CONTENT_W - D.width * z, 0);
+  const y = clamp(CONTENT_H / 2 - cy * z, CONTENT_H - D.height * z, 0);
+  return { z, x, y };
+}
+function camAt(t) {
+  const s = D.steps; let i = -1;
+  for (let k = 0; k < s.length; k++) if (s[k].t <= t) i = k;
+  const prev = camFor(s[i - 1]), cur = camFor(s[i]);
+  const k = ease((t - (s[i]?.t ?? 0)) / 1.0);
+  return { z: lerp(prev.z, cur.z, k), x: lerp(prev.x, cur.x, k), y: lerp(prev.y, cur.y, k), i };
+}
+function frameAt(t) { let f = D.frames[0]; for (const x of D.frames) { if (x.t <= t) f = x; else break; } return f; }
+function mouseAt(t) {
+  const m = D.mouse; if (!m.length) return { x: 720, y: 450 };
+  if (t <= m[0].t) return m[0];
+  for (let k = 1; k < m.length; k++) if (m[k].t >= t) { const a = m[k - 1], b = m[k], q = (t - a.t) / Math.max(b.t - a.t, 1e-3); return { x: lerp(a.x, b.x, q), y: lerp(a.y, b.y, q) }; }
+  return m[m.length - 1];
+}
+
+window.render = async (T) => {
+  const total = INTRO + D.duration + OUTRO, t = T - INTRO;
+  // background drift
+  $('b1').style.transform = `translate(${-200 + 180 * Math.sin(T * .23)}px, ${-300 + 120 * Math.cos(T * .19)}px)`;
+  $('b2').style.transform = `translate(${1100 + 160 * Math.cos(T * .21)}px, ${300 + 140 * Math.sin(T * .17)}px)`;
+  $('b3').style.transform = `translate(${400 + 200 * Math.sin(T * .15 + 1)}px, ${500 + 100 * Math.cos(T * .25)}px)`;
+
+  // intro and outro cards
+  const inK = easeOut(T / .9), outK = 1 - ease((T - 2.3) / .7);
+  $('intro').style.opacity = Math.min(inK, outK);
+  $('intro').style.transform = `translateY(${(1 - inK) * 30 - (1 - outK) * 40}px) scale(${1 - (1 - outK) * .06})`;
+  $('intro').querySelector('.title').style.backgroundPosition = `${100 - clamp(T / 2.4, 0, 1) * 100}% 0`;
+  const endT = T - (INTRO + D.duration);
+  const oK = spring(endT / 1.1);
+  $('outro').style.opacity = clamp(endT / .5, 0, 1);
+  $('outro').style.transform = `translateY(${(1 - oK) * 40}px) scale(${.94 + .06 * oK})`;
+  $('outro').querySelector('.title').style.backgroundPosition = `${100 - clamp(endT / 2.2, 0, 1) * 100}% 0`;
+
+  // window entrance and exit
+  const wIn = spring((T - 2.3) / 1.2), wOut = ease(endT / .8);
+  const w = $('window');
+  w.style.opacity = clamp((T - 2.3) / .4, 0, 1) * (1 - wOut);
+  w.style.transform = `translateY(${(1 - wIn) * 120 + wOut * -40}px) scale(${(.92 + .08 * wIn) * (1 - .08 * wOut)}) perspective(1600px) rotateX(${(1 - wIn) * 12}deg)`;
+  w.style.filter = wOut > 0 ? `blur(${wOut * 10}px)` : 'none';
+
+  // screenshot, camera, pointer
+  const tc = clamp(t, 0, D.duration);
+  const f = frameAt(tc), img = $('shot');
+  if (img.dataset.file !== f.file) { img.src = f.file; img.dataset.file = f.file; await img.decode().catch(() => {}); }
+  const c = camAt(tc);
+  $('cam').style.transform = `translate(${c.x}px, ${c.y}px) scale(${c.z})`;
+  const m = mouseAt(tc);
+  $('cursor').style.transform = `translate(${m.x - 4}px, ${m.y - 2}px) scale(${1 / Math.sqrt(c.z / (CONTENT_W / D.width))})`;
+  $('cursor').style.transformOrigin = '4px 2px';
+  const down = [...D.mouse].reverse().find((e) => e.down && e.t <= tc);
+  const rk = down ? (tc - down.t) / .55 : 9;
+  const rp = $('ripple');
+  rp.style.opacity = rk < 1 ? (1 - rk) : 0;
+  if (down) { rp.style.left = down.x + 'px'; rp.style.top = down.y + 'px'; rp.style.transform = `scale(${.3 + 1.2 * easeOut(rk)})`; }
+  $('cursor').style.scale = rk < .15 ? .85 : 1;
+  $('progress').style.width = `${clamp(t / D.duration, 0, 1) * 100}%`;
+
+  // caption for the current step, sliding in on change
+  const cap = $('caption');
+  const i = c.i, s = D.steps[i];
+  const since = s ? t - s.t : 0, next = D.steps[i + 1] ? D.steps[i + 1].t - t : D.duration - t;
+  const show = t >= 0 && t <= D.duration && s;
+  const kIn = easeOut(since / .45), kOut = next < .3 ? ease(1 - next / .3) : 0;
+  cap.style.opacity = show ? Math.min(kIn, 1 - kOut) * Math.min(1, (T - 2.6) / .5) : 0;
+  cap.style.transform = `translateX(-50%) translateY(${(1 - kIn) * 24 - kOut * 10}px) scale(${.96 + .04 * kIn})`;
+  cap.style.filter = `blur(${(1 - kIn) * 6 + kOut * 4}px)`;
+  if (s) { $('text').textContent = s.caption; $('num').textContent = String(i + 1).padStart(2, '0'); }
+  return total;
+};
+</script>
+</body></html>

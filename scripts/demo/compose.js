@@ -1,0 +1,40 @@
+// Pass 2: renders compose.html frame by frame over the pass-1 recording, then encodes
+// overhive-demo.mp4 and overhive-demo.webp.  Usage: node compose.js <pass-1 dir> [fps]
+// Needs: npm i puppeteer-core ffmpeg-static.
+const puppeteer = require('puppeteer-core');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const ffmpeg = require('ffmpeg-static');
+
+const DIR = path.resolve(process.argv[2] || '.');
+const FPS = Number(process.argv[3] || 30);
+const repo = path.resolve(__dirname, '../..');
+
+(async () => {
+  fs.copyFileSync(path.join(__dirname, 'compose.html'), path.join(DIR, 'compose.html'));
+  fs.copyFileSync(path.join(repo, 'src/Amc.Daemon/wwwroot/logo.svg'), path.join(DIR, 'logo.svg'));
+  const out = path.join(DIR, 'out'); fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out);
+
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--allow-file-access-from-files'] });
+  const p = await b.newPage();
+  await p.setViewport({ width: 1920, height: 1080 });
+  await p.goto('file://' + path.join(DIR, 'compose.html'), { waitUntil: 'networkidle0' });
+  await p.evaluate(() => document.fonts.ready);
+  const data = JSON.parse(fs.readFileSync(path.join(DIR, 'steps.json'), 'utf8'));
+  const total = await p.evaluate((d) => window.setup(d), data);
+  const n = Math.round(total * FPS);
+  for (let i = 0; i < n; i++) {
+    await p.evaluate((T) => window.render(T), i / FPS);
+    await p.screenshot({ path: path.join(out, `${String(i).padStart(5, '0')}.jpg`), type: 'jpeg', quality: 94 });
+    if (i % 150 === 0) process.stdout.write(`frame ${i}/${n}\n`);
+  }
+  await b.close();
+
+  const ff = (...a) => execFileSync(ffmpeg, ['-loglevel', 'error', '-y', ...a], { stdio: 'inherit' });
+  ff('-framerate', String(FPS), '-i', path.join(out, '%05d.jpg'), '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', path.join(DIR, 'overhive-demo.mp4'));
+  ff('-i', path.join(DIR, 'overhive-demo.mp4'), '-vf', 'fps=15,scale=1120:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '68',
+     '-compression_level', '2', '-loop', '0', '-an', path.join(DIR, 'overhive-demo.webp'));
+  console.log('done', n, 'frames');
+})().catch((e) => { console.error(e); process.exit(1); });

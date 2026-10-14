@@ -69,3 +69,19 @@ git tag v0.1.0 && git push origin v0.1.0
 `.github/workflows/release.yml` then runs the tests, builds the self-contained `linux-x64` and
 `linux-arm64` archives with `scripts/package.sh`, writes `SHA256SUMS`, and creates the GitHub release.
 Everything runs on GitHub's free hosted runners; no secrets beyond the built-in `GITHUB_TOKEN` are needed.
+
+## Recording the demo
+
+The README demo is made from the real dashboard, running against an isolated demo instance (own port, data,
+home and config, so none of your own sessions or repositories appear) with scripted agents that report
+through the open protocol and make real changes in a sample repository.
+
+```bash
+cd scripts/demo && npm i --no-save puppeteer-core ffmpeg-static   # recording tools only; not shipped
+./setup.sh                      # demo instance on http://127.0.0.1:47900 with a sample repo and agents
+node record.js /tmp/ovh-demo    # pass 1: scripted tour, timestamped 1.5x screenshots, mouse path, steps
+node compose.js /tmp/ovh-demo   # pass 2: title, captions, zooms and pointer; writes overhive-demo.mp4/.webp
+./setup.sh stop                 # stop the demo instance and delete its directory
+```
+
+Captions and zoom areas are the `step(...)` calls in `record.js`; the look is `compose.html`.
