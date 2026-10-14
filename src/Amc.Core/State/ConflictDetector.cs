@@ -100,6 +100,13 @@ public static class ConflictDetector
 
     // ---- rules ---------------------------------------------------------------------------
 
+    private static bool IsAncestor(WorldState s, string ancestorId, string agentId)
+    {
+        for (var (id, hops) = (agentId, 0); hops < 16 && s.Agents.TryGetValue(id, out var a) && a.ParentId is { } p; id = p, hops++)
+            if (p == ancestorId) return true;
+        return false;
+    }
+
     private static bool Active(WorldState s, string agentId) => s.Agents.TryGetValue(agentId, out var a) && !a.IsTerminal;
     private static bool Dirty(FileChange f) => f.GitStatus is not null and not "clean";
     private static string Name(WorldState s, string agentId) => s.Agents.TryGetValue(agentId, out var a) ? a.Title ?? a.AgentType ?? agentId : agentId;
@@ -136,13 +143,16 @@ public static class ConflictDetector
         };
     }
 
-    /// <summary>3. ≥2 active agents writing in one worktree within the activity window.</summary>
+    /// <summary>3. ≥2 active agents writing in one worktree within the activity window. An agent and its own
+    /// sub-agents count as one writer (the parent delegates while it waits); siblings still count separately.</summary>
     private static Conflict? SameWorktree(WorldState s, Worktree wt)
     {
         if (!s.Index.WritersByWorktree.TryGetValue(wt.Id, out var writersAt) || writersAt.Count < 2) return null;
         var since = s.Clock > DateTimeOffset.MinValue + ActivityWindow ? s.Clock - ActivityWindow : DateTimeOffset.MinValue;
         var writers = writersAt.Where(kv => kv.Value >= since && Active(s, kv.Key)).Select(kv => kv.Key).Order().ToList();
         if (writers.Count < 2) return null;
+        var heads = writers.Where(w => !writers.Any(other => other != w && IsAncestor(s, w, other))).ToList();
+        if (heads.Count < 2) return null;
         return new Conflict
         {
             Key = $"same-worktree|{wt.Id}", Kind = ConflictKind.SameWorktree, WorktreeId = wt.Id,

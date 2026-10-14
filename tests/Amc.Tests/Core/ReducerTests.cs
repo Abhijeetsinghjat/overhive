@@ -160,6 +160,17 @@ public class ConflictDetectorTests
     }
 
     [Fact]
+    public void Parent_and_its_own_sub_agent_in_one_worktree_is_not_a_conflict()
+    {
+        Setup();
+        Reducer.ApplyBatch(_s, [_f.Edit("main", "w1", "A.cs"), _f.Edit("a", "w1", "B.cs")]);
+        Assert.DoesNotContain(_s.Conflicts.Values, c => c.Kind == ConflictKind.SameWorktree);
+
+        Reducer.ApplyBatch(_s, [_f.Edit("b", "w1", "C.cs")]);
+        Assert.Contains(_s.Conflicts.Values, c => c.Kind == ConflictKind.SameWorktree);
+    }
+
+    [Fact]
     public void Two_active_agents_on_same_file_is_a_conflict_until_one_finishes()
     {
         Setup();

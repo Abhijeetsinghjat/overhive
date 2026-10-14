@@ -353,11 +353,14 @@ export function usageTitle(u, label = 'Tokens') {
     `${(u.responses || 0).toLocaleString()} model responses`;
 }
 
+/** claude-opus-5-5 → opus 5.5; claude-haiku-4-5-20251001 → haiku 4.5. Other vendors' ids (gpt-5-codex,
+ *  gemini-2.5-pro) have no such convention, so they are shown as reported, minus a trailing date. */
 export function shortModelName(m) {
-  const x = String(m).replace(/^claude-/, '').replace(/-\d{8}$/, '');
-  const parts = x.split('-');
+  const id = String(m).replace(/-\d{8}$/, '').replace(/-\d{4}-\d{2}-\d{2}$/, '');
+  if (!/^claude-/.test(id)) return id;
+  const parts = id.replace(/^claude-/, '').split('-');
   const name = parts.shift();
-  return parts.length ? `${name} ${parts.join('.')}` : name;
+  return parts.length && parts.every((x) => /^\d+$/.test(x)) ? `${name} ${parts.join('.')}` : [name, ...parts].join(' ');
 }
 
 // ---- commit links ----------------------------------------------------------------------

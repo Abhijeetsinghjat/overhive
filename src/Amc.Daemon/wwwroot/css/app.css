@@ -237,7 +237,9 @@ body.hide-right .main { --rw: 0px; } body.hide-right .right { display: none; }
 .gcard.main { background: linear-gradient(180deg, var(--panel2), var(--panel)); }
 .gcard.st-blocked { border-color: color-mix(in srgb, var(--orange) 60%, var(--border2)); }
 .gcard.st-failed { border-color: color-mix(in srgb, var(--red) 45%, var(--border2)); }
-.gc-head { display: flex; align-items: center; gap: 5px; }
+.gc-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.gc-head .gc-model { max-width: 112px; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; margin-right: 0; }
+.gc-head .gc-kind { min-width: 0; flex-shrink: 1; }
 .gc-kind { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
 .gc-title { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gc-desc { color: var(--text2); font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 16px; line-height: 1.35; }

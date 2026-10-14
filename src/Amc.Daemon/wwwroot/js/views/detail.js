@@ -145,7 +145,7 @@ function overview() {
     section('ov-repos', 'Repositories', store.e.repository.size, all('repository').map((r) => h('div', { class: 'ov-item' }, repoLink(r.id), h('span', { class: 'muted small' }, ` · ${all('worktree').filter((w) => w.repositoryId === r.id).length} worktrees`)))),
     section('ov-help', 'How data appears', null, h('ul', { class: 'small muted plain' },
       h('li', null, 'Any AI coding tool is detected from its running process: folder, worktree, files and commits (observed).'),
-      h('li', null, 'Tools with an integration (Claude Code today; others via the open protocol) also report tool calls, prompts and usage.'),
+      h('li', null, 'Tools with hooks connected (Claude Code, Codex, Gemini CLI, Grok, Cursor, Copilot) or reporting through the open protocol also send tool calls, prompts, files and usage (reported).'),
       h('li', null, 'Git state is observed from repositories under the workspace roots.'),
       h('li', null, 'Sessions started with ', h('code', null, '+ New session'), ' get a live terminal you can type into.'))));
 }

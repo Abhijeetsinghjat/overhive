@@ -4,7 +4,7 @@
 import { h, s, mount, keyed, agoEl, oneLine, norm, duration, ms } from '../util.js';
 import { store, register, get, invalidate } from '../store.js';
 import { ui, select, isSelected } from '../ui.js';
-import { toolName, usageRollup, fmtTok, usageTotal, usageTitle, roots, children, agentName, statusMeta, statusOf, isActive, isTerminal, evBadge, agentColor, worktreeOfAgent, worktreeLabel, describe } from '../model.js';
+import { toolName, shortModelName, usageRollup, fmtTok, usageTotal, usageTitle, roots, children, agentName, statusMeta, statusOf, isActive, isTerminal, evBadge, agentColor, worktreeOfAgent, worktreeLabel, describe } from '../model.js';
 import { agentPasses, filterCtx } from '../filters.js';
 
 const W = 280, H = 150, COL_GAP = 56, ROW_GAP = 16, PAD = 20, BAND_GAP = 36;
@@ -143,13 +143,6 @@ export function initGraph() {
   });
 }
 
-/** claude-opus-5-5 → opus 5.5; claude-haiku-4-5-20251001 → haiku 4.5 (full id in the tooltip). */
-function shortModel(m) {
-  const x = m.replace(/^claude-/, '').replace(/-\d{8}$/, '');
-  const parts = x.split('-');
-  const name = parts.shift();
-  return parts.length ? `${name} ${parts.join('.')}` : name;
-}
 
 function tokensSpan(a, isMain) {
   const u = isMain ? usageRollup(a) : (a.usage || {});
@@ -204,9 +197,9 @@ function card(n) {
   h('div', { class: 'gc-head' },
     h('span', { class: `pill ${m.cls}`, title: a.statusReason || m.label }, h('span', { class: 'glyph' }, m.glyph), m.label),
     evBadge(a.statusEvidence, 'Applies to the status'),
-    nConf ? h('span', { class: 'pill st-blocked', title: `${nConf} conflict(s) involve this agent` }, '⚠ conflict') : null,
+    nConf ? h('span', { class: 'pill st-blocked', title: `${nConf} conflict(s) involve this agent`, 'aria-label': 'conflict' }, '⚠') : null,
     h('span', { class: 'spacer' }),
-    a.model ? h('span', { class: 'gc-model', title: `Model: ${a.model} (reported)` }, shortModel(a.model)) : null,
+    a.model ? h('span', { class: 'gc-model', title: `Model: ${a.model} (reported)` }, shortModelName(a.model)) : null,
     h('span', { class: 'gc-kind', title: isMain ? 'Tool' : 'Sub-agent type' }, isMain ? toolName(a.provider) : a.agentType || 'sub-agent')),
   h('div', { class: 'gc-title', title: agentName(a) }, oneLine(agentName(a), 70)),
   h('div', { class: 'gc-desc' }, oneLine(isMain ? a.lastPrompt || a.cwd || '' : a.description || a.lastPrompt || '', 140)),
