@@ -38,8 +38,9 @@ const repo = path.resolve(__dirname, '../..');
   const x264 = ['-c:v', 'libx264', '-preset', 'veryslow', '-b:v', `${kbps}k`, '-pix_fmt', 'yuv420p'];
   ff(...frames, ...x264, '-pass', '1', '-an', '-f', 'mp4', '/dev/null');
   ff(...frames, ...x264, '-pass', '2', '-movflags', '+faststart', path.join(DIR, 'overhive-demo.mp4'));
-  // Animated WebP for places that cannot play video, encoded from the frames (not from the MP4).
-  ff(...frames, '-vf', 'fps=15,scale=1280:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '80',
+  // Animated WebP for the README (GitHub never autoplays video, but animated images play on their own),
+  // encoded from the frames, not the MP4, at 1600 px so it stays sharp on high-density screens.
+  ff(...frames, '-vf', 'fps=12,scale=1600:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '85',
      '-compression_level', '3', '-loop', '0', path.join(DIR, 'overhive-demo.webp'));
   console.log('done', n, 'frames');
 })().catch((e) => { console.error(e); process.exit(1); });
