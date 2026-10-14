@@ -56,3 +56,16 @@ its own git worktree and branch (`agent/git`, `agent/claude`, `agent/process`,
 `agent/cli`, `agent/ui` under `../agent-mission-control-worktrees/`), and merged after
 review. The dashboard displays that development itself: each implementation agent, its
 worktree and its files.
+
+## Releasing
+
+CI (`.github/workflows/ci.yml`) builds and tests every push to `main` and every pull request.
+To publish a release, tag a commit and push the tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` then runs the tests, builds the self-contained `linux-x64` and
+`linux-arm64` archives with `scripts/package.sh`, writes `SHA256SUMS`, and creates the GitHub release.
+Everything runs on GitHub's free hosted runners; no secrets beyond the built-in `GITHUB_TOKEN` are needed.

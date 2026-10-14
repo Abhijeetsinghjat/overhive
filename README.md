@@ -2,6 +2,8 @@
 
 <h1 align="center">Overhive</h1>
 
+<p align="center"><a href="https://github.com/Abhijeetsinghjat/overhive/actions/workflows/ci.yml"><img src="https://github.com/Abhijeetsinghjat/overhive/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
+
 <p align="center"><b>Keep watch over every AI coding agent on your machine — any tool, free and open source.</b></p>
 
 Overhive is a local control center for AI coding agents. It shows every agent and sub-agent you run,
@@ -25,9 +27,11 @@ You can message agents, pause or stop them, and start new sessions of any instal
 
 ## Install
 
-From a release archive (no .NET needed):
+From a release archive (no .NET needed). Download the archive for your machine (`linux-x64` or
+`linux-arm64`) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
 
 ```bash
+sha256sum --ignore-missing -c SHA256SUMS
 tar -xzf overhive-<version>-linux-x64.tar.gz
 ./overhive-<version>-linux-x64/install-release.sh
 ```
@@ -35,7 +39,7 @@ tar -xzf overhive-<version>-linux-x64.tar.gz
 From source (needs the .NET 10 SDK):
 
 ```bash
-git clone https://github.com/<you>/overhive && cd overhive
+git clone https://github.com/Abhijeetsinghjat/overhive && cd overhive
 scripts/install.sh
 ```
 
