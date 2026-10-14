@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write      # build provenance (signed by GitHub, free for public repositories)
+  attestations: write
 
 jobs:
   release:
@@ -26,7 +28,16 @@ jobs:
         run: AMC_RELEASE="${GITHUB_REF_NAME#v}" AMC_RIDS="linux-x64 linux-arm64" scripts/package.sh
       - name: Checksums
         run: cd dist && sha256sum *.tar.gz > SHA256SUMS
+      - name: Build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          printf '\n---\nVerify a download: `sha256sum --ignore-missing -c SHA256SUMS` and `gh attestation verify <archive> -R %s`\n' "$GITHUB_REPOSITORY" >> notes.md
+          test -s notes.md
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --title "Overhive $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --title "Overhive $GITHUB_REF_NAME" --notes-file notes.md

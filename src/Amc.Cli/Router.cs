@@ -87,7 +87,8 @@ public static class Router
 
     private static Task<int> VersionAsync(CliContext ctx, ParsedArgs args, CancellationToken ct)
     {
-        ctx.Out.WriteLine("agentctl " + (typeof(Router).Assembly.GetName().Version?.ToString() ?? "dev"));
+        var v = typeof(Router).Assembly.GetName().Version;
+        ctx.Out.WriteLine("Overhive " + (v is null ? "dev" : $"{v.Major}.{v.Minor}.{v.Build}"));
         return Task.FromResult(ExitCodes.Ok);
     }
 

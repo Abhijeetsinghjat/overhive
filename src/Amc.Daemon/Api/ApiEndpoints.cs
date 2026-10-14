@@ -27,7 +27,7 @@ public static class ApiEndpoints
             websocket = new { clients = b.ClientCount },
             seq = state.Read(s => s.Seq),
             serverTime = DateTimeOffset.UtcNow,
-            version = typeof(ApiEndpoints).Assembly.GetName().Version?.ToString(),
+            version = typeof(ApiEndpoints).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : null,
         }));
 
         api.MapGet("/state", (StateStore state) => Results.Content(state.SerializeState(), "application/json"));

@@ -15,7 +15,7 @@ body:
     validations: { required: true }
   - type: input
     id: version
-    attributes: { label: Overhive version, description: "From `overhive --version` or the release you installed." }
+    attributes: { label: Overhive version, description: "From `overhive version` or the release you installed." }
     validations: { required: true }
   - type: dropdown
     id: tool
