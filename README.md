@@ -6,12 +6,13 @@
 
 <p align="center"><b>Keep watch over every AI coding agent on your machine — any tool, free and open source.</b></p>
 
-<p align="center"><img src="docs/media/overhive-demo.webp" width="1280" alt="Overhive demo: Codex, Gemini CLI and Copilot agents working in one repository; the graph, file changes, a cross-worktree conflict, activity, a commit, token usage, and a message sent from the dashboard that the agent answers"></p>
-<p align="center"><sub>44-second tour with sample agents in a demo repository · <a href="docs/media/overhive-demo.mp4">MP4 version</a></sub></p>
+https://github.com/user-attachments/assets/dc34ef94-923d-440e-8eac-943e7e16831d
+<p align="center"><sub>44-second tour with sample agents in a demo repository</sub></p>
 
 Overhive is a local control center for AI coding agents. It shows every agent and sub-agent you run,
 whatever tool runs it: Claude Code, Codex, Gemini CLI, Grok, Cursor, Copilot, Aider, OpenCode, or your own.
 For each one you see:
+
 - its status, with the evidence behind it
 - its process, repository, worktree and branch
 - the files it changed, with diffs
