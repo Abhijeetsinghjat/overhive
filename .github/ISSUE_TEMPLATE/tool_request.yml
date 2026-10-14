@@ -1,0 +1,17 @@
+name: Support a new AI tool
+description: Ask for Overhive to recognise or integrate another AI coding tool
+labels: [tool-support]
+body:
+  - type: input
+    id: tool
+    attributes: { label: Tool name and link }
+    validations: { required: true }
+  - type: input
+    id: command
+    attributes: { label: Command and process name, placeholder: "e.g. command `foo`, process `foo` or `node .../foo.js`" }
+  - type: textarea
+    id: hooks
+    attributes: { label: Hooks or extension points, description: "Link to the tool's documentation for hooks, plugins, logs or telemetry, if it has any." }
+  - type: textarea
+    id: why
+    attributes: { label: What you want to see for it }
