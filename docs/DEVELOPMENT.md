@@ -85,3 +85,9 @@ node compose.js /tmp/ovh-demo   # pass 2: title, captions, zooms and pointer; wr
 ```
 
 Captions and zoom areas are the `step(...)` calls in `record.js`; the look is `compose.html`.
+
+To publish a new recording, replace `docs/media/overhive-demo.webp` (the README animation; GitHub never
+autoplays video, but animated images play on their own). For the 1080p video, drag `overhive-demo.mp4` into
+the README editor on github.com: GitHub only plays videos uploaded that way. Update the "Watch in full
+quality" link to the new upload URL. Don't wrap other content in a link to an uploaded video: GitHub replaces
+such a link with a video player.
