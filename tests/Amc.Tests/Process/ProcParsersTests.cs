@@ -48,7 +48,7 @@ public class ProcParsersTests
     [Fact]
     public void ParseStat_RealSelf()
     {
-        var st = ProcParsers.ParseStat(new ProcFs().ReadStat(Environment.ProcessId));
+        var st = ProcParsers.ParseStat(ProcSources.Default.ReadStat(Environment.ProcessId));
         Assert.NotNull(st);
         Assert.Equal(Environment.ProcessId, st.Pid);
         Assert.True(st.StartTime > 0);

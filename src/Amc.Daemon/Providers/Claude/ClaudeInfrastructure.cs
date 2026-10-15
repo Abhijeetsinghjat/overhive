@@ -54,35 +54,38 @@ public interface IProcFs
     string? ProcStart(int pid);
     /// <summary>Field 3 of /proc/&lt;pid&gt;/stat (R, S, T, Z …), or null.</summary>
     char? State(int pid);
+    /// <summary>Process name, or null when unknown.</summary>
+    string? Name(int pid) => null;
 }
 
-public sealed class LinuxProcFs : IProcFs
+/// <summary><see cref="IProcFs"/> over the platform process source (/proc on Linux, libproc on macOS).</summary>
+public sealed class LinuxProcFs(Amc.Daemon.Collectors.Processes.IProcSource? source = null) : IProcFs
 {
-    public string? ProcStart(int pid) => Fields(pid) is { Length: > 19 } f ? f[19] : null;
-    public char? State(int pid) => Fields(pid) is { Length: > 0 } f && f[0].Length > 0 ? f[0][0] : null;
+    private readonly Amc.Daemon.Collectors.Processes.IProcSource _src = source ?? Amc.Daemon.Collectors.Processes.ProcSources.Default;
 
-    /// <summary>Fields after the "(comm)" part: index 0 = field 3 (state).</summary>
-    private static string[]? Fields(int pid)
-    {
-        try
-        {
-            var stat = File.ReadAllText($"/proc/{pid}/stat");
-            var close = stat.LastIndexOf(')');
-            return close < 0 ? null : stat[(close + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        }
-        catch (IOException) { return null; }
-        catch (UnauthorizedAccessException) { return null; }
-    }
+    private Amc.Daemon.Collectors.Processes.ProcStat? Stat(int pid) =>
+        Amc.Daemon.Collectors.Processes.ProcParsers.ParseStat(_src.ReadStat(pid));
+
+    public string? ProcStart(int pid) => Stat(pid)?.ProcStart;
+    public char? State(int pid) => Stat(pid)?.State;
+    public string? Name(int pid) => Stat(pid)?.Comm;
 }
 
 public static class ProcFsExtensions
 {
     /// <summary>True only when the pid exists and is the same process (start time matches) — PID-reuse safe.</summary>
-    public static bool IsAlive(this IProcFs proc, int? pid, string? procStart) =>
-        pid is > 0 && procStart is not null && proc.ProcStart(pid.Value) == procStart && proc.State(pid.Value) is not 'Z' and not 'X';
+    public static bool IsAlive(this IProcFs proc, int? pid, string? procStart)
+    {
+        if (pid is not > 0 || procStart is null || proc.State(pid.Value) is null or 'Z' or 'X') return false;
+        if (proc.ProcStart(pid.Value) == procStart) return true;
+        // On Linux Claude Code records the /proc start time, so a mismatch means another process. Elsewhere its
+        // stamp may not be comparable with ours: accept a live claude/node process (weaker pid-reuse protection).
+        return !OperatingSystem.IsLinux() && proc.Name(pid.Value) is { } n
+            && (n.Contains("claude", StringComparison.OrdinalIgnoreCase) || n.Contains("node", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
-/// <summary>Signal delivery (abstracted for tests). Linux numbering.</summary>
+/// <summary>Signal delivery (abstracted for tests), using the running OS's numbers (see <see cref="Signals"/>).</summary>
 public interface ISignalSender
 {
     /// <summary>Returns 0 on success, otherwise errno.</summary>
@@ -91,7 +94,9 @@ public interface ISignalSender
 
 public static class Signals
 {
-    public const int SigKill = 9, SigTerm = 15, SigCont = 18, SigStop = 19;
+    public const int SigKill = 9, SigTerm = 15;
+    /// <summary>CONT and STOP differ on macOS (19 and 17) from Linux (18 and 19).</summary>
+    public static readonly int SigCont = OperatingSystem.IsMacOS() ? 19 : 18, SigStop = OperatingSystem.IsMacOS() ? 17 : 19;
 }
 
 public sealed class LibcSignalSender : ISignalSender

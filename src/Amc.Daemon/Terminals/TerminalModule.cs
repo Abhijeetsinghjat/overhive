@@ -11,7 +11,7 @@ public static class TerminalModule
     public static IServiceCollection AddTerminals(this IServiceCollection services)
     {
         services.AddSingleton<TerminalHub>(sp => ActivatorUtilities.CreateInstance<TerminalHub>(sp,
-            sp.GetService<IProcSource>() ?? new ProcFs()));
+            sp.GetService<IProcSource>() ?? ProcSources.Default));
         services.AddSingleton<ITerminalHub>(sp => sp.GetRequiredService<TerminalHub>());
         services.AddSingleton<ITerminalDirectory>(sp => sp.GetRequiredService<TerminalHub>());
         services.AddHostedService<TerminalSweeper>();

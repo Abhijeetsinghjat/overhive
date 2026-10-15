@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Amc.Daemon.Collectors.Processes;
 
-/// <summary>Linux signal numbers (identical on x86_64 and arm64, asm-generic).</summary>
+/// <summary>Signals by their Linux numbers (x86_64 and arm64); <see cref="ProcessSignals.Native"/> maps them for macOS.</summary>
 public enum Signal
 {
     Hup = 1, Int = 2, Quit = 3, Kill = 9, Usr1 = 10, Usr2 = 12, Term = 15,
@@ -55,14 +55,21 @@ public static class ProcessSignals
     public static bool Send(int pid, Signal sig)
     {
         if (pid <= 1) return false; // never signal init or "all processes" (0/-1)
-        return ProcNative.kill(pid, (int)sig) == 0;
+        return ProcNative.kill(pid, Native(sig)) == 0;
     }
+
+    /// <summary>The OS signal number. macOS numbers differ for these (STOP is 17 there, 19 means CONT).</summary>
+    public static int Native(Signal sig) => !OperatingSystem.IsMacOS() ? (int)sig : sig switch
+    {
+        Signal.Usr1 => 30, Signal.Usr2 => 31, Signal.Cont => 19, Signal.Stop => 17, Signal.Tstp => 18,
+        _ => (int)sig, // HUP INT QUIT KILL TERM WINCH are the same
+    };
 
     /// <summary>Signals a process group (kill(-pgid, sig)).</summary>
     public static bool SendGroup(int pgid, Signal sig)
     {
         if (pgid <= 1) return false;
-        return ProcNative.kill(-pgid, (int)sig) == 0;
+        return ProcNative.kill(-pgid, Native(sig)) == 0;
     }
 
     /// <summary>Signals only if /proc still shows the same starttime (PID-reuse safe; tiny TOCTOU window remains).</summary>
@@ -113,5 +120,5 @@ public static class ProcessSignals
     /// </summary>
     public static int TerminateTree(ILiveProcesses live, int pid) => SendTree(live, pid, Signal.Term, childrenFirst: true);
 
-    private static readonly ProcFs DefaultProc = new();
+    private static IProcSource DefaultProc => ProcSources.Default;
 }

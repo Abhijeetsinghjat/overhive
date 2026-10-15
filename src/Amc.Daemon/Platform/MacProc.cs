@@ -9,7 +9,7 @@ namespace Amc.Daemon.Platform;
 /// <param name="StartId">Opaque start stamp: together with the pid it identifies one process, so a reused pid is not mistaken for it.</param>
 /// <param name="State">'R' running, 'S' sleeping, 'T' stopped, 'Z' zombie, '?' unknown.</param>
 /// <param name="CpuTime">User plus system CPU time; null when the OS does not tell (another user's process).</param>
-public sealed record ProcBasics(int Pid, int Ppid, string Name, char State, string StartId, DateTimeOffset StartedAt, TimeSpan? CpuTime, long RssBytes);
+public sealed record ProcBasics(int Pid, int Ppid, int Pgid, string Name, char State, string StartId, DateTimeOffset StartedAt, TimeSpan? CpuTime, long RssBytes);
 
 /// <summary>
 /// macOS process facts through libproc and sysctl, the equivalent of Linux /proc. Struct offsets follow
@@ -50,6 +50,7 @@ public static class MacProc
         var s = b.AsSpan();
         var status = BinaryPrimitives.ReadUInt32LittleEndian(s[4..]);
         var ppid = (int)BinaryPrimitives.ReadUInt32LittleEndian(s[16..]);
+        var pgid = (int)BinaryPrimitives.ReadUInt32LittleEndian(s[100..]);
         var comm = CString(s.Slice(48, 16));
         var name = CString(s.Slice(64, 32));
         var sec = (long)BinaryPrimitives.ReadUInt64LittleEndian(s[120..]);
@@ -66,8 +67,8 @@ public static class MacProc
             var (numer, denom) = TimebaseInfo.Value;
             cpu = TimeSpan.FromTicks((long)(machUnits * (double)numer / denom / 100)); // ns → 100 ns ticks
         }
-        return new ProcBasics(pid, ppid, name.Length > 0 ? name : comm, state,
-            $"{sec}.{usec:D6}", DateTimeOffset.FromUnixTimeSeconds(sec).AddTicks(usec * 10), cpu, rss);
+        return new ProcBasics(pid, ppid, pgid, name.Length > 0 ? name : comm, state,
+            (sec * 1_000_000 + usec).ToString(System.Globalization.CultureInfo.InvariantCulture), DateTimeOffset.FromUnixTimeSeconds(sec).AddTicks(usec * 10), cpu, rss);
     }
 
     /// <summary>Current working directory; null when not permitted (another user's process) or gone.</summary>

@@ -7,7 +7,7 @@ public static class ProcessModule
 {
     public static IServiceCollection AddProcesses(this IServiceCollection services)
     {
-        services.AddSingleton<IProcSource>(_ => new ProcFs());
+        services.AddSingleton<IProcSource>(_ => ProcSources.Create());
         services.AddSingleton<LiveProcessTable>();
         services.AddSingleton<ILiveProcesses>(sp => sp.GetRequiredService<LiveProcessTable>());
         services.AddSingleton<LiveProcessCollector>();
