@@ -3,6 +3,15 @@
 All notable changes to Overhive. Versions follow [Semantic Versioning](https://semver.org/); while the
 version is 0.x, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Added
+- Runaway guard: warns when a session fans out into too many sub-agents (at once, per 10 minutes, or too
+  deep) or burns tokens too fast (per minute, per hour, optional per-session budget). Banner, header badge,
+  agent-panel section with **Pause tree** / **Dismiss**, counters on the graph, `overhive guard` and
+  `GET /api/guard`. Optional `Guard.AutoPause` (off by default) pauses a session on a critical alert, audited
+  as automatic; it never kills. See [docs/RUNAWAY_GUARD.md](docs/RUNAWAY_GUARD.md).
+
 ## [0.1.0] - 2026-10-15
 
 First public release: a free, open-source, local control center for AI coding agents. Linux (x64, arm64).

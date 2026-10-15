@@ -33,6 +33,8 @@ public sealed class AmcOptions
     public bool Simulate { get; set; }
     /// <summary>Allow UI-initiated process control (pause/resume/terminate). Message sending is always allowed.</summary>
     public bool EnableControl { get; set; } = true;
+    /// <summary>Runaway guard thresholds and the opt-in automatic pause (section "Guard").</summary>
+    public Amc.Core.Guard.GuardSettings Guard { get; set; } = new();
 
     public string DbPath => Path.Combine(DataDir, "amc.db");
     public string TokenPath => Path.Combine(DataDir, "token");

@@ -92,6 +92,9 @@ to the fold semantics apply to all of history.
 **Time-based rules** that no event triggers (a sub-agent silent for 30 min with no
 completion recorded becomes `unknown`) are applied by `StalenessMonitor`, which
 publishes ordinary, explicitly *inferred* status events. The reducer stays a pure fold.
+The runaway guard (`GuardService`, rules in `Amc.Core/Guard`) works the same way: it evaluates
+sub-agent fan-out, depth and token rates per session and publishes `guard.*` events on level changes
+(see RUNAWAY_GUARD.md).
 
 **Volatile telemetry** (CPU %, RSS, PTY bytes) is *not* written to the event log.
 It lives in a bounded in-memory overlay and is pushed to clients at ≤1 Hz.
@@ -255,6 +258,9 @@ GET  /api/processes                  live process overlay
 POST /api/agents/{id}/messages       {text}
 POST /api/agents/{id}/control        {action, confirm}
 GET  /api/terminals/{id}/buffer
+GET  /api/guard                      runaway guard: rules, live values per session, active alerts
+POST /api/guard/dismiss              {key} or {rootAgentId}
+POST /api/guard/pause                {rootAgentId}: pause the session tree
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
 ```
 

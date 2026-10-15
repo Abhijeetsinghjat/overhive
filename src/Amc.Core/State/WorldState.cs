@@ -14,6 +14,7 @@ public static class EntityKinds
     public const string Test = "test";
     public const string Terminal = "terminal";
     public const string Conflict = "conflict";
+    public const string Guard = "guard";
 }
 
 public readonly record struct EntityRef(string Kind, string Id);
@@ -58,6 +59,8 @@ public sealed class WorldState
     public Dictionary<string, UsageMark> UsageMarks { get; set; } = [];
     public const int MaxUsageMarks = 20_000;
     public Dictionary<string, Conflict> Conflicts { get; set; } = [];
+    /// <summary>Active runaway-guard alerts, keyed root|rule (see Amc.Core.Guard).</summary>
+    public Dictionary<string, Amc.Core.Guard.GuardAlert> GuardAlerts { get; set; } = [];
 
     public object? Get(EntityRef r) => r.Kind switch
     {
@@ -70,6 +73,7 @@ public sealed class WorldState
         EntityKinds.Test => TestRuns.GetValueOrDefault(r.Id),
         EntityKinds.Terminal => Terminals.GetValueOrDefault(r.Id),
         EntityKinds.Conflict => Conflicts.GetValueOrDefault(r.Id),
+        EntityKinds.Guard => GuardAlerts.GetValueOrDefault(r.Id),
         _ => null,
     };
 
@@ -78,5 +82,5 @@ public sealed class WorldState
         Agents.Values.FirstOrDefault(a => a.Pid == pid && (procStart is null || a.ProcStart == procStart));
 }
 
-/// <summary>Usage already counted for one model response.</summary>
-public sealed record UsageMark(long Input, long Output, long CacheWrite, long CacheRead, DateTimeOffset At);
+/// <summary>Usage already counted for one model response (AgentId lets the runaway guard compute token rates per tree).</summary>
+public sealed record UsageMark(long Input, long Output, long CacheWrite, long CacheRead, DateTimeOffset At, string? AgentId = null);

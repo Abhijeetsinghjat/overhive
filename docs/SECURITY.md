@@ -19,6 +19,7 @@ signal processes. It is designed for a single user on their own machine.
 | Monitoring itself disturbing agents | All git calls use `GIT_OPTIONAL_LOCKS=0` (never take `index.lock`), `core.fsmonitor=false`. Hooks fail open (`curl -sf … || true`, 3 s timeout) so a down daemon never blocks an agent. |
 | Destructive actions by mistake | Terminate/Kill need `confirm=true` (HTTP 428 otherwise); the UI requires typing the agent's short id; the CLI requires typed confirmation or `--yes`. Pause/resume are reversible. No action deletes files, resets Git state or force-pushes. |
 | Undocumented agent internals | Claude Code's per-session messaging sockets and their `.key` token files are not read or used. |
+| Automatic actions | Only the runaway guard acts on its own, only when `Guard.AutoPause` is turned on, and only to pause (reversible). It never terminates or kills: automation cannot pass the confirmation for destructive actions. Each automatic action is audited with source `system` and the reason. |
 | Audit | Every control action and message is an event (`audit.control`, `agent.message_*`) in the append-only log. |
 
 ## Hooks

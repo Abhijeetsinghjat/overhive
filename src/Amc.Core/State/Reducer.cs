@@ -10,7 +10,7 @@ namespace Amc.Core.State;
 public static class Reducer
 {
     /// <summary>Bump whenever folding semantics change: snapshots from another version are discarded and the log is replayed.</summary>
-    public const int Version = 7;
+    public const int Version = 8;
 
     public static HashSet<EntityRef> ApplyBatch(WorldState s, IEnumerable<AgentEvent> events)
     {
@@ -171,13 +171,20 @@ public static class Reducer
             case EventTypes.TerminalExited:
                 OnTerminal(s, e, changed);
                 break;
+
+            case EventTypes.GuardAlert:
+            case EventTypes.GuardCleared:
+            case EventTypes.GuardDismissed:
+                Guard.GuardReducer.Apply(s, e, changed);
+                break;
         }
     }
 
     private static bool IsActivity(string type) =>
         type is not (EventTypes.AgentCreated or EventTypes.ProcessExited or EventTypes.AuditControl or EventTypes.GitFileStatus
             or EventTypes.WorktreeChanged or EventTypes.AgentStatusChanged or EventTypes.MessageSent
-            or EventTypes.MessageFailed or EventTypes.AgentUpdated);
+            or EventTypes.MessageFailed or EventTypes.AgentUpdated
+            or EventTypes.GuardAlert or EventTypes.GuardCleared or EventTypes.GuardDismissed);
 
     // ---- agents ---------------------------------------------------------------
 
@@ -388,7 +395,7 @@ public static class Reducer
         }
         s.UsageMarks[u.MessageId] = new UsageMark(
             Math.Max(u.Input, prev?.Input ?? 0), Math.Max(u.Output, prev?.Output ?? 0),
-            Math.Max(u.CacheWrite, prev?.CacheWrite ?? 0), Math.Max(u.CacheRead, prev?.CacheRead ?? 0), ts);
+            Math.Max(u.CacheWrite, prev?.CacheWrite ?? 0), Math.Max(u.CacheRead, prev?.CacheRead ?? 0), ts, a.Id);
         Bound(s.UsageMarks, WorldState.MaxUsageMarks, x => x.At);
         changed.Add(new(EntityKinds.Agent, a.Id));
     }
