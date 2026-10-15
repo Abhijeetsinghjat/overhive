@@ -29,6 +29,7 @@ jobs:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     continue-on-error: true
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -46,7 +47,8 @@ jobs:
           git config --global init.defaultBranch main
           git config --global core.autocrlf false
       - run: dotnet build -c Release
-      - run: dotnet test -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+      - run: dotnet test -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults --blame-hang-timeout 3m --blame-hang-dump-type none
+        timeout-minutes: 25
       - name: Failed tests
         if: always()
         shell: bash
