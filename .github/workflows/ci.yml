@@ -53,6 +53,7 @@ jobs:
         run: |
           set +e
           cli=src/Amc.Cli/bin/Release/net10.0/agentctl
+          d="$HOME/.local/state/agent-mission-control"; mkdir -p "$d" && printf x > "$d/token" && chmod 600 "$d/token"  # no daemon needed
           AMC_Port=1 "$cli" run -- /bin/sh -c 'echo hello-from-pty; tty; exit 3' < /dev/null
           echo "exit=$?"
           AMC_Port=1 "$cli" run -- /bin/echo plain
