@@ -29,7 +29,7 @@ jobs:
       - name: Checksums
         run: cd dist && sha256sum *.tar.gz > SHA256SUMS
       - name: Build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*.tar.gz
       - name: Release notes from CHANGELOG.md
