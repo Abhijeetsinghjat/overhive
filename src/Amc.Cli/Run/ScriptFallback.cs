@@ -6,7 +6,8 @@ using Amc.Cli.Native;
 namespace Amc.Cli.Run;
 
 /// <summary>
-/// Fallback when the native PTY path is unavailable: `script -qfec "&lt;cmd&gt;" /dev/null` allocates the
+/// Fallback when the native PTY path is unavailable: script(1) (`script -qfec "&lt;cmd&gt;" /dev/null` on Linux,
+/// `script -qF /dev/null sh -c "&lt;cmd&gt;"` on macOS) allocates the
 /// PTY and we talk to it over pipes. Limitations: the PTY size is fixed at start (set via stty inside
 /// the script command; SIGWINCH/resizes are not propagated), and exit codes come from script(1).
 /// </summary>
@@ -21,7 +22,11 @@ internal static class ScriptFallback
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = false,
             UseShellExecute = false, WorkingDirectory = cwd,
         };
-        foreach (var a in new[] { "-q", "-f", "-e", "-c", inner, "/dev/null" }) psi.ArgumentList.Add(a);
+        // util-linux: script -q -f -e -c "<cmd>" FILE. BSD/macOS: script -q -F FILE command… (exit status is the child's).
+        var args = OperatingSystem.IsMacOS()
+            ? new[] { "-q", "-F", "/dev/null", "/bin/sh", "-c", inner }
+            : new[] { "-q", "-f", "-e", "-c", inner, "/dev/null" };
+        foreach (var a in args) psi.ArgumentList.Add(a);
         foreach (var (k, v) in env) psi.Environment[k] = v;
 
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("cannot start script(1)");

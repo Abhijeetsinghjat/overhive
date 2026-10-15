@@ -170,7 +170,7 @@ public static class RunCommand
             }
             var n = Libc.read(pty.MasterFd, ref buf[0], buf.Length);
             if (n > 0) { idleAfterExit = 0; sink(buf.AsSpan(0, (int)n)); continue; }
-            if (n < 0 && Libc.Errno is Libc.EINTR or Libc.EAGAIN) continue;
+            if (n < 0 && (Libc.Errno is var e && (e == Libc.EINTR || e == Libc.EAGAIN))) continue;
             break; // 0 or EIO: slave side fully closed
         }
     }
@@ -187,7 +187,7 @@ public static class RunCommand
             if ((p.Revents & Libc.POLLNVAL) != 0) return;
             var n = Libc.read(fd, ref buf[0], buf.Length);
             if (n > 0) { if (!pty.Write(buf.AsSpan(0, (int)n))) return; continue; }
-            if (n < 0 && Libc.Errno is Libc.EINTR or Libc.EAGAIN) continue;
+            if (n < 0 && (Libc.Errno is var e && (e == Libc.EINTR || e == Libc.EAGAIN))) continue;
             return; // EOF on stdin: stop relaying, leave the PTY open (like script(1) does)
         }
     }
