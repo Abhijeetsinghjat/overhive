@@ -87,8 +87,7 @@ public static class Router
 
     private static Task<int> VersionAsync(CliContext ctx, ParsedArgs args, CancellationToken ct)
     {
-        var v = typeof(Router).Assembly.GetName().Version;
-        ctx.Out.WriteLine("Overhive " + (v is null ? "dev" : $"{v.Major}.{v.Minor}.{v.Build}"));
+        ctx.Out.WriteLine($"{Amc.Core.Product.Name} {Amc.Core.Product.Describe(typeof(Router).Assembly.GetName().Version)}");
         return Task.FromResult(ExitCodes.Ok);
     }
 

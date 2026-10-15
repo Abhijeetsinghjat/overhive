@@ -28,6 +28,7 @@ public static class ApiEndpoints
             seq = state.Read(s => s.Seq),
             serverTime = DateTimeOffset.UtcNow,
             version = typeof(ApiEndpoints).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : null,
+            stage = Amc.Core.Product.Stage,
         }));
 
         api.MapGet("/state", (StateStore state) => Results.Content(state.SerializeState(), "application/json"));
