@@ -8,7 +8,7 @@ namespace Amc.Daemon.Collectors.Git;
 /// on Linux each watcher consumes one inotify *instance* (default limit 128 per user,
 /// shared with editors and other tools). Watches are non-recursive directory watches.
 /// </summary>
-public sealed class Inotify : IDisposable
+public sealed class Inotify : IDirWatcher
 {
     public const uint Modify = 0x2, CloseWrite = 0x8, MovedFrom = 0x40, MovedTo = 0x80, Create = 0x100, Delete = 0x200,
         DeleteSelf = 0x400, MoveSelf = 0x800, Overflow = 0x4000, Ignored = 0x8000, OnlyDir = 0x1000000, IsDir = 0x40000000;
@@ -42,7 +42,9 @@ public sealed class Inotify : IDisposable
 
     public int Count { get { lock (_byWd) return _byWd.Count; } }
 
-    public bool Add(string dir, uint mask = DefaultMask)
+    public bool Add(string dir) => Add(dir, DefaultMask);
+
+    public bool Add(string dir, uint mask)
     {
         lock (_byWd)
         {
