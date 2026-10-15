@@ -46,4 +46,19 @@ public class MacProcTests
         Assert.NotEmpty(argv);
         Assert.Contains(env, e => e.StartsWith("PATH=", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Open_file_path_is_reported_on_macOS()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var path = Path.GetTempFileName();
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+            var opened = MacFile.PathOf(fs.SafeFileHandle)!;
+            Assert.Equal(Path.GetFileName(path), Path.GetFileName(opened));
+            Assert.True(File.Exists(opened));
+        }
+        finally { File.Delete(path); }
+    }
 }

@@ -113,6 +113,7 @@ public static class GitEndpoints
 
     private static string? OpenedPath(FileStream fs)
     {
+        if (OperatingSystem.IsMacOS()) return Amc.Daemon.Platform.MacFile.PathOf(fs.SafeFileHandle);
         if (!OperatingSystem.IsLinux()) return null;
         try { return new FileInfo($"/proc/self/fd/{fs.SafeFileHandle.DangerousGetHandle()}").LinkTarget; }
         catch (IOException) { return null; }
