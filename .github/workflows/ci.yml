@@ -23,3 +23,43 @@ jobs:
           git config --global init.defaultBranch main
       - run: dotnet build -c Release
       - run: dotnet test -c Release --no-build --logger "console;verbosity=normal"
+
+  # macOS and Windows support is in progress: these runs report problems but do not block merges yet.
+  platforms:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Git identity for tests that commit
+        shell: bash
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@localhost
+          git config --global init.defaultBranch main
+          git config --global core.autocrlf false
+      - run: dotnet build -c Release
+      - run: dotnet test -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+      - name: Failed tests
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY' || true
+          import glob, xml.etree.ElementTree as ET
+          ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          for f in glob.glob('TestResults/**/*.trx', recursive=True):
+              root = ET.parse(f).getroot()
+              c = root.find('.//t:Counters', ns)
+              print('total', c.get('total'), 'passed', c.get('passed'), 'failed', c.get('failed'))
+              for r in root.iter('{%s}UnitTestResult' % ns['t']):
+                  if r.get('outcome') == 'Failed':
+                      msg = r.find('.//t:Message', ns)
+                      print('FAIL', r.get('testName'), '::', (msg.text or '').strip().splitlines()[0][:220] if msg is not None and msg.text else '')
+          PY
