@@ -29,14 +29,22 @@ You can message agents, pause or stop them, and start new sessions of any instal
 - **Local only.** One daemon on `127.0.0.1` and a private Unix socket. Data stays in SQLite under
   `~/.local/state/agent-mission-control`.
 
-> **Beta.** Overhive works and is used daily on Linux, but it has had few users so far. Expect rough edges and
-> please report them. macOS support comes next, then native Windows. On Windows today you can run it inside
-> WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
+> **Beta.** Overhive works and is used daily on Linux; macOS support is new and passes the full test suite
+> on Apple Silicon, but has had few real users yet. Expect rough edges and please report them. Native Windows
+> comes next; on Windows today you can run it inside WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
 
 ## Install
 
-From a release archive (no .NET needed). Download the archive for your machine (`linux-x64` or
-`linux-arm64`) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
+On macOS with [Homebrew](https://brew.sh) (from v0.2.0, the first release with macOS builds):
+
+```bash
+brew tap abhijeetsinghjat/overhive https://github.com/Abhijeetsinghjat/overhive
+brew install overhive
+brew services start overhive      # start now and at every login
+```
+
+From a release archive (no .NET needed). Download the archive for your machine (`linux-x64`, `linux-arm64`,
+`osx-arm64` for Apple Silicon, `osx-x64` for Intel Macs) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
@@ -52,7 +60,8 @@ git clone https://github.com/Abhijeetsinghjat/overhive && cd overhive
 scripts/install.sh
 ```
 
-Both install `amcd` (the daemon, run as a systemd user service that starts on login) and the CLI as
+Both install `amcd` (the daemon, started at login by a systemd user service on Linux or a launchd agent on
+macOS) and the CLI as
 `overhive` (also available as `agentctl`). Open the dashboard at **http://127.0.0.1:47821**.
 
 ## Connect your AI tools

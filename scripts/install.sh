@@ -12,15 +12,7 @@ mkdir -p "$HOME/.local/bin"
 ln -sf "$base/launcher.sh" "$HOME/.local/bin/amcd"
 ln -sf "$base/launcher.sh" "$HOME/.local/bin/agentctl"
 ln -sf "$base/launcher.sh" "$HOME/.local/bin/overhive"   # friendly alias for agentctl
-# Start on login via a systemd user unit (skip with AMC_NO_SYSTEMD=1).
-if [[ -z "${AMC_NO_SYSTEMD:-}" ]] && command -v systemctl >/dev/null && systemctl --user is-system-running >/dev/null 2>&1; then
-  mkdir -p "$HOME/.config/systemd/user"
-  install -m 0644 "$repo/scripts/amcd.service" "$HOME/.config/systemd/user/amcd.service"
-  systemctl --user daemon-reload
-  systemctl --user enable amcd.service >/dev/null
-  systemctl --user restart amcd.service   # picks up the freshly published binaries
-  echo "Installed. amcd runs as a systemd user service (starts on login): systemctl --user status amcd"
-else
-  echo "Installed. Start the daemon with: amcd   (then open http://127.0.0.1:47821)"
-fi
+# Start at login: systemd user unit on Linux, launchd agent on macOS.
+source "$repo/scripts/service.sh"
+install_service "$repo/scripts"
 echo "Dashboard: http://127.0.0.1:47821"

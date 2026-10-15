@@ -47,6 +47,11 @@ jobs:
           git config --global init.defaultBranch main
           git config --global core.autocrlf false
       - run: dotnet build -c Release
+      - name: Package and smoke test the macOS archive
+        if: runner.os == 'macOS'
+        shell: bash
+        run: AMC_RELEASE=0.0.0 AMC_RIDS=osx-arm64 scripts/package.sh && scripts/smoke-release.sh dist/overhive-0.0.0-osx-arm64.tar.gz
+        timeout-minutes: 15
       - name: PTY smoke test (macOS)
         if: runner.os == 'macOS'
         shell: bash
