@@ -53,9 +53,9 @@ jobs:
         run: |
           set +e
           cli=src/Amc.Cli/bin/Release/net10.0/agentctl
-          AMC_Port=1 timeout 60 "$cli" run -- /bin/sh -c 'echo hello-from-pty; tty; exit 3' < /dev/null
+          AMC_Port=1 "$cli" run -- /bin/sh -c 'echo hello-from-pty; tty; exit 3' < /dev/null
           echo "exit=$?"
-          AMC_Port=1 timeout 60 "$cli" run -- /bin/echo plain
+          AMC_Port=1 "$cli" run -- /bin/echo plain
           echo "exit=$?"
         timeout-minutes: 3
       # One step per test area, each with its own limit, so a hang in one area still reports the others.
