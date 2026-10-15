@@ -6,6 +6,7 @@ import { store, register, get, invalidate } from '../store.js';
 import { ui, select, isSelected } from '../ui.js';
 import { toolName, shortModelName, usageRollup, fmtTok, usageTotal, usageTitle, roots, children, agentName, statusMeta, statusOf, isActive, isTerminal, evBadge, agentColor, worktreeOfAgent, worktreeLabel, describe } from '../model.js';
 import { agentPasses, filterCtx } from '../filters.js';
+import { verifyMark } from './verification.js';
 
 const W = 280, H = 150, COL_GAP = 56, ROW_GAP = 16, PAD = 20, BAND_GAP = 36;
 const MIN_ZOOM = 0.35, MAX_ZOOM = 1.6, MIN_FIT = 0.6;
@@ -159,7 +160,7 @@ function cardSig(n) {
   const lt = store.lastTool.get(a.id);
   return [a.status, a.model, usageTotal(usageRollup(a)), (a.childIds || []).length, a.statusReason, a.statusEvidence, a.title, a.description, a.lastPrompt, a.currentTool, a.currentAction, a.toolCount, a.toolFailures,
     a.filesChanged, a.lastActivityAt, a.completedAt, JSON.stringify(a.tasks?.map((t) => t.state)), lt?.seq, n.dim, isSelected('agent', a.id),
-    a.currentWorktreeId, (a.childIds || []).length, conflictFor(a.id)].join('|');
+    a.currentWorktreeId, (a.childIds || []).length, conflictFor(a.id), a.verification?.contradicted].join('|');
 }
 
 function conflictFor(id) {
@@ -198,6 +199,7 @@ function card(n) {
     h('span', { class: `pill ${m.cls}`, title: a.statusReason || m.label }, h('span', { class: 'glyph' }, m.glyph), m.label),
     evBadge(a.statusEvidence, 'Applies to the status'),
     nConf ? h('span', { class: 'pill st-blocked', title: `${nConf} conflict(s) involve this agent`, 'aria-label': 'conflict' }, '⚠') : null,
+    verifyMark(a),
     h('span', { class: 'spacer' }),
     a.model ? h('span', { class: 'gc-model', title: `Model: ${a.model} (reported)` }, shortModelName(a.model)) : null,
     h('span', { class: 'gc-kind', title: isMain ? 'Tool' : 'Sub-agent type' }, isMain ? toolName(a.provider) : a.agentType || 'sub-agent')),

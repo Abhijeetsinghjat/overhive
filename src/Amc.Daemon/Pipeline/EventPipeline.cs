@@ -92,6 +92,7 @@ public sealed class EventPipeline : BackgroundService, IEventSink
             replayed++;
         }
         ConflictDetector.Recompute(state, changed);
+        Amc.Core.Verification.VerificationFold.Recompute(state, changed);
         state.ReducerVersion = Reducer.Version;
         _state.Load(state);
         _sinceSnapshot = replayed;

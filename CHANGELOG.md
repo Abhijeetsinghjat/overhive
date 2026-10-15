@@ -3,6 +3,16 @@
 All notable changes to Overhive. Versions follow [Semantic Versioning](https://semver.org/); while the
 version is 0.x, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Added
+- Claimed vs observed: when an agent says "all tests pass", "the build succeeds", "I committed the changes"
+  or "created `src/x.ts`", Overhive checks it against the commands it ran, Git and the files, and shows
+  each claim as confirmed, contradicted or unverified with the evidence behind it (agent panel →
+  Verification, `GET /api/agents/{id}/verification`). Contradicted claims show as ✗ N on the agent's card
+  and tree row. A review hint (inferred) flags sessions where tests went from failing to passing after the
+  tests themselves were changed.
+
 ## [0.1.0] - 2026-10-15
 
 First public release: a free, open-source, local control center for AI coding agents. Linux (x64, arm64).
