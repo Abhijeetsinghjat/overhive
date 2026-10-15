@@ -31,7 +31,7 @@ public class PtyRunTests
     {
         var (code, output) = await Run(["/bin/sh", "-c", "tty; echo; test -t 0 && test -t 1 && test -t 2 && echo ALLTTY"]);
         Assert.Equal(0, code);
-        Assert.Matches(@"^/dev/pts/\d+", output); // note: this distro's tty(1) omits the trailing newline
+        Assert.Matches(@"^/dev/(pts/\d+|ttys\d+)", output); // Linux /dev/pts/N, macOS /dev/ttysNNN
         Assert.Contains("ALLTTY", output);
     }
 
@@ -40,7 +40,7 @@ public class PtyRunTests
     {
         var dir = Path.GetTempPath().TrimEnd('/');
         var (code, output) = await Run(
-            ["/bin/sh", "-c", "echo id=$AMC_TERMINAL_ID; pwd; stty size; [ \"$(ps -o sid= -p $$ | tr -d ' ')\" = \"$$\" ] && echo LEADER"],
+            ["/bin/sh", "-c", "echo id=$AMC_TERMINAL_ID; pwd; stty size; ps -o stat= -p $$ | grep -q s && echo LEADER"],
             new RunOptions { TerminalId = "TEST123", Cwd = dir, Cols = 101, Rows = 33 });
         Assert.Equal(0, code);
         Assert.Contains("id=TEST123", output);

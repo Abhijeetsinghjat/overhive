@@ -55,7 +55,7 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
     public TerminalHub(IEventSink sink, HealthRegistry health, IOptions<AmcOptions> options, ILogger<TerminalHub> log,
         IProcSource? proc = null, int ringBytes = RingBuffer.DefaultCapacity)
     {
-        _sink = sink; _health = health; _log = log; _proc = proc ?? new ProcFs();
+        _sink = sink; _health = health; _log = log; _proc = proc ?? ProcSources.Default;
         _dir = options.Value.TerminalDir;
         _ringBytes = ringBytes;
         _health.Register(HealthName);

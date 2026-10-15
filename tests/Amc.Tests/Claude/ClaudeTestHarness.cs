@@ -100,13 +100,9 @@ public sealed class FakeSignals(FakeProcFs proc) : ISignalSender
     {
         Sent.Add((pid, signal));
         if (!proc.Procs.TryGetValue(pid, out var p)) return 3; // ESRCH
-        switch (signal)
-        {
-            case Signals.SigStop: proc.Procs[pid] = (p.Start, 'T'); break;
-            case Signals.SigCont: proc.Procs[pid] = (p.Start, 'S'); break;
-            case Signals.SigTerm when !IgnoreTerm:
-            case Signals.SigKill: proc.Procs.TryRemove(pid, out _); break;
-        }
+        if (signal == Signals.SigStop) proc.Procs[pid] = (p.Start, 'T');
+        else if (signal == Signals.SigCont) proc.Procs[pid] = (p.Start, 'S');
+        else if ((signal == Signals.SigTerm && !IgnoreTerm) || signal == Signals.SigKill) proc.Procs.TryRemove(pid, out _);
         return 0;
     }
 }

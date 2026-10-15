@@ -68,9 +68,9 @@ public sealed class LiveProcessCollector(
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        if (!OperatingSystem.IsLinux() || !Directory.Exists("/proc/self"))
+        if (!(OperatingSystem.IsMacOS() || (OperatingSystem.IsLinux() && Directory.Exists("/proc/self"))))
         {
-            health.Disabled(HealthName, "/proc not available");
+            health.Disabled(HealthName, "process information not available on this OS yet");
             return;
         }
         health.Register(HealthName, Interval * 5);

@@ -19,7 +19,8 @@ internal struct PollFd
 }
 
 /// <summary>
-/// Minimal glibc bindings (Linux x86_64 / arm64). Opaque C structs (termios, posix_spawnattr_t,
+/// Minimal libc bindings for Linux (glibc, x86_64 / arm64) and macOS. Constants that differ are chosen at
+/// startup. Opaque C structs (termios, posix_spawnattr_t,
 /// posix_spawn_file_actions_t, sigset_t) are allocated as generously sized byte buffers so we never
 /// depend on their exact layout.
 /// </summary>
@@ -27,13 +28,18 @@ internal static class Libc
 {
     private const string L = "libc";
 
-    public const int EINTR = 4, EIO = 5, EAGAIN = 11, ENOENT = 2, EACCES = 13;
+    private static readonly bool Mac = OperatingSystem.IsMacOS();
+
+    public const int EINTR = 4, EIO = 5, ENOENT = 2, EACCES = 13;
+    public static readonly int EAGAIN = Mac ? 35 : 11;
     public const short POLLIN = 0x1, POLLERR = 0x8, POLLHUP = 0x10, POLLNVAL = 0x20;
-    public const int O_RDWR = 2, O_NOCTTY = 0x100;
+    public const int O_RDWR = 2;
+    public static readonly int O_NOCTTY = Mac ? 0x20000 : 0x100;
     public const int F_SETFD = 2, FD_CLOEXEC = 1;
     public const int TCSANOW = 0;
-    public const nuint TIOCGWINSZ = 0x5413, TIOCSWINSZ = 0x5414;
-    public const short POSIX_SPAWN_SETSIGDEF = 0x04, POSIX_SPAWN_SETSIGMASK = 0x08, POSIX_SPAWN_SETSID = 0x80;
+    public static readonly nuint TIOCGWINSZ = Mac ? (nuint)0x40087468 : 0x5413, TIOCSWINSZ = Mac ? (nuint)0x80087467 : 0x5414;
+    public const short POSIX_SPAWN_SETSIGDEF = 0x04, POSIX_SPAWN_SETSIGMASK = 0x08;
+    public static readonly short POSIX_SPAWN_SETSID = Mac ? (short)0x400 : (short)0x80;
     public const int SIGHUP = 1, SIGINT = 2, SIGQUIT = 3, SIGKILL = 9, SIGTERM = 15;
 
     public const int TermiosSize = 256;          // real: 60
@@ -43,13 +49,45 @@ internal static class Libc
 
     [DllImport(L, SetLastError = true)] public static extern int openpty(out int master, out int slave, IntPtr name, IntPtr termp, ref WinSize winp);
     [DllImport(L, SetLastError = true)] public static extern int ptsname_r(int fd, byte[] buf, nuint len);
+    [DllImport(L, SetLastError = true)] private static extern IntPtr ptsname(int fd);
+
+    /// <summary>
+    /// Path of the PTY slave for a master fd: ptsname_r on Linux; ptsname on macOS, where ptsname_r is missing
+    /// on older releases (ptsname's static buffer is safe here: only PTY spawns call it, one at a time).
+    /// </summary>
+    public static string? SlaveName(int master)
+    {
+        if (Mac)
+        {
+            lock (PtsnameGate) { var p = ptsname(master); return p == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(p); }
+        }
+        var buf = new byte[256];
+        if (ptsname_r(master, buf, (nuint)buf.Length) != 0) return null;
+        var n = Array.IndexOf(buf, (byte)0);
+        return System.Text.Encoding.UTF8.GetString(buf, 0, n < 0 ? buf.Length : n);
+    }
+
+    private static readonly object PtsnameGate = new();
     [DllImport(L, SetLastError = true)] public static extern int close(int fd);
-    [DllImport(L, SetLastError = true)] public static extern int fcntl(int fd, int cmd, int arg);
+    [DllImport(L, EntryPoint = "fcntl", SetLastError = true)] private static extern int fcntl_std(int fd, int cmd, int arg);
     [DllImport(L, SetLastError = true)] public static extern nint read(int fd, ref byte buf, nint count);
     [DllImport(L, SetLastError = true)] public static extern nint write(int fd, ref byte buf, nint count);
     [DllImport(L, SetLastError = true)] public static extern int poll(ref PollFd fds, nuint nfds, int timeout);
     [DllImport(L, SetLastError = true)] public static extern int isatty(int fd);
-    [DllImport(L, SetLastError = true)] public static extern int ioctl(int fd, nuint request, ref WinSize ws);
+    [DllImport(L, EntryPoint = "ioctl", SetLastError = true)] private static extern int ioctl_std(int fd, nuint request, ref WinSize ws);
+
+    // ioctl and fcntl are variadic. On Apple arm64, variadic arguments are passed on the stack, not in registers,
+    // so a plain P/Invoke hands the callee garbage (and it may write through it). Filling x2..x7 with dummies
+    // makes the real argument the first stack slot, which is where a variadic callee reads it.
+    private static readonly bool AppleArm64 = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+    [DllImport(L, EntryPoint = "ioctl", SetLastError = true)] private static extern int ioctl_va(int fd, nuint request, nint d2, nint d3, nint d4, nint d5, nint d6, nint d7, ref WinSize ws);
+    [DllImport(L, EntryPoint = "fcntl", SetLastError = true)] private static extern int fcntl_va(int fd, int cmd, nint d2, nint d3, nint d4, nint d5, nint d6, nint d7, nint arg);
+
+    public static int ioctl(int fd, nuint request, ref WinSize ws) =>
+        AppleArm64 ? ioctl_va(fd, request, 0, 0, 0, 0, 0, 0, ref ws) : ioctl_std(fd, request, ref ws);
+
+    public static int fcntl(int fd, int cmd, int arg) =>
+        AppleArm64 ? fcntl_va(fd, cmd, 0, 0, 0, 0, 0, 0, arg) : fcntl_std(fd, cmd, arg);
     [DllImport(L, SetLastError = true)] public static extern int tcgetattr(int fd, byte[] termios);
     [DllImport(L, SetLastError = true)] public static extern int tcsetattr(int fd, int optionalActions, byte[] termios);
     [DllImport(L)] public static extern void cfmakeraw(byte[] termios);

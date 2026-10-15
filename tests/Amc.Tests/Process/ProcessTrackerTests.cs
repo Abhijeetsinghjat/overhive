@@ -196,8 +196,8 @@ public class ProcessTrackerTests
     public void RealProc_SelfAsAgent()
     {
         var self = Environment.ProcessId;
-        var st = ProcParsers.ParseStat(new ProcFs().ReadStat(self))!;
-        var r = new ProcessTracker(new ProcFs()).Scan([new AgentProcessRef("test:self", self, st.ProcStart)], [], 0);
+        var st = ProcParsers.ParseStat(ProcSources.Default.ReadStat(self))!;
+        var r = new ProcessTracker(ProcSources.Default).Scan([new AgentProcessRef("test:self", self, st.ProcStart)], [], 0);
         var me = r.Processes.Single(p => p.Pid == self);
         Assert.True(me.RssBytes > 0);
         Assert.Equal(Environment.CurrentDirectory, me.Cwd);

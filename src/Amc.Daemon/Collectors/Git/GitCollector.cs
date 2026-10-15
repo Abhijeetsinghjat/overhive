@@ -77,7 +77,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
     private readonly Dictionary<string, (Timer Timer, DateTimeOffset First)> _pending = new(StringComparer.Ordinal);
     private readonly Channel<string> _work = Channel.CreateUnbounded<string>();
     private readonly CancellationTokenSource _stopping = new();
-    private Inotify? _inotify;
+    private IDirWatcher? _inotify;
     private long _refreshes;
 
     public GitCollector(GitCli git, IEventSink sink, StateStore state, HealthRegistry health, IOptions<AmcOptions> options,
@@ -88,7 +88,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
         _health.Register(GitCli.HealthName, _settings.Tick * 3 + TimeSpan.FromSeconds(30));
         if (_settings.Watch)
         {
-            _inotify = Inotify.TryCreate(out var error);
+            _inotify = DirWatchers.TryCreate(out var error);
             if (_inotify is null) _log.LogWarning("Git metadata watching unavailable ({Error}); relying on periodic rescans", error);
             else _inotify.Changed += OnFsEvent;
         }

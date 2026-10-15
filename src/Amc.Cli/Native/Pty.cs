@@ -43,10 +43,7 @@ public sealed class PtyProcess : IDisposable
         {
             Libc.fcntl(master, Libc.F_SETFD, Libc.FD_CLOEXEC);
             Libc.fcntl(slave, Libc.F_SETFD, Libc.FD_CLOEXEC);
-            var nameBuf = new byte[256];
-            if (Libc.ptsname_r(master, nameBuf, (nuint)nameBuf.Length) != 0)
-                throw new PtySpawnException("ptsname_r failed", Libc.Errno);
-            var slavePath = Encoding.UTF8.GetString(nameBuf, 0, Array.IndexOf(nameBuf, (byte)0));
+            var slavePath = Libc.SlaveName(master) ?? throw new PtySpawnException("cannot get the PTY slave name", Libc.Errno);
 
             attr = Zeroed(Libc.SpawnAttrSize);
             fa = Zeroed(Libc.FileActionsSize);
@@ -59,8 +56,8 @@ public sealed class PtyProcess : IDisposable
             Check(Libc.posix_spawnattr_setsigmask(attr, sigmask), "setsigmask");
             Check(Libc.posix_spawnattr_setsigdefault(attr, sigdef), "setsigdefault");
             Check(Libc.posix_spawnattr_setflags(attr,
-                Libc.POSIX_SPAWN_SETSID | Libc.POSIX_SPAWN_SETSIGMASK | Libc.POSIX_SPAWN_SETSIGDEF), "setflags");
-            // setsid happens before file actions in glibc, so this open acquires the controlling tty.
+                (short)(Libc.POSIX_SPAWN_SETSID | Libc.POSIX_SPAWN_SETSIGMASK | Libc.POSIX_SPAWN_SETSIGDEF)), "setflags");
+            // setsid happens before file actions (glibc and macOS), so this open acquires the controlling tty.
             Check(Libc.posix_spawn_file_actions_addopen(fa, 0, slavePath, Libc.O_RDWR, 0), "addopen");
             Check(Libc.posix_spawn_file_actions_adddup2(fa, 0, 1), "adddup2");
             Check(Libc.posix_spawn_file_actions_adddup2(fa, 0, 2), "adddup2");
@@ -72,7 +69,7 @@ public sealed class PtyProcess : IDisposable
 
             var rc = Libc.posix_spawnp(out var pid, argv[0], fa, attr, argvPtrs, envPtrs);
             if (rc != 0) throw new PtySpawnException($"cannot execute '{argv[0]}': {Marshal.GetPInvokeErrorMessage(rc)}", rc);
-            // glibc's posix_spawn returns after the child exec'd (CLONE_VFORK), so the slave was already opened.
+            // posix_spawn returns after the child exec'd (glibc: CLONE_VFORK; macOS: in-kernel), so the slave was already opened.
             Libc.close(slave);
             slave = -1;
             return new PtyProcess(master, pid, slavePath);

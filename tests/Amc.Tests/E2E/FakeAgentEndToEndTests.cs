@@ -67,7 +67,7 @@ public sealed class FakeAgentEndToEndTests : IDisposable
 
         // ---- 1. start fake agent: real process + registry entry ----
         _fakeAgent = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("sleep", "600") { UseShellExecute = false })!;
-        var procStart = File.ReadAllText($"/proc/{_fakeAgent.Id}/stat").Split(')')[^1].Split(' ', StringSplitOptions.RemoveEmptyEntries)[19];
+        var procStart = Amc.Daemon.Collectors.Processes.ProcParsers.ParseStat(Amc.Daemon.Collectors.Processes.ProcSources.Default.ReadStat(_fakeAgent.Id))!.ProcStart;
         File.WriteAllText(Path.Combine(_claude.Path, "sessions", $"{_fakeAgent.Id}.json"), new JsonObject
         {
             ["pid"] = _fakeAgent.Id, ["sessionId"] = Session, ["cwd"] = repo, ["procStart"] = procStart,
