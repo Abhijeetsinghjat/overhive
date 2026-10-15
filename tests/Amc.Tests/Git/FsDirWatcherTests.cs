@@ -6,7 +6,7 @@ namespace Amc.Tests.Git;
 public class FsDirWatcherTests
 {
     [Fact]
-    public async Task Reports_create_change_rename_and_delete_with_inotify_bits()
+    public async Task Reports_changed_entries_with_inotify_bits()
     {
         var dir = Directory.CreateTempSubdirectory("amc-fsw-").FullName;
         try
@@ -24,15 +24,23 @@ public class FsDirWatcherTests
             Directory.CreateDirectory(Path.Combine(dir, "sub"));
             File.Delete(Path.Combine(dir, "ORIG_HEAD"));
 
-            bool Has(string name, uint bit) => events.Any(e => e.Dir == dir && e.Name == name && (e.Mask & bit) != 0);
+            // The collector only needs to learn that an entry changed (it then refreshes); the exact bits vary:
+            // FSEvents on macOS may report a rename as a delete of the old name and nothing for the new one.
+            bool Has(string name, uint bits = uint.MaxValue) => events.Any(e => e.Dir == dir && e.Name == name && (e.Mask & bits) != 0);
             var until = DateTime.UtcNow.AddSeconds(10);
-            while (DateTime.UtcNow < until && !(Has("ORIG_HEAD", Inotify.MovedTo) && Has("sub", Inotify.IsDir) && Has("ORIG_HEAD", Inotify.Delete)))
+            while (DateTime.UtcNow < until && !(Has("HEAD") && Has("ORIG_HEAD") && Has("sub", Inotify.IsDir)))
                 await Task.Delay(50);
 
-            Assert.True(Has("HEAD", Inotify.Create | Inotify.CloseWrite | Inotify.MovedFrom), string.Join(", ", events));
-            Assert.True(Has("ORIG_HEAD", Inotify.MovedTo), string.Join(", ", events));
-            Assert.True(Has("sub", Inotify.IsDir), string.Join(", ", events));
-            Assert.True(Has("ORIG_HEAD", Inotify.Delete), string.Join(", ", events));
+            var seen = string.Join(", ", events);
+            Assert.True(Has("HEAD", Inotify.Create | Inotify.CloseWrite), seen);
+            Assert.True(Has("ORIG_HEAD"), seen);
+            Assert.True(Has("sub", Inotify.IsDir), seen);
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsWindows())
+            {
+                // These report renames and deletes precisely.
+                Assert.True(Has("ORIG_HEAD", Inotify.MovedTo), seen);
+                Assert.True(Has("ORIG_HEAD", Inotify.Delete), seen);
+            }
 
             w.Remove(dir);
             Assert.False(w.IsWatched(dir));
