@@ -4,7 +4,8 @@
 #   scripts/smoke-release.sh dist/overhive-<version>-<rid>.tar.gz
 set -euo pipefail
 archive="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-tmp="$(mktemp -d)"; trap 'kill "${pid:-0}" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+# Short path: Unix socket paths are limited to 104 bytes on macOS, whose default temp dir is long.
+tmp="$(mktemp -d /tmp/ovh-smoke.XXXXXX)"; trap 'kill "${pid:-0}" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/home"
 export HOME="$tmp/home" AMC_NO_SYSTEMD=1 AMC_NO_LAUNCHD=1   # everything below uses the throwaway home
 unset AMC_INSTALL_DIR XDG_STATE_HOME XDG_CONFIG_HOME
