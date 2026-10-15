@@ -6,6 +6,8 @@
 
 <p align="center"><b>Keep watch over every AI coding agent on your machine — any tool, free and open source.</b></p>
 
+<p align="center"><b>🧪 Beta</b> · works on Linux today; macOS and Windows are on the way · <a href="https://github.com/Abhijeetsinghjat/overhive/issues/new/choose">report a problem</a></p>
+
 <p align="center"><img src="docs/media/overhive-demo.webp" width="100%" alt="Overhive demo: Codex, Gemini CLI and Copilot agents working in one repository; the graph, file changes, a cross-worktree conflict, activity, a commit, token usage, and a message sent from the dashboard that the agent answers"></p>
 <p align="center"><sub>44-second tour with sample agents in a demo repository · ▶ <a href="https://github.com/user-attachments/assets/dc34ef94-923d-440e-8eac-943e7e16831d">Watch in full quality (1080p video)</a></sub></p>
 
@@ -27,7 +29,9 @@ You can message agents, pause or stop them, and start new sessions of any instal
 - **Local only.** One daemon on `127.0.0.1` and a private Unix socket. Data stays in SQLite under
   `~/.local/state/agent-mission-control`.
 
-> Status: early. Linux today; macOS and Windows are planned.
+> **Beta.** Overhive works and is used daily on Linux, but it has had few users so far. Expect rough edges and
+> please report them. macOS support comes next, then native Windows. On Windows today you can run it inside
+> WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
 
 ## Install
 

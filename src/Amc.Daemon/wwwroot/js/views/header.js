@@ -57,7 +57,8 @@ export function initHeader() {
   help.addEventListener('click', showHelp);
 
   mount(header,
-    h('div', { class: 'brand' }, h('img', { class: 'logo-img', src: '/logo.svg', alt: '' }), h('span', null, 'Overhive')),
+    h('div', { class: 'brand' }, h('img', { class: 'logo-img', src: '/logo.svg', alt: '' }), h('span', { class: 'brand-name' }, 'Overhive'),
+      h('span', { class: 'beta-tag', title: 'Overhive is in beta: tested on Linux; please report problems on GitHub' }, 'Beta')),
     conn, countsEl, conflictBtn,
     h('div', { class: 'spacer' }),
     sessionSel, follow,

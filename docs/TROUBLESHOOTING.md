@@ -38,3 +38,20 @@ A fresh state snapshot is written before each run and only events covered by it 
 exact. Freed space is returned to disk (incremental vacuum). Caveat: after an upgrade that changes how state
 is derived (`Reducer.Version`), state is rebuilt from the *retained* events, so counters derived from pruned
 detail (for example tool-call counts older than the detail window) restart from what is still in the log.
+
+## Windows via WSL2
+
+Until native Windows support lands, Overhive can run inside WSL2 (the Linux on Windows that many AI coding
+CLIs already use). This setup is **not yet verified**; if you try it, please report how it went.
+
+1. Run your AI tools inside WSL (Ubuntu or another distribution), and install Overhive there with the Linux
+   release archive, as in the README.
+2. For the start-on-login service, enable systemd in WSL: add `[boot]` and `systemd=true` to `/etc/wsl.conf`,
+   then run `wsl --shutdown` in Windows and reopen WSL. Without systemd, start the daemon by hand with
+   `amcd &`.
+3. Open **http://127.0.0.1:47821** in your Windows browser; WSL2 forwards localhost to Windows by default.
+
+Limits:
+- Overhive sees only agents running inside WSL, not tools running natively on Windows.
+- Keep repositories in the Linux file system (for example `~/dev`), not under `/mnt/c`: file-change
+  notifications do not work on Windows drives, so changes there are picked up late, and Git is much slower.
