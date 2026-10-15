@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          for area in Core Claude Cli E2E Git Pipeline Process Terminals Tools Ui; do
+          for area in Platform Core Claude Cli E2E Git Pipeline Process Terminals Tools Ui; do
             echo "::group::$area"
             if command -v timeout >/dev/null; then t="timeout 360"; elif command -v gtimeout >/dev/null; then t="gtimeout 360"; else t=""; fi
             $t dotnet test -c Release --no-build --filter "FullyQualifiedName~Amc.Tests.$area." \
