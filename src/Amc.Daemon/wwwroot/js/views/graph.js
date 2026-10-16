@@ -6,6 +6,7 @@ import { store, register, get, invalidate } from '../store.js';
 import { ui, select, isSelected } from '../ui.js';
 import { toolName, shortModelName, usageRollup, fmtTok, usageTotal, usageTitle, roots, children, agentName, statusMeta, statusOf, isActive, isTerminal, evBadge, agentColor, worktreeOfAgent, worktreeLabel, describe } from '../model.js';
 import { agentPasses, filterCtx } from '../filters.js';
+import { guardCardRow, guardSig } from './guard.js';
 
 const W = 280, H = 150, COL_GAP = 56, ROW_GAP = 16, PAD = 20, BAND_GAP = 36;
 const MIN_ZOOM = 0.35, MAX_ZOOM = 1.6, MIN_FIT = 0.6;
@@ -61,7 +62,7 @@ export function initGraph() {
   new ResizeObserver(() => { if (autoFit) apply(); }).observe(scroller);
 
   register({
-    name: 'graph', deps: ['agent', 'worktree', 'session', 'filters', 'selection', 'events', 'tab', 'conflict'],
+    name: 'graph', deps: ['agent', 'worktree', 'session', 'filters', 'selection', 'events', 'tab', 'conflict', 'guard', 'guard-live'],
     render(d) {
       if (ui.tab !== 'graph') return;
       const ctx = filterCtx();
@@ -159,7 +160,7 @@ function cardSig(n) {
   const lt = store.lastTool.get(a.id);
   return [a.status, a.model, usageTotal(usageRollup(a)), (a.childIds || []).length, a.statusReason, a.statusEvidence, a.title, a.description, a.lastPrompt, a.currentTool, a.currentAction, a.toolCount, a.toolFailures,
     a.filesChanged, a.lastActivityAt, a.completedAt, JSON.stringify(a.tasks?.map((t) => t.state)), lt?.seq, n.dim, isSelected('agent', a.id),
-    a.currentWorktreeId, (a.childIds || []).length, conflictFor(a.id)].join('|');
+    a.currentWorktreeId, (a.childIds || []).length, conflictFor(a.id), guardSig(a.id)].join('|');
 }
 
 function conflictFor(id) {
@@ -202,7 +203,7 @@ function card(n) {
     a.model ? h('span', { class: 'gc-model', title: `Model: ${a.model} (reported)` }, shortModelName(a.model)) : null,
     h('span', { class: 'gc-kind', title: isMain ? 'Tool' : 'Sub-agent type' }, isMain ? toolName(a.provider) : a.agentType || 'sub-agent')),
   h('div', { class: 'gc-title', title: agentName(a) }, oneLine(agentName(a), 70)),
-  h('div', { class: 'gc-desc' }, oneLine(isMain ? a.lastPrompt || a.cwd || '' : a.description || a.lastPrompt || '', 140)),
+  guardCardRow(a) || h('div', { class: 'gc-desc' }, oneLine(isMain ? a.lastPrompt || a.cwd || '' : a.description || a.lastPrompt || '', 140)),
   st === 'blocked' ? h('div', { class: 'gc-banner', title: a.statusReason || '' }, '⚠ Needs your input', a.statusReason ? ': ' + oneLine(a.statusReason, 70) : '') :
     st === 'failed' && a.statusReason ? h('div', { class: 'gc-banner bad' }, '✕ ', oneLine(a.statusReason, 80)) :
       st === 'disconnected' ? h('div', { class: 'gc-banner disc' }, '⌁ ', oneLine(a.statusReason || 'Process vanished', 80)) : activity,

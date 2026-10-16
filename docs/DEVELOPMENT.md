@@ -29,8 +29,8 @@ AMC_DataDir=/tmp/amc AMC_Port=47900 dotnet run --project src/Amc.Daemon   # isol
 
 Configuration: `~/.config/agent-mission-control/config.json`, environment variables
 prefixed `AMC_` (for example `AMC_Port`, `AMC_DataDir`, `AMC_ClaudeHome`,
-`AMC_WorkspaceRoots__0`, `AMC_BackfillHours`), or command-line `--Key=value`. See
-`AmcOptions`.
+`AMC_WorkspaceRoots__0`, `AMC_BackfillHours`, `AMC_Guard__AutoPause`), or command-line `--Key=value`. See
+`AmcOptions` (runaway guard settings: `GuardSettings`, documented in RUNAWAY_GUARD.md).
 
 UI fixture (simulated data, clearly labelled in the UI):
 `AMC_FIXTURE_DIR=/tmp/amc-fixture dotnet test --filter Category=DevFixture`, then run the
@@ -66,8 +66,12 @@ To publish a release, tag a commit and push the tag:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` then runs the tests, builds the self-contained `linux-x64` and
-`linux-arm64` archives with `scripts/package.sh`, writes `SHA256SUMS`, and creates the GitHub release.
+`.github/workflows/release.yml` then runs the tests and builds the self-contained archives with
+`scripts/package.sh`: `linux-x64` and `linux-arm64` on Linux, `osx-arm64` and `osx-x64` on macOS (the SDK
+signs macOS binaries only when it builds on macOS). Each build is smoke-tested by `scripts/smoke-release.sh`.
+It then writes `SHA256SUMS`, adds build provenance and creates the GitHub release with a generated Homebrew
+formula (`overhive.rb`). After a release, copy that file to `Formula/overhive.rb` in a pull request so
+`brew install overhive` picks up the new version.
 Everything runs on GitHub's free hosted runners; no secrets beyond the built-in `GITHUB_TOKEN` are needed.
 
 ## Recording the demo

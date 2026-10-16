@@ -50,9 +50,11 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `test.started` / `test.passed` / `test.failed` | `TestRunData` | test command + parsed output | inferred |
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
 | `terminal.started` / `terminal.exited` | `TerminalData` | `agentctl run` | observed |
-| `audit.control` | `AuditData` | every control action (also `warn-conflict` / `auto-warn-conflict`) | observed |
 | `conflict.analyzed` | `ConflictAnalysisData` (conflict key + changed line ranges per worktree pair) | `ConflictAnalyzer` (git diff against the merge base) | observed |
 | `conflict.warned` | `ConflictWarnedData` (conflict key, per-agent outcome) | "Warn agents" action or automatic warning | observed |
+| `audit.control` | `AuditData` | every control action (source `system` when automatic, e.g. the runaway guard's pause; also `warn-conflict` / `auto-warn-conflict`) | observed |
+| `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
+| `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)
 
@@ -71,6 +73,9 @@ current truth and disappear when resolved. The overlap analysis and warnings of 
 conflict are events (`conflict.analyzed`, `conflict.warned`), folded by conflict key into
 `WorldState.ConflictInsights` and shown on the conflict as `insight`, so they survive the
 conflict being re-derived and a restart.
+
+The attention queue ("needs you") is derived the same way, by `AttentionDeriver` from state through
+`IAttentionProvider`s, after every batch; it is never stored as events (see NOTIFICATIONS.md).
 
 ## Volatile data (not events)
 

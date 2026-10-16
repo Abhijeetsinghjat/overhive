@@ -76,6 +76,10 @@ public static class EventTypes
     // Conflict analysis and warnings to agents (see ConflictInsight)
     public const string ConflictAnalyzed = "conflict.analyzed";    // ConflictAnalysisData (observed: git diffs)
     public const string ConflictWarned = "conflict.warned";        // ConflictWarnedData
+    // Runaway guard (payloads in Amc.Core.Guard)
+    public const string GuardAlert = "guard.alert";                // GuardAlertData — a tree crossed a threshold (or changed level)
+    public const string GuardCleared = "guard.cleared";            // GuardClearedData
+    public const string GuardDismissed = "guard.dismissed";        // GuardDismissedData — hidden by the user
 
     public static bool IsFileChange(string type) =>
         type is FileCreated or FileModified or FileDeleted or FileRenamed;

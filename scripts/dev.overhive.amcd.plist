@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent for the Overhive daemon on macOS: starts at login, restarts after a crash.
+  Installed by scripts/install.sh / install-release.sh into ~/Library/LaunchAgents/ with __HOME__ replaced.
+  Logs: ~/Library/Logs/Overhive/amcd.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.overhive.amcd</string>
+  <key>ProgramArguments</key>
+  <array><string>__HOME__/.local/bin/amcd</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>3</integer>
+  <key>ProcessType</key><string>Background</string>
+  <!-- 077: the daemon sets this itself too; keeps any early files private. -->
+  <key>Umask</key><integer>63</integer>
+  <!-- Sessions started from the dashboard are children of the daemon: keep them running across restarts. -->
+  <key>AbandonProcessGroup</key><true/>
+  <key>ExitTimeOut</key><integer>15</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/Overhive/amcd.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/Overhive/amcd.log</string>
+</dict>
+</plist>

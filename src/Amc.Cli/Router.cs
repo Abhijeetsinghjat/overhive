@@ -12,6 +12,8 @@ public static class Router
     [
         new("status", "status [--json]", "Daemon health, agent counts and conflicts", StatusCommand.RunAsync),
         new("agents", "agents [--all] [--json]", "Agent tree (finished agents older than 1h hidden)", AgentsCommand.RunAsync, Flags: ["all"]),
+        new("attention", "attention [--all] [--json]", "What needs you: agents waiting or blocked, failures, conflicts (all tools)",
+            AttentionCommand.RunAsync, Flags: ["all"]),
         new("inspect", "inspect <agent> [--json]", "Full detail of one agent", InspectCommand.RunAsync, 1, 1),
         new("conflicts", "conflicts [warn <n|key>] [--yes] [--json]", "Conflicts with compared line ranges; 'warn' messages the involved agents",
             ConflictsCommand.RunAsync, 0, 2, Flags: ["yes"]),
@@ -22,6 +24,7 @@ public static class Router
         new("inbox", "inbox --tool T --agent ID [--wait SECONDS] [--json]", "Print messages queued for an agent (open protocol)",
             InboxCommand.RunAsync, Values: ["tool", "agent", "wait"]),
         new("usage", "usage [--agents] [--json]", "Token usage per session (incl. sub-agents), per agent and per model", UsageCommand.RunAsync, Flags: ["agents"]),
+        new("guard", "guard [--json]", "Runaway guard: sub-agent fan-out and token-burn alerts per session", GuardCommand.RunAsync),
         new("files", "files [--agent A] [--worktree W] [--json]", "Changed files with attribution", FilesCommand.RunAsync, Values: ["agent", "worktree"]),
         new("events", "events [--agent A] [--type T]... [--file F] [--worktree W] [--since 10m] [--limit N] [-f]", "Event log (follow with -f)",
             EventsCommand.RunAsync, Flags: ["follow"], Values: ["agent", "type", "file", "worktree", "since", "limit"]),
