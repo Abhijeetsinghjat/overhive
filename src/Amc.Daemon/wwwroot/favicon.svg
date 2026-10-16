@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Overhive">
+<title>Overhive</title>
+<defs>
+<linearGradient id="t" x1="0" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="#FFE29A"/><stop offset=".45" stop-color="#F6B544"/><stop offset="1" stop-color="#E08E22"/></linearGradient>
+<linearGradient id="tb" x1="0" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="#F7C565"/><stop offset="1" stop-color="#C9781B"/></linearGradient>
+<linearGradient id="sl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C8751A"/><stop offset="1" stop-color="#9E5512"/></linearGradient>
+<linearGradient id="sr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8F4A0F"/><stop offset="1" stop-color="#5E2E08"/></linearGradient>
+<linearGradient id="rc" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#B9660F"/><stop offset=".55" stop-color="#E9982C"/><stop offset="1" stop-color="#FFC35A"/></linearGradient>
+<linearGradient id="rcb" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#9C5410"/><stop offset=".6" stop-color="#D48526"/><stop offset="1" stop-color="#F2AE4A"/></linearGradient>
+<radialGradient id="sh" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1A0E02" stop-opacity=".45"/><stop offset="1" stop-color="#1A0E02" stop-opacity="0"/></radialGradient>
+</defs>
+<path d="M18.14 21.47 L32 26.75 L32 39.75 L18.14 34.47Z" fill="url(#sl)"/><path d="M32 26.75 L45.86 21.47 L45.86 34.47 L32 39.75Z" fill="url(#sr)"/>
+<path d="M32 5.63 L45.86 10.91 L45.86 21.47 L32 26.75 L18.14 21.47 L18.14 10.91Z" fill="url(#t)"/>
+<path d="M21.5 16.19 Q32 6.16 42.5 16.19 Q32 26.23 21.5 16.19Z" fill="#3B1F06"/>
+<ellipse cx="32" cy="16.19" rx="4.2" ry="2.77" fill="#FFC24F"/>
+<path d="M1.86 45.09 L15.72 50.37 L15.72 58.37 L1.86 53.09Z" fill="url(#sl)"/><path d="M15.72 50.37 L29.58 45.09 L29.58 53.09 L15.72 58.37Z" fill="url(#sr)"/>
+<path d="M15.72 29.25 L29.58 34.53 L29.58 45.09 L15.72 50.37 L1.86 45.09 L1.86 34.53Z" fill="url(#tb)"/>
+<path d="M34.42 45.09 L48.28 50.37 L48.28 58.37 L34.42 53.09Z" fill="url(#sl)"/><path d="M48.28 50.37 L62.14 45.09 L62.14 53.09 L48.28 58.37Z" fill="url(#sr)"/>
+<path d="M48.28 29.25 L62.14 34.53 L62.14 45.09 L48.28 50.37 L34.42 45.09 L34.42 34.53Z" fill="url(#tb)"/>
+</svg>
