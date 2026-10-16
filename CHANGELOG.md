@@ -5,7 +5,16 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-17
+
+Still beta. First release with macOS builds.
+
 ### Added
+- macOS support (Apple Silicon and Intel): process detection for agents Overhive did not start, live
+  terminals, repository watching, pause/resume, and a launchd agent that starts the daemon at login.
+  Release archives `osx-arm64` and `osx-x64`, and a Homebrew formula (`brew install overhive`,
+  `brew services start overhive`). The full test suite runs on macOS in CI and every release archive is
+  install-tested on a Mac before it is published.
 - The "Needs you" queue now includes runaway-guard alerts (critical: urgent), risky actions (critical:
   urgent, each on its own; warnings combined per agent and rule) and claims contradicted by the evidence
   (normal), so they notify like everything else when notifications are on.
@@ -77,4 +86,5 @@ First public release: a free, open-source, local control center for AI coding ag
 - Self-contained release archives (no .NET needed) with `SHA256SUMS` and GitHub build provenance;
   systemd user service that starts on login.
 
+[0.2.0]: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v0.1.0

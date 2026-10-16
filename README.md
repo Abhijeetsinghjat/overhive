@@ -47,7 +47,7 @@ From a release archive (no .NET needed). Download the archive for your machine (
 `osx-arm64` for Apple Silicon, `osx-x64` for Intel Macs) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
 
 ```bash
-sha256sum --ignore-missing -c SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS            # on macOS: shasum -a 256 --ignore-missing -c SHA256SUMS
 gh attestation verify overhive-<version>-linux-x64.tar.gz -R Abhijeetsinghjat/overhive   # optional: proves GitHub built it from this repo
 tar -xzf overhive-<version>-linux-x64.tar.gz
 ./overhive-<version>-linux-x64/install-release.sh
