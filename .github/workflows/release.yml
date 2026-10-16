@@ -1,18 +1,26 @@
 name: Release
 
-# Push a tag like v0.1.0 to build self-contained Linux archives and publish a GitHub release.
+# Push a tag like v0.2.0 to build self-contained Linux and macOS archives and publish a GitHub release.
+# macOS archives are built on macOS: the SDK signs the binaries only there, and Apple Silicon refuses
+# to run unsigned ones.
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: write
-  id-token: write      # build provenance (signed by GitHub, free for public repositories)
-  attestations: write
+  contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rids: linux-x64 linux-arm64
+          - os: macos-latest
+            rids: osx-arm64 osx-x64
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -25,13 +33,36 @@ jobs:
           git config --global init.defaultBranch main
       - run: dotnet test -c Release
       - name: Package
-        run: AMC_RELEASE="${GITHUB_REF_NAME#v}" AMC_RIDS="linux-x64 linux-arm64" scripts/package.sh
+        run: AMC_RELEASE="${GITHUB_REF_NAME#v}" AMC_RIDS="${{ matrix.rids }}" scripts/package.sh
+      - name: Smoke test the native archive
+        run: scripts/smoke-release.sh dist/overhive-*-$(uname -s | sed 's/Darwin/osx/;s/Linux/linux/')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write      # build provenance (signed by GitHub, free for public repositories)
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum *.tar.gz > SHA256SUMS
+        run: cd dist && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
       - name: Build provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*.tar.gz
+      - name: Homebrew formula
+        run: scripts/homebrew-formula.sh "${GITHUB_REF_NAME#v}" dist/SHA256SUMS > dist/overhive.rb
       - name: Release notes from CHANGELOG.md
         run: |
           awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
@@ -43,4 +74,4 @@ jobs:
         # While src/Amc.Core/Product.cs says Stage = "beta", releases are published as pre-releases.
         run: |
           pre=(); grep -q 'Stage = "beta"' src/Amc.Core/Product.cs && pre=(--prerelease)
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --title "Overhive $GITHUB_REF_NAME" --notes-file notes.md "${pre[@]}"
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/overhive.rb --title "Overhive $GITHUB_REF_NAME" --notes-file notes.md "${pre[@]}"
