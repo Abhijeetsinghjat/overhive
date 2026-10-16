@@ -93,6 +93,7 @@ Add a tool Overhive does not know yet:
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
 | Commits with links to your Git host | Commits tab |
 | Conflicts between agents | Conflict banner, `overhive status` |
+| Risky actions (deletes outside the worktree, force-pushes, credential files, `curl \| sh`, publishes, DB drops) | Risks tab, red badge on the agent, `overhive risks` ([rules](docs/RISKS.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |
@@ -106,7 +107,7 @@ an agent as working, or as changing a file, without evidence.
 - [Architecture](docs/ARCHITECTURE.md): system design, including what can and can't be known about an agent
 - [Agent integration](docs/AGENT_INTEGRATION.md): how each tool is discovered and tracked
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
-- [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Dependencies](docs/DEPENDENCIES.md)
+- [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Risky-action rules](docs/RISKS.md), [Dependencies](docs/DEPENDENCIES.md)
 - [Development](docs/DEVELOPMENT.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Contributing](CONTRIBUTING.md)
 
 ## License

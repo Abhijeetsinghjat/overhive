@@ -96,7 +96,7 @@ export function initRisks() {
     }
     mount(body, h('table', { class: 'ptable risks-table' },
       h('thead', null, h('tr', null, h('th', null, 'When'), h('th', null, 'Severity'), h('th', null, 'Agent'), h('th', null, 'Rule'),
-        h('th', null, 'Command'), h('th', null, 'Evidence'))),
+        h('th', null, 'Matched command'), h('th', null, 'Evidence'))),
       h('tbody', null, rows.slice(0, 500).map((r) => {
         const a = r.agentId ? get('agent', r.agentId) : null;
         const evTip = norm(r.evidence) === 'observed'
@@ -109,7 +109,7 @@ export function initRisks() {
             ? h('span', { class: 'risk-agent' }, h('span', { class: 'agent-swatch', style: { background: agentColor(a.id) } }), ' ', oneLine(agentName(a), 30))
             : h('span', { class: 'muted' }, r.agentId || '?')),
           h('td', { class: 'risk-rule' }, h('div', { class: 'risk-rule-name' }, RULES[r.ruleId] || r.ruleId), h('div', { class: 'risk-expl' }, r.explanation)),
-          h('td', { class: 'cmd mono small', title: r.command || r.span }, oneLine(r.command || r.span, 160)),
+          h('td', { class: 'cmd mono small', title: r.command && r.command !== r.span ? 'Full command (redacted):\n' + r.command : r.span }, oneLine(r.span || r.command, 140)),
           h('td', { class: 'nowrap' }, evBadge(r.evidence, evTip), r.origin ? h('span', { class: 'muted small' }, ' ' + r.origin) : null));
         tr.addEventListener('click', () => {
           if (a) select('agent', a.id);

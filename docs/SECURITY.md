@@ -20,6 +20,7 @@ signal processes. It is designed for a single user on their own machine.
 | Destructive actions by mistake | Terminate/Kill need `confirm=true` (HTTP 428 otherwise); the UI requires typing the agent's short id; the CLI requires typed confirmation or `--yes`. Pause/resume are reversible. No action deletes files, resets Git state or force-pushes. |
 | Undocumented agent internals | Claude Code's per-session messaging sockets and their `.key` token files are not read or used. |
 | Audit | Every control action and message is an event (`audit.control`, `agent.message_*`) in the append-only log. |
+| Risk recorder reading secrets | The risky-action recorder ([RISKS.md](RISKS.md)) classifies command lines and **paths** only: credential files (`~/.ssh`, `~/.aws/credentials`, `.env` …) are recognised by name and never opened, read or hashed; commands are redacted before storage; it runs no shell and makes no network call. It records, it never blocks. |
 
 ## Hooks
 

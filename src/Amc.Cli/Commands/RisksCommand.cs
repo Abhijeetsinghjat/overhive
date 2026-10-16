@@ -33,14 +33,14 @@ public static class RisksCommand
 
     public static TextTable Build(IEnumerable<Risk> risks, Style s, DateTimeOffset now)
     {
-        var t = new TextTable("AGE", "SEVERITY", "AGENT", "RULE", "EVIDENCE", "COMMAND", "WHY");
+        var t = new TextTable("AGE", "SEVERITY", "AGENT", "RULE", "EVIDENCE", "MATCHED", "WHY");
         foreach (var r in risks)
             t.Add(Fmt.Age(now, r.At),
                 r.Severity switch { RiskSeverity.Critical => s.Red(s.Bold(r.Severity)), RiskSeverity.Warn => s.Yellow(r.Severity), _ => s.Dim(r.Severity) },
                 r.AgentId is null ? "-" : AgentRef.Short(r.AgentId),
                 r.RuleId,
                 r.Evidence.ToString().ToLowerInvariant(),
-                Fmt.Trunc(Fmt.OneLine(r.Command ?? r.Span), 60),
+                Fmt.Trunc(Fmt.OneLine(r.Span), 60),
                 Fmt.Trunc(r.Explanation, 80));
         return t;
     }

@@ -3,6 +3,16 @@
 All notable changes to Overhive. Versions follow [Semantic Versioning](https://semver.org/); while the
 version is 0.x, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Added
+- Risky-action flight recorder: every agent's commands (reported by hooks/protocol and observed in its
+  process tree) and file events are checked for recursive deletes outside the worktree, force-pushes,
+  `git reset --hard`/`clean -fdx`, `chmod -R 777`, pipe-to-shell installs, credential file paths, writes
+  outside the worktree, publishes/deploys and database drops. Findings carry severity, an explanation and
+  the evidence label; see the **Risks** tab, the red badge on agents, `overhive risks` and `GET /api/risks`
+  ([rules](docs/RISKS.md)). Credential files are matched by path only and never opened.
+
 ## [0.1.0] - 2026-10-15
 
 First public release: a free, open-source, local control center for AI coding agents. Linux (x64, arm64).

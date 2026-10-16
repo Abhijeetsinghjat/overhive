@@ -721,7 +721,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .risks-table td.risk-rule { white-space: normal; min-width: 220px; max-width: 420px; }
 .risk-rule-name { font-weight: 600; }
 .risk-expl { color: var(--text2); font-size: 11.5px; }
-.risks-table td.cmd { max-width: 420px; }
+.risks-table td.cmd { max-width: 340px; }
 .risks-table tbody tr { cursor: pointer; }
 .risk-row-critical td:first-child { box-shadow: inset 3px 0 0 var(--red); }
 .risk-row-warn td:first-child { box-shadow: inset 3px 0 0 var(--orange); }
