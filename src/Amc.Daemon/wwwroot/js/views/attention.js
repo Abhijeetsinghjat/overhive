@@ -2,7 +2,7 @@
 // and the opt-in browser notification controls. Data and notifications live in attention-store.js.
 import { h, mount } from '../util.js';
 import { store, register, invalidate } from '../store.js';
-import { select, openDrawer } from '../ui.js';
+import { select, openDrawer, setTab } from '../ui.js';
 import { toast } from '../components/overlay.js';
 import { attentionItem } from '../components/attention-item.js';
 import {
@@ -66,6 +66,7 @@ export function runAction(action, item) {
     case 'open-terminal': select('agent', target); openDrawer('terminal', { agentId: target }); break;
     case 'reply': select('agent', target); openDrawer('messages', { agentId: target }); break;
     case 'open-conflict': select('conflict', target); break;
+    case 'open-risks': setTab('risks'); break;
     default: if (target) select('agent', target);
   }
   if (!panel.hidden && item) closeAttentionPanel();

@@ -5,6 +5,7 @@ using Amc.Daemon.Collectors.Git;
 
 namespace Amc.Tests.Git;
 
+[Collection(WatcherCollection.Name)]
 public sealed class GitCollectorTests
 {
     private static readonly CancellationToken None = CancellationToken.None;

@@ -6,6 +6,9 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- The "Needs you" queue now includes runaway-guard alerts (critical: urgent), risky actions (critical:
+  urgent, each on its own; warnings combined per agent and rule) and claims contradicted by the evidence
+  (normal), so they notify like everything else when notifications are on.
 - Risky-action flight recorder: every agent's commands (reported by hooks/protocol and observed in its
   process tree) and file events are checked for recursive deletes outside the worktree, force-pushes,
   `git reset --hard`/`clean -fdx`, `chmod -R 777`, pipe-to-shell installs, credential file paths, writes

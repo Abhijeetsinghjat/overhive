@@ -17,6 +17,7 @@ const composers = new Map(); // item id → composer element (typing survives re
 try { const t = JSON.parse(localStorage.getItem('amc.theme') || '"dark"'); document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'; } catch { /* default */ }
 
 function dashboardLink(action) {
+  if (action.kind === 'open-risks') return '/#' + new URLSearchParams({ tab: 'risks' }).toString();
   const sel = action.kind === 'open-conflict' ? 'conflict:' + action.target : 'agent:' + action.target;
   const drawer = action.kind === 'open-terminal' ? '&drawer=terminal' : '';
   return '/#' + new URLSearchParams({ tab: 'graph', sel }).toString() + drawer;
