@@ -245,6 +245,8 @@ export function describe(e) {
     case 'terminal.started': text = `Terminal ${d.terminalId} started: ${d.command || ''}`; break;
     case 'terminal.exited': text = `Terminal ${d.terminalId} exited (${d.exitCode ?? '?'})`; break;
     case 'audit.control': text = `Control ${d.action} → ${d.outcome}`; detail = d.detail || ''; bad = d.outcome !== 'ok'; break;
+    case 'conflict.analyzed': text = `Conflict lines compared: ${e.filePath || ''} — ${norm(d.overlap?.verdict) === 'overlapping' ? 'overlapping' : norm(d.overlap?.verdict) === 'separate' ? 'different regions' : 'not determined'}`; bad = norm(d.overlap?.verdict) === 'overlapping'; break;
+    case 'conflict.warned': [icon, iconCls] = ICON.message; text = `Agents warned about ${e.filePath || 'a conflict'}${d.auto ? ' (automatic)' : ''}`; detail = (d.recipients || []).map((r) => `${r.agentId}: ${r.outcome}`).join(' · '); break;
     case 'guard.alert': icon = '⚠'; iconCls = norm(d.severity) === 'critical' ? 'ic-fail' : 'st-blocked'; text = `Runaway guard ${norm(d.severity)}: ${oneLine(d.summary || '', 160)}`; bad = norm(d.severity) === 'critical'; break;
     case 'guard.cleared': [icon, iconCls] = ICON.ok; text = `Runaway guard cleared (${d.rule}): ${oneLine(d.reason || '', 140)}`; break;
     case 'guard.dismissed': icon = '⚠'; text = 'Runaway guard alert dismissed'; detail = d.key || ''; break;

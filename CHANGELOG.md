@@ -6,6 +6,17 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Line-level conflict check: when the same file is changed in several worktrees, Overhive compares the
+  changed lines of each worktree (committed and uncommitted) against the branches' merge base and shows
+  "overlapping lines — will likely conflict" or "different regions — likely merges cleanly", with the line
+  ranges per agent and branch (evidence: observed). `git merge-tree` confirms committed changes.
+- **Warn agents** on a conflict (dashboard, `overhive conflicts warn <n>`, `POST /api/conflicts/warn`):
+  each involved agent gets a short, factual heads-up through its usual message transport; the result is
+  reported per agent (delivered, queued, unsupported, failed) and audited. Requires confirmation.
+- `AutoWarnConflicts` option (off by default): warn automatically once per conflict and agent, again only
+  when the overlapping lines change.
+- `overhive conflicts` lists conflicts with their compared line ranges; `GET /api/conflicts/detail?key=`
+  shows the analysis and the exact warning text per agent.
 - Claimed vs observed: when an agent says "all tests pass", "the build succeeds", "I committed the changes"
   or "created `src/x.ts`", Overhive checks it against the commands it ran, Git and the files, and shows
   each claim as confirmed, contradicted or unverified with the evidence behind it (agent panel →

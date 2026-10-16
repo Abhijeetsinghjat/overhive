@@ -76,6 +76,9 @@ public static class EventTypes
     // Control / audit
     public const string AuditControl = "audit.control";            // AuditData
 
+    // Conflict analysis and warnings to agents (see ConflictInsight)
+    public const string ConflictAnalyzed = "conflict.analyzed";    // ConflictAnalysisData (observed: git diffs)
+    public const string ConflictWarned = "conflict.warned";        // ConflictWarnedData
     // Runaway guard (payloads in Amc.Core.Guard)
     public const string GuardAlert = "guard.alert";                // GuardAlertData — a tree crossed a threshold (or changed level)
     public const string GuardCleared = "guard.cleared";            // GuardClearedData

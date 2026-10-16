@@ -100,6 +100,12 @@ about 0.25 s. As soon as the session is busy again (`UserPromptSubmit`/`PreToolU
 waiters are released and mid-turn delivery goes through `PostToolUse`. A waiter lives up to
 an hour (hook timeout 3600 s). After that, delivery falls back to the next hook.
 
+**Conflict warnings** use the same transports. "Warn agents" on a cross-worktree conflict
+(or `AutoWarnConflicts`) sends each active agent attributed to the file a short message such as
+"Heads-up from Overhive: Gemini (Gemini CLI, branch fix/y) is also editing src/auth.ts lines
+52-70, overlapping your lines 40-80. Coordinate before changing those lines." Agents without a
+transport are reported as `unsupported`; the others as `queued` or `delivered`.
+
 **Not implemented:** Claude Code's internal session-to-session sockets
 (`/run/user/<uid>/cc-socks/*.sock`). Their protocol is undocumented and authenticated by
 per-session tokens; researching it was declined.
