@@ -7,7 +7,7 @@ namespace Amc.Core.Attention;
 [JsonConverter(typeof(JsonStringEnumConverter<AttentionPriority>))]
 public enum AttentionPriority { Urgent, Normal, Low }
 
-/// <summary>Item kinds produced by the built-in providers. Plug-in providers add their own (e.g. "guard.alert").</summary>
+/// <summary>Item kinds produced by the built-in providers. Plug-in providers add their own.</summary>
 public static class AttentionKinds
 {
     public const string AgentBlocked = "agent.blocked";
@@ -16,6 +16,9 @@ public static class AttentionKinds
     public const string AgentDisconnected = "agent.disconnected";
     public const string AgentFinished = "agent.finished";
     public const string Conflict = "conflict";
+    public const string GuardAlert = "guard.alert";
+    public const string Risk = "risk";
+    public const string ClaimContradicted = "claim.contradicted";
 }
 
 /// <summary>What the primary button of an item does. The UI maps these to existing panels and endpoints.</summary>
@@ -29,6 +32,8 @@ public static class AttentionActions
     public const string Reply = "reply";
     /// <summary>Select the conflict (Target = conflict key).</summary>
     public const string OpenConflict = "open-conflict";
+    /// <summary>Open the Risks tab (Target unused).</summary>
+    public const string OpenRisks = "open-risks";
 }
 
 public sealed record AttentionAction(string Kind, string Label, string? Target);

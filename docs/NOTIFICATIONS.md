@@ -12,13 +12,16 @@ sent anywhere unless you configure your own ntfy server.
 | Session failed (sub-agent failed: normal), last 24 h | urgent | from the status |
 | Git: unmerged files / merge or rebase in progress | urgent | observed |
 | Session finished its turn and waits for your next prompt (not while its sub-agents work) | normal | from the status |
+| Runaway guard alert: sub-agent fan-out or token burn ([details](RUNAWAY_GUARD.md)) | urgent (critical) / normal (warning) | of the alert |
+| Risky action, last 24 h ([rules](RISKS.md)): critical findings each on their own (urgent); warnings combined per agent and rule | urgent / normal | observed / reported |
+| Claim contradicted by the evidence ("all tests pass" after a failing run …), last 24 h | normal | of the observation |
 | Session exited unexpectedly, last 24 h | normal | usually observed |
 | Conflicts between agents (same file, same worktree, same path in several worktrees) | normal | observed / inferred |
 | Session finished, last hour | low | from the status |
 
 Ordered by priority, then the oldest first. The header badge (**⚑**) counts urgent items; click it or press
 **`a`** for the whole queue. The Overview panel ("Needs you") shows the same list. Each item has its main
-action (open the agent, open its terminal to answer a prompt, message it, or open the conflict), plus:
+action (open the agent, open its terminal to answer a prompt, message it, open the conflict or the Risks tab), plus:
 
 * **Snooze** (15 min – 1 day): hidden, then it comes back and notifies again.
 * **Dismiss**: hidden until the situation happens again (a new prompt, a new failure).

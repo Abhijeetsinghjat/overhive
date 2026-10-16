@@ -3,6 +3,7 @@ using Amc.Daemon.Collectors.Git;
 
 namespace Amc.Tests.Git;
 
+[Collection(WatcherCollection.Name)]
 public class FsDirWatcherTests
 {
     [Fact]
