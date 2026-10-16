@@ -64,6 +64,8 @@ public sealed class WorldState
     public Dictionary<string, Amc.Core.Risk.Risk> Risks { get; set; } = [];
     public const int MaxRisks = 2000;
     public const int MaxRisksPerAgent = 100;
+    /// <summary>Overlap analysis and warning history by conflict key (survives the conflict being re-derived).</summary>
+    public Dictionary<string, ConflictInsight> ConflictInsights { get; set; } = [];
     /// <summary>Claimed vs observed: per-agent claims, test/build runs and file writes (see Amc.Core/Verification).</summary>
     public Dictionary<string, Amc.Core.Verification.AgentVerification> Verification { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore] internal Amc.Core.Verification.VerificationDirtySet VerificationDirty { get; } = new();

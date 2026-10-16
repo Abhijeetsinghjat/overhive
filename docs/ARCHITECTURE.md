@@ -229,6 +229,22 @@ disables it with the reason.
     (likely merge conflict),
   * `same-worktree` — ≥2 active agents writing in one worktree,
   * `git-unmerged` — unmerged index entries / in-progress merge or rebase.
+* Hunk-level overlap (`ConflictAnalyzer`, daemon) for each `cross-worktree` conflict: for every
+  pair of worktrees (first 4 worktrees only) it runs `git merge-base` on their HEADs, then in each
+  worktree `git diff -U0 -M <merge-base> -- <path>` (committed **and** uncommitted changes;
+  untracked files count as wholly new). Changed base-line ranges separated by fewer than 3
+  unchanged lines are *overlapping* (severity high, merging will likely conflict); otherwise
+  *different regions* (severity low, likely merges cleanly). When both heads committed a change
+  to the file, `git merge-tree --write-tree` confirms the committed state (it writes unreferenced
+  objects that `git gc` removes). Bounds: only already-flagged conflicts, only when their inputs
+  (HEADs, file status) changed, after 2 s of quiet, ≤8 per 3 s tick, files ≤1 MB, diff ≤512 KB,
+  10 s git timeout. Results are `conflict.analyzed` events, evidence `observed`.
+* "Warn agents" (`ConflictWarner`) sends every active agent attributed to the file a factual
+  heads-up through its normal message transport (other agent, tool, branch, both line ranges);
+  it needs `confirm=true` and is audited (`conflict.warned` + `audit.control`). With
+  `AutoWarnConflicts` (default off) overlapping conflicts are warned automatically, once per
+  conflict and agent; again only after 10 min and only if the overlapping lines moved by more
+  than 10 lines.
 
 ### Claimed vs observed (`Amc.Core/Verification`)
 

@@ -177,6 +177,10 @@ public static class Reducer
             case EventTypes.RiskDetected:
                 Risk.RiskReducer.Apply(s, agent, e, changed);
                 break;
+            case EventTypes.ConflictAnalyzed:
+            case EventTypes.ConflictWarned:
+                ConflictInsightFold.Apply(s, e, changed);
+                break;
             case EventTypes.GuardAlert:
             case EventTypes.GuardCleared:
             case EventTypes.GuardDismissed:

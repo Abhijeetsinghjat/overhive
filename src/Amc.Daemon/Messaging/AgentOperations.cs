@@ -25,7 +25,7 @@ public sealed class AgentOperations(IEnumerable<IAgentProvider> providers, State
         return a is null ? null : ProviderFor(a)?.Capabilities(a);
     }
 
-    public async Task<SendResult> SendMessageAsync(string agentId, string text, CancellationToken ct)
+    public async Task<SendResult> SendMessageAsync(string agentId, string text, CancellationToken ct, string author = "user")
     {
         text = text.Trim();
         if (text.Length is 0 or > 8000) return new(false, "", null, "Message must be 1–8000 characters", 400);
@@ -42,7 +42,7 @@ public sealed class AgentOperations(IEnumerable<IAgentProvider> providers, State
         {
             Type = EventTypes.MessageSent, Source = EventSources.User, Evidence = Evidence.Observed,
             AgentId = a.Id, SessionId = a.SessionId,
-            Data = Json.ToObject(new MessageData(id, text, caps.MessageTransports[0], "user")),
+            Data = Json.ToObject(new MessageData(id, text, caps.MessageTransports[0], author)),
         }, ct);
 
         DeliveryResult r;

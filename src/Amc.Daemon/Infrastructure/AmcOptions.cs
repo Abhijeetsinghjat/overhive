@@ -33,6 +33,16 @@ public sealed class AmcOptions
     public bool Simulate { get; set; }
     /// <summary>Allow UI-initiated process control (pause/resume/terminate). Message sending is always allowed.</summary>
     public bool EnableControl { get; set; } = true;
+    /// <summary>
+    /// Send the "Warn agents" heads-up automatically when a cross-worktree conflict has overlapping changes:
+    /// once per conflict and agent, again only when the overlapping lines change. Off by default.
+    /// </summary>
+    public bool AutoWarnConflicts { get; set; }
+    /// <summary>
+    /// Also confirm conflicts in committed state with `git merge-tree --write-tree`. Off by default: it writes
+    /// unreferenced objects into the repository (git gc removes them), and Overhive otherwise only reads repositories.
+    /// </summary>
+    public bool ConflictMergeTree { get; set; }
     /// <summary>Runaway guard thresholds and the opt-in automatic pause (section "Guard").</summary>
     public Amc.Core.Guard.GuardSettings Guard { get; set; } = new();
     /// <summary>Attention notifications: desktop and self-hosted ntfy, both off by default (docs/NOTIFICATIONS.md).</summary>

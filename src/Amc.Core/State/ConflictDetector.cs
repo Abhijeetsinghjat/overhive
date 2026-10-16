@@ -22,6 +22,7 @@ public static class ConflictDetector
         {
             Apply(s, changed, Detect(s).ToDictionary(c => c.Key), inScope: _ => true);
             s.LastFullConflictScan = s.Clock;
+            ConflictInsightFold.Prune(s);
             s.ConflictDirtyAgents.Clear();
             s.ConflictDirtyWorktrees.Clear();
             return;
@@ -79,6 +80,7 @@ public static class ConflictDetector
                 if (old.AgentIds.SequenceEqual(c.AgentIds) && old.WorktreeIds.SequenceEqual(c.WorktreeIds) && old.Description == c.Description)
                     continue;
             }
+            c.Insight = s.ConflictInsights.GetValueOrDefault(key);
             s.Conflicts[key] = c;
             changed.Add(new(EntityKinds.Conflict, key));
         }

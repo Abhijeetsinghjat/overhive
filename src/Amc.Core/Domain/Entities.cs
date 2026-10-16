@@ -234,6 +234,8 @@ public sealed class Conflict
     public List<string> AgentIds { get; set; } = [];
     public List<string> WorktreeIds { get; set; } = [];
     public DateTimeOffset DetectedAt { get; set; }
+    /// <summary>Hunk-level overlap and warnings sent (cross-worktree conflicts); null until analysed.</summary>
+    public ConflictInsight? Insight { get; set; }
 }
 
 public sealed class Commit

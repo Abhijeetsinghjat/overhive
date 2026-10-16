@@ -24,6 +24,7 @@ signal processes. It is designed for a single user on their own machine.
 | Automatic actions | Only the runaway guard acts on its own, only when `Guard.AutoPause` is turned on, and only to pause (reversible). It never terminates or kills: automation cannot pass the confirmation for destructive actions. Each automatic action is audited with source `system` and the reason. |
 | Audit | Every control action and message is an event (`audit.control`, `agent.message_*`) in the append-only log. |
 | Risk recorder reading secrets | The risky-action recorder ([RISKS.md](RISKS.md)) classifies command lines and **paths** only: credential files (`~/.ssh`, `~/.aws/credentials`, `.env` …) are recognised by name and never opened, read or hashed; commands are redacted before storage; it runs no shell and makes no network call. It records, it never blocks. |
+| Conflict warnings | "Warn agents" sends only a fixed, factual text (agent names, tool, branch, path, line numbers; passed through `Redactor`), never file contents. It needs `confirm=true` (428 otherwise) and the dashboard/CLI show each recipient's exact text first. Automatic warnings are off unless `AutoWarnConflicts` is set. The overlap check runs read-only `git diff`/`merge-base`. The optional committed-state check (`ConflictMergeTree`, off by default) runs `git merge-tree --write-tree`, which adds unreferenced objects to the repository (`git gc` removes them); it is opt-in because Overhive otherwise never writes to repositories. |
 
 ## Hooks
 
