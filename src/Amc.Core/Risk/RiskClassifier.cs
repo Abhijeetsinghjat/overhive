@@ -22,7 +22,7 @@ public static partial class RiskClassifier
         return Dedupe(findings);
     }
 
-    /// <param name="kind">created, modified, deleted, renamed or read.</param>
+    /// <param name="kind">created, modified, deleted, renamed, read, or accessed (a tool was pointed at the path; only the credential rule applies).</param>
     public static IReadOnlyList<RiskFinding> ClassifyFileEvent(string kind, string? absolutePath, RiskContext ctx)
     {
         var findings = new List<RiskFinding>();
@@ -138,10 +138,10 @@ public static partial class RiskClassifier
             if (cred is { } cr)
             {
                 var sev = Downgrade(cr, path, null);
-                var verb = kind switch { "read" => "Read", "deleted" => "Deleted", "created" => "Created", _ => "Wrote" };
+                var verb = kind switch { "read" => "Read", "accessed" => "Accessed", "deleted" => "Deleted", "created" => "Created", _ => "Wrote" };
                 Add(RiskRules.CredentialAccess, sev, $"{verb} {cr.Label}: {path} (matched by path; Overhive never opens it)", span, path);
             }
-            if (kind == "read") return;
+            if (kind is "read" or "accessed") return;
             var (loc, reason) = Locate(path);
             var deleted = kind == "deleted";
             var rule = deleted ? RiskRules.DeleteOutsideWorktree : RiskRules.WriteOutsideWorktree;

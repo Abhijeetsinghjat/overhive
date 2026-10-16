@@ -73,6 +73,9 @@ public static class EventTypes
     // Control / audit
     public const string AuditControl = "audit.control";            // AuditData
 
+    // Risky actions (flight recorder; payload in Amc.Core.Risk)
+    public const string RiskDetected = "risk.detected";            // RiskData — evidence of the source (observed / reported)
+
     public static bool IsFileChange(string type) =>
         type is FileCreated or FileModified or FileDeleted or FileRenamed;
 }

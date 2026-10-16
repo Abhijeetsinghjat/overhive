@@ -22,6 +22,7 @@ public static class Composition
         services.AddTerminals();
         services.AddClaude();
         services.AddTools(options);
+        services.AddRisk();
         return services;
     }
 
@@ -32,6 +33,7 @@ public static class Composition
         app.MapTerminalEndpoints();
         ClaudeModule.MapClaudeEndpoints(app);
         ToolsModule.MapToolEndpoints(app);
+        app.MapRiskEndpoints();
         return app;
     }
 }

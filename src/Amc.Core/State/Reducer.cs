@@ -10,7 +10,7 @@ namespace Amc.Core.State;
 public static class Reducer
 {
     /// <summary>Bump whenever folding semantics change: snapshots from another version are discarded and the log is replayed.</summary>
-    public const int Version = 7;
+    public const int Version = 8;
 
     public static HashSet<EntityRef> ApplyBatch(WorldState s, IEnumerable<AgentEvent> events)
     {
@@ -171,13 +171,17 @@ public static class Reducer
             case EventTypes.TerminalExited:
                 OnTerminal(s, e, changed);
                 break;
+
+            case EventTypes.RiskDetected:
+                Risk.RiskReducer.Apply(s, agent, e, changed);
+                break;
         }
     }
 
     private static bool IsActivity(string type) =>
         type is not (EventTypes.AgentCreated or EventTypes.ProcessExited or EventTypes.AuditControl or EventTypes.GitFileStatus
             or EventTypes.WorktreeChanged or EventTypes.AgentStatusChanged or EventTypes.MessageSent
-            or EventTypes.MessageFailed or EventTypes.AgentUpdated);
+            or EventTypes.MessageFailed or EventTypes.AgentUpdated or EventTypes.RiskDetected);
 
     // ---- agents ---------------------------------------------------------------
 

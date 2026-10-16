@@ -14,6 +14,7 @@ public static class EntityKinds
     public const string Test = "test";
     public const string Terminal = "terminal";
     public const string Conflict = "conflict";
+    public const string Risk = "risk";
 }
 
 public readonly record struct EntityRef(string Kind, string Id);
@@ -58,6 +59,10 @@ public sealed class WorldState
     public Dictionary<string, UsageMark> UsageMarks { get; set; } = [];
     public const int MaxUsageMarks = 20_000;
     public Dictionary<string, Conflict> Conflicts { get; set; } = [];
+    /// <summary>Risky-action findings (newest kept): at most <see cref="MaxRisksPerAgent"/> per agent and <see cref="MaxRisks"/> overall.</summary>
+    public Dictionary<string, Amc.Core.Risk.Risk> Risks { get; set; } = [];
+    public const int MaxRisks = 2000;
+    public const int MaxRisksPerAgent = 100;
 
     public object? Get(EntityRef r) => r.Kind switch
     {
@@ -70,6 +75,7 @@ public sealed class WorldState
         EntityKinds.Test => TestRuns.GetValueOrDefault(r.Id),
         EntityKinds.Terminal => Terminals.GetValueOrDefault(r.Id),
         EntityKinds.Conflict => Conflicts.GetValueOrDefault(r.Id),
+        EntityKinds.Risk => Risks.GetValueOrDefault(r.Id),
         _ => null,
     };
 

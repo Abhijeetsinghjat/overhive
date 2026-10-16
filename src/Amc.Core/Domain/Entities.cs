@@ -102,6 +102,8 @@ public sealed class Agent
     public int ToolFailures { get; set; }
     public int FilesChanged { get; set; }
     public List<AgentTask> Tasks { get; set; } = [];
+    /// <summary>Risky-action findings by severity (cumulative; the findings are in WorldState.Risks).</summary>
+    public Amc.Core.Risk.RiskCounts Risks { get; set; } = new();
 
     [JsonIgnore] public bool IsTerminal => AgentStateMachine.IsTerminal(Status);
 }
