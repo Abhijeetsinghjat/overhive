@@ -59,6 +59,9 @@ public sealed class WorldState
     public Dictionary<string, UsageMark> UsageMarks { get; set; } = [];
     public const int MaxUsageMarks = 20_000;
     public Dictionary<string, Conflict> Conflicts { get; set; } = [];
+    /// <summary>Claimed vs observed: per-agent claims, test/build runs and file writes (see Amc.Core/Verification).</summary>
+    public Dictionary<string, Amc.Core.Verification.AgentVerification> Verification { get; set; } = [];
+    [System.Text.Json.Serialization.JsonIgnore] internal Amc.Core.Verification.VerificationDirtySet VerificationDirty { get; } = new();
     /// <summary>Active runaway-guard alerts, keyed root|rule (see Amc.Core.Guard).</summary>
     public Dictionary<string, Amc.Core.Guard.GuardAlert> GuardAlerts { get; set; } = [];
 

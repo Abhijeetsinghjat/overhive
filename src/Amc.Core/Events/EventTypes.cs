@@ -70,6 +70,9 @@ public static class EventTypes
     public const string TerminalStarted = "terminal.started";      // TerminalData
     public const string TerminalExited = "terminal.exited";        // TerminalData
 
+    // Claimed vs observed
+    public const string VerificationSettled = "verification.settled"; // VerificationSettledData (settle window of a claim passed; observed)
+
     // Control / audit
     public const string AuditControl = "audit.control";            // AuditData
 
