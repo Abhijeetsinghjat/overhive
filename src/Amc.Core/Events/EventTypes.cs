@@ -75,6 +75,10 @@ public static class EventTypes
 
     // Risky actions (flight recorder; payload in Amc.Core.Risk)
     public const string RiskDetected = "risk.detected";            // RiskData — evidence of the source (observed / reported)
+    // Runaway guard (payloads in Amc.Core.Guard)
+    public const string GuardAlert = "guard.alert";                // GuardAlertData — a tree crossed a threshold (or changed level)
+    public const string GuardCleared = "guard.cleared";            // GuardClearedData
+    public const string GuardDismissed = "guard.dismissed";        // GuardDismissedData — hidden by the user
 
     public static bool IsFileChange(string type) =>
         type is FileCreated or FileModified or FileDeleted or FileRenamed;

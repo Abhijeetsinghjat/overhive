@@ -3,11 +3,11 @@
 // Entities are keyed by (kind, id) exactly like the daemon's patches. Events are kept in a
 // bounded, seq-ordered buffer; older events are paged from /api/events on demand.
 
-export const KINDS = ['agent', 'repository', 'worktree', 'file', 'message', 'commit', 'test', 'terminal', 'conflict', 'risk'];
+export const KINDS = ['agent', 'repository', 'worktree', 'file', 'message', 'commit', 'test', 'terminal', 'conflict', 'guard', 'risk'];
 
 const COLLECTIONS = {
   agents: 'agent', repositories: 'repository', worktrees: 'worktree', files: 'file', messages: 'message',
-  commits: 'commit', testRuns: 'test', terminals: 'terminal', conflicts: 'conflict', risks: 'risk',
+  commits: 'commit', testRuns: 'test', terminals: 'terminal', conflicts: 'conflict', guardAlerts: 'guard', risks: 'risk',
 };
 
 export const MAX_EVENTS = 5000;
@@ -65,7 +65,7 @@ export const get = (kind, id) => store.e[kind]?.get(id);
 export const all = (kind) => [...store.e[kind].values()];
 
 export function idOf(kind, v) {
-  if (kind === 'file' || kind === 'conflict') return v.key;
+  if (kind === 'file' || kind === 'conflict' || kind === 'guard') return v.key;
   if (kind === 'commit') return v.sha;
   return v.id;
 }

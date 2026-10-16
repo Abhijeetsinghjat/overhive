@@ -50,7 +50,9 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `test.started` / `test.passed` / `test.failed` | `TestRunData` | test command + parsed output | inferred |
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
 | `terminal.started` / `terminal.exited` | `TerminalData` | `agentctl run` | observed |
-| `audit.control` | `AuditData` | every control action | observed |
+| `audit.control` | `AuditData` | every control action (source `system` when automatic, e.g. the runaway guard's pause) | observed |
+| `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
+| `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
 | `risk.detected` | `RiskData` (rule, severity, explanation, matched span, target, redacted command) | risk recorder on commands, child processes and file events ([RISKS.md](RISKS.md)) | of the source: reported / observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)
@@ -68,6 +70,9 @@ risk:<agent>:<rule>:<evidence>:<hash of target or matched command>
 Conflicts (`same-file`, `cross-worktree`, `same-worktree`, `git-unmerged`) are
 recomputed from state after every batch (`ConflictDetector`) so they always reflect the
 current truth and disappear when resolved.
+
+The attention queue ("needs you") is derived the same way, by `AttentionDeriver` from state through
+`IAttentionProvider`s, after every batch; it is never stored as events (see NOTIFICATIONS.md).
 
 ## Volatile data (not events)
 

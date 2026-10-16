@@ -1,5 +1,6 @@
 using System.Net;
 using Amc.Daemon.Infrastructure;
+using Microsoft.Extensions.Options;
 
 namespace Amc.Daemon.Api;
 
@@ -11,18 +12,20 @@ public sealed class ApiToken(string value)
 }
 
 /// <summary>
-/// 1. Host header must name a loopback host (defeats DNS rebinding).
-/// 2. Cross-origin requests are rejected (Origin, when present, must be our own origin).
+/// 1. Host header must name a loopback host, or an exact name listed in AllowedHosts (defeats DNS rebinding).
+/// 2. Cross-origin requests are rejected (Origin, when present, must be our own origin: loopback on our port,
+///    or the same allowed host the request was addressed to, e.g. behind `tailscale serve`).
 /// 3. Everything except the UI shell and static assets requires the API token.
 /// </summary>
-public sealed class SecurityMiddleware(RequestDelegate next, ApiToken token, ILogger<SecurityMiddleware> log)
+public sealed class SecurityMiddleware(RequestDelegate next, ApiToken token, ILogger<SecurityMiddleware> log, IOptions<AmcOptions> options)
 {
     private static readonly HashSet<string> LoopbackHosts = new(StringComparer.OrdinalIgnoreCase) { "localhost", "127.0.0.1", "[::1]", "::1" };
+    private readonly HashSet<string> _allowedHosts = new(options.Value.AllowedHosts, StringComparer.OrdinalIgnoreCase);
 
     public async Task InvokeAsync(HttpContext ctx)
     {
         var host = ctx.Request.Host.Host;
-        if (!LoopbackHosts.Contains(host) && !IsLoopbackAddress(host))
+        if (!LoopbackHosts.Contains(host) && !IsLoopbackAddress(host) && !_allowedHosts.Contains(host))
         {
             log.LogWarning("Rejected request with non-loopback Host header {Host}", host);
             await Reject(ctx, 421, "Host not allowed");
@@ -66,10 +69,11 @@ public sealed class SecurityMiddleware(RequestDelegate next, ApiToken token, ILo
     private static bool IsLoopbackAddress(string host) =>
         IPAddress.TryParse(host.Trim('[', ']'), out var ip) && IPAddress.IsLoopback(ip);
 
-    private static bool SameOrigin(string origin, HttpContext ctx) =>
+    private bool SameOrigin(string origin, HttpContext ctx) =>
         Uri.TryCreate(origin, UriKind.Absolute, out var u)
-        && (LoopbackHosts.Contains(u.Host) || IsLoopbackAddress(u.Host))
-        && u.Port == ctx.Connection.LocalPort;
+        && ((LoopbackHosts.Contains(u.Host) || IsLoopbackAddress(u.Host)) && u.Port == ctx.Connection.LocalPort
+            // Behind a local reverse proxy (tailscale serve) the page's origin is the allowed name on the proxy's port.
+            || _allowedHosts.Contains(u.Host) && string.Equals(u.Host, ctx.Request.Host.Host, StringComparison.OrdinalIgnoreCase));
 
     private static Task Reject(HttpContext ctx, int status, string message)
     {
