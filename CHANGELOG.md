@@ -3,6 +3,19 @@
 All notable changes to Overhive. Versions follow [Semantic Versioning](https://semver.org/); while the
 version is 0.x, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Added
+- "Needs you" attention queue across all tools: blocked and waiting agents, failures, unexpected exits and
+  conflicts, ordered by priority and age, each with its evidence label and main action. Header badge (key `a`),
+  Overview panel, `overhive attention`, `GET /api/attention`; snooze and dismiss kept by the daemon.
+- Opt-in notifications for new urgent items, rate-limited and combined: browser notifications from the
+  dashboard, desktop notifications from the daemon (`Notifications.Desktop`, notify-send / osascript), and push
+  through your own ntfy server (`Notifications.NtfyUrl`), the only outbound call and only when configured.
+- Phone page `/m` and a guide to reaching it through your own SSH tunnel or `tailscale serve`; optional
+  `AllowedHosts` (exact names, empty by default) for the `tailscale serve` host name.
+- Extension point `IAttentionProvider` so other features can add items with one registration line.
+
 ## [0.1.0] - 2026-10-15
 
 First public release: a free, open-source, local control center for AI coding agents. Linux (x64, arm64).

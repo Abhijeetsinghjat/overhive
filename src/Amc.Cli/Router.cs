@@ -12,6 +12,8 @@ public static class Router
     [
         new("status", "status [--json]", "Daemon health, agent counts and conflicts", StatusCommand.RunAsync),
         new("agents", "agents [--all] [--json]", "Agent tree (finished agents older than 1h hidden)", AgentsCommand.RunAsync, Flags: ["all"]),
+        new("attention", "attention [--all] [--json]", "What needs you: agents waiting or blocked, failures, conflicts (all tools)",
+            AttentionCommand.RunAsync, Flags: ["all"]),
         new("inspect", "inspect <agent> [--json]", "Full detail of one agent", InspectCommand.RunAsync, 1, 1),
         new("worktrees", "worktrees [--all] [--json]", "Repositories' worktrees, state and owners", WorktreesCommand.RunAsync, Flags: ["all"]),
         new("emit", "emit <kind> --tool T --agent ID [--parent ID] [--title X] [--cwd DIR] [--pid N] [--model M] [--data JSON | stdin]",

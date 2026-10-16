@@ -9,7 +9,8 @@ signal processes. It is designed for a single user on their own machine.
 |--------|------------|
 | Another machine on the network reaches the daemon | Binds `127.0.0.1` only; the daemon refuses to start with any other bind address. |
 | A malicious web page in the user's browser calls the API (CSRF) | Every `/api`, `/ws`, `/hooks`, `/pty` request needs the token; cross-origin `Origin` headers are rejected; responses carry no CORS headers. |
-| DNS rebinding (attacker domain resolving to 127.0.0.1) | `Host` header must be a loopback name/address, otherwise `421`. |
+| DNS rebinding (attacker domain resolving to 127.0.0.1) | `Host` header must be a loopback name/address, or an exact name the user listed in `AllowedHosts` (empty by default; wildcards refused), otherwise `421`. |
+| Data leaving the machine | Nothing by default. The only outbound call is the optional ntfy push (`Notifications.NtfyUrl`, the user's own server): titles only, redacted, no redirects, no retries. Desktop notifications use `notify-send`/`osascript` via `ArgumentList`. |
 | Another local user | Token file `0600` in a `0700` state dir; SQLite db `0600`. (Root and the same Unix user are trusted.) |
 | Another local user squatting the port while the daemon is down, or reading the token from `ps` | Hooks talk to the daemon over a **Unix socket** (`amcd.sock`) in the 0700 state dir. Requests over the socket are authenticated by filesystem permissions, so no token appears on any command line, and no other user can create that path. The daemon runs with umask 077. |
 | Secrets leaking into the UI / database | `Redactor` runs centrally in the ingest pipeline on every string before persistence: API keys (Anthropic, OpenAI, GitHub, Slack, AWS, Google, npm), bearer/authorization headers, `password=`/`token=`-style assignments, URL credentials, JWTs, private keys. Environment variables are shown as an allow-list of names; values of other variables are never read. Thinking/reasoning blocks from transcripts are never ingested. **Exception:** raw PTY output from `agentctl run` sessions (ring buffer, `terminals/*.log`, live terminal view) is stored and shown byte-for-byte without redaction, because rewriting a terminal stream would corrupt it. It stays in 0600 files in the 0700 state dir and is served only to token-holding clients. |
@@ -34,6 +35,9 @@ read it from the 0600 token file.
 
 ## Remote access
 
-Not supported in this version. If added later it must require TLS, the token (or
-stronger auth), and an explicit opt-in flag, and remote control actions must be
-separately opt-in.
+The daemon never listens on anything but `127.0.0.1`. To reach the dashboard or the phone page (`/m`)
+from another device, use your own SSH tunnel or `tailscale serve` (TLS by Tailscale, tailnet only); see
+[REMOTE_ACCESS.md](REMOTE_ACCESS.md). The page embeds the API token, so anyone who can load it has full
+control: expose it only to your own devices. `tailscale serve` needs its host name in `AllowedHosts`; a
+browser `Origin` from such a name is accepted only for requests addressed to that same name. Native remote
+listening (with TLS and separate opt-in for control actions) remains unsupported.

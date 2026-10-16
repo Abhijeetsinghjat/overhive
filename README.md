@@ -97,6 +97,8 @@ Add a tool Overhive does not know yet:
 | Need | Where |
 |------|-------|
 | What is running, waiting, blocked, failed | Header counters, agent tree, `overhive agents` |
+| Which agent needs me now (any tool) | **⚑ Needs you** badge (key `a`), Overview panel, `overhive attention`; opt-in browser, desktop or self-hosted ntfy notifications ([details](docs/NOTIFICATIONS.md)) |
+| Check agents from a phone | `/m` through your own SSH tunnel or `tailscale serve` ([how](docs/REMOTE_ACCESS.md)) |
 | Agent → sub-agent hierarchy, models, token usage | Graph tab, Usage tab, `overhive usage` |
 | Repo / worktree / branch / HEAD per agent | Agent panel → Location, Worktrees & Files tab |
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
@@ -115,6 +117,7 @@ an agent as working, or as changing a file, without evidence.
 - [Architecture](docs/ARCHITECTURE.md): system design, including what can and can't be known about an agent
 - [Agent integration](docs/AGENT_INTEGRATION.md): how each tool is discovered and tracked
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
+- [Attention queue and notifications](docs/NOTIFICATIONS.md), [Phone access](docs/REMOTE_ACCESS.md)
 - [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Dependencies](docs/DEPENDENCIES.md)
 - [Development](docs/DEVELOPMENT.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Contributing](CONTRIBUTING.md)
 
