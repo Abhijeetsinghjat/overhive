@@ -1,4 +1,6 @@
+using Amc.Daemon.Attention;
 using Amc.Daemon.Collectors.Git;
+using Amc.Daemon.Guard;
 using Amc.Daemon.Infrastructure;
 using Amc.Daemon.Providers.Claude;
 using Amc.Daemon.Tools;
@@ -22,6 +24,8 @@ public static class Composition
         services.AddTerminals();
         services.AddClaude();
         services.AddTools(options);
+        services.AddGuard();
+        services.AddAttention(options);
         return services;
     }
 
@@ -32,6 +36,8 @@ public static class Composition
         app.MapTerminalEndpoints();
         ClaudeModule.MapClaudeEndpoints(app);
         ToolsModule.MapToolEndpoints(app);
+        app.MapGuardEndpoints();
+        AttentionModule.MapAttentionEndpoints(app);
         return app;
     }
 }

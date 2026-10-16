@@ -33,6 +33,15 @@ public sealed class AmcOptions
     public bool Simulate { get; set; }
     /// <summary>Allow UI-initiated process control (pause/resume/terminate). Message sending is always allowed.</summary>
     public bool EnableControl { get; set; } = true;
+    /// <summary>Runaway guard thresholds and the opt-in automatic pause (section "Guard").</summary>
+    public Amc.Core.Guard.GuardSettings Guard { get; set; } = new();
+    /// <summary>Attention notifications: desktop and self-hosted ntfy, both off by default (docs/NOTIFICATIONS.md).</summary>
+    public Amc.Daemon.Attention.NotificationOptions Notifications { get; set; } = new();
+    /// <summary>
+    /// Extra Host names accepted besides loopback, e.g. the name `tailscale serve` forwards with. Exact names only:
+    /// no wildcards, no IP ranges. The daemon still listens on 127.0.0.1 only. Empty by default.
+    /// </summary>
+    public List<string> AllowedHosts { get; set; } = [];
 
     public string DbPath => Path.Combine(DataDir, "amc.db");
     public string TokenPath => Path.Combine(DataDir, "token");

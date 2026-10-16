@@ -55,3 +55,19 @@ Limits:
 - Overhive sees only agents running inside WSL, not tools running natively on Windows.
 - Keep repositories in the Linux file system (for example `~/dev`), not under `/mnt/c`: file-change
   notifications do not work on Windows drives, so changes there are picked up late, and Git is much slower.
+
+## macOS
+
+- **Start and logs.** The installer adds a launchd agent (`~/Library/LaunchAgents/dev.overhive.amcd.plist`) that
+  starts the daemon at login. Logs: `~/Library/Logs/Overhive/amcd.log`. Restart it with
+  `launchctl kickstart -k gui/$(id -u)/dev.overhive.amcd`. With Homebrew, use `brew services restart overhive`;
+  logs are in `$(brew --prefix)/var/log/overhive.log`.
+- **"cannot be opened because the developer cannot be verified".** Release archives are not notarised (that
+  needs a paid Apple account). Homebrew installs are not affected. For an archive downloaded with a browser,
+  remove the quarantine flag once: `xattr -dr com.apple.quarantine overhive-<version>-osx-arm64`.
+- **`overhive` not found.** The archive installer links into `~/.local/bin`; add it to your PATH, for example
+  `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc`.
+- **Claude Code sessions.** On macOS, Overhive may not be able to compare Claude Code's recorded process start
+  time with its own, and then accepts the live `claude`/`node` process with that pid. Please report it if a
+  finished session keeps showing as running.
+

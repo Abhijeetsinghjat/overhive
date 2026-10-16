@@ -51,7 +51,9 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
 | `terminal.started` / `terminal.exited` | `TerminalData` | `agentctl run` | observed |
 | `verification.settled` | `VerificationSettledData` | settle window of a commit/file claim passed; whether the claimed path exists | observed |
-| `audit.control` | `AuditData` | every control action | observed |
+| `audit.control` | `AuditData` | every control action (source `system` when automatic, e.g. the runaway guard's pause) | observed |
+| `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
+| `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)
 
@@ -70,6 +72,8 @@ current truth and disappear when resolved.
 
 Verification checks (claimed vs observed, see ARCHITECTURE.md §9) are computed from state on
 request; only their per-agent counts (`agent.verification`) are kept in state.
+The attention queue ("needs you") is derived the same way, by `AttentionDeriver` from state through
+`IAttentionProvider`s, after every batch; it is never stored as events (see NOTIFICATIONS.md).
 
 ## Volatile data (not events)
 
