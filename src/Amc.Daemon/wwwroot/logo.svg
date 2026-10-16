@@ -1,11 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Overhive">
-  <title>Overhive</title>
-  <!-- Three hive cells; the centre cell holds the watching eye. -->
-  <g fill="none" stroke="#E8A33D" stroke-width="3.2" stroke-linejoin="round">
-    <path d="M32 6 L45 13.5 L45 28.5 L32 36 L19 28.5 L19 13.5 Z"/>
-    <path d="M17.5 31 L30.5 38.5 L30.5 53.5 L17.5 61 L4.5 53.5 L4.5 38.5 Z" opacity=".55"/>
-    <path d="M46.5 31 L59.5 38.5 L59.5 53.5 L46.5 61 L33.5 53.5 L33.5 38.5 Z" opacity=".55"/>
-  </g>
-  <ellipse cx="32" cy="21" rx="8.2" ry="5.2" fill="none" stroke="#E8A33D" stroke-width="2.6"/>
-  <circle cx="32" cy="21" r="2.6" fill="#E8A33D"/>
+<title>Overhive</title>
+<defs>
+<linearGradient id="t" x1="0" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="#FFE29A"/><stop offset=".45" stop-color="#F6B544"/><stop offset="1" stop-color="#E08E22"/></linearGradient>
+<linearGradient id="tb" x1="0" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="#F7C565"/><stop offset="1" stop-color="#C9781B"/></linearGradient>
+<linearGradient id="sl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C8751A"/><stop offset="1" stop-color="#9E5512"/></linearGradient>
+<linearGradient id="sr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8F4A0F"/><stop offset="1" stop-color="#5E2E08"/></linearGradient>
+<linearGradient id="rc" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#B9660F"/><stop offset=".55" stop-color="#E9982C"/><stop offset="1" stop-color="#FFC35A"/></linearGradient>
+<linearGradient id="rcb" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#9C5410"/><stop offset=".6" stop-color="#D48526"/><stop offset="1" stop-color="#F2AE4A"/></linearGradient>
+<radialGradient id="sh" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1A0E02" stop-opacity=".45"/><stop offset="1" stop-color="#1A0E02" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse cx="32" cy="55.87" rx="29" ry="4.2" fill="url(#sh)"/>
+<path d="M18.14 20.01 L32 24.97 L32 40.47 L18.14 35.51Z" fill="url(#sl)"/><path d="M32 24.97 L45.86 20.01 L45.86 35.51 L32 40.47Z" fill="url(#sr)"/>
+<path d="M32 5.13 L45.86 10.09 L45.86 20.01 L32 24.97 L18.14 20.01 L18.14 10.09Z" fill="url(#t)"/>
+<path d="M18.14 20.01 L18.14 10.09 L32 5.13" fill="none" stroke="#FFF4D6" stroke-opacity=".6" stroke-width=".6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18.14 20.01 L32 24.97 L45.86 20.01" fill="none" stroke="#FFD98A" stroke-opacity=".55" stroke-width=".6"/>
+<path d="M32 7.74 L42.22 11.39 L42.22 18.71 L32 22.37 L21.78 18.71 L21.78 11.39Z" fill="url(#rc)"/>
+<path d="M42.22 11.39 L42.22 18.71 L32 22.37 L21.78 18.71" fill="none" stroke="#FFE7B0" stroke-opacity=".8" stroke-width=".7" stroke-linejoin="round"/>
+<path d="M21.78 18.71 L21.78 11.39 L32 7.74 L42.22 11.39" fill="none" stroke="#7A3F0A" stroke-opacity=".55" stroke-width=".7" stroke-linejoin="round"/>
+<path d="M24.4 15.05 Q32 8.11 39.6 15.05 Q32 22 24.4 15.05Z" fill="#3B1F06"/>
+<ellipse cx="32" cy="15.05" rx="3.3" ry="2.05" fill="#F6B544"/>
+<ellipse cx="32" cy="15.05" rx="1.5" ry="0.93" fill="#3B1F06"/>
+<circle cx="30.9" cy="14.25" r=".75" fill="#FFF8E6"/>
+<path d="M3.25 42.51 L17.1 47.47 L17.1 56.47 L3.25 51.51Z" fill="url(#sl)"/><path d="M17.1 47.47 L30.96 42.51 L30.96 51.51 L17.1 56.47Z" fill="url(#sr)"/>
+<path d="M17.1 27.63 L30.96 32.59 L30.96 42.51 L17.1 47.47 L3.25 42.51 L3.25 32.59Z" fill="url(#tb)"/>
+<path d="M3.25 42.51 L3.25 32.59 L17.1 27.63" fill="none" stroke="#FFF4D6" stroke-opacity=".6" stroke-width=".6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M3.25 42.51 L17.1 47.47 L30.96 42.51" fill="none" stroke="#FFD98A" stroke-opacity=".55" stroke-width=".6"/>
+<path d="M17.1 30.23 L27.32 33.89 L27.32 41.21 L17.1 44.86 L6.89 41.21 L6.89 33.89Z" fill="url(#rcb)"/>
+<path d="M27.32 33.89 L27.32 41.21 L17.1 44.86 L6.89 41.21" fill="none" stroke="#FFE7B0" stroke-opacity=".8" stroke-width=".7" stroke-linejoin="round"/>
+<path d="M6.89 41.21 L6.89 33.89 L17.1 30.23 L27.32 33.89" fill="none" stroke="#7A3F0A" stroke-opacity=".55" stroke-width=".7" stroke-linejoin="round"/>
+<path d="M33.04 42.51 L46.9 47.47 L46.9 56.47 L33.04 51.51Z" fill="url(#sl)"/><path d="M46.9 47.47 L60.75 42.51 L60.75 51.51 L46.9 56.47Z" fill="url(#sr)"/>
+<path d="M46.9 27.63 L60.75 32.59 L60.75 42.51 L46.9 47.47 L33.04 42.51 L33.04 32.59Z" fill="url(#tb)"/>
+<path d="M33.04 42.51 L33.04 32.59 L46.9 27.63" fill="none" stroke="#FFF4D6" stroke-opacity=".6" stroke-width=".6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M33.04 42.51 L46.9 47.47 L60.75 42.51" fill="none" stroke="#FFD98A" stroke-opacity=".55" stroke-width=".6"/>
+<path d="M46.9 30.23 L57.11 33.89 L57.11 41.21 L46.9 44.86 L36.68 41.21 L36.68 33.89Z" fill="url(#rcb)"/>
+<path d="M57.11 33.89 L57.11 41.21 L46.9 44.86 L36.68 41.21" fill="none" stroke="#FFE7B0" stroke-opacity=".8" stroke-width=".7" stroke-linejoin="round"/>
+<path d="M36.68 41.21 L36.68 33.89 L46.9 30.23 L57.11 33.89" fill="none" stroke="#7A3F0A" stroke-opacity=".55" stroke-width=".7" stroke-linejoin="round"/>
 </svg>

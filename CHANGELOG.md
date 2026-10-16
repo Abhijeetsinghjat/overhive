@@ -5,6 +5,12 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Changed
+- New 3D logo: the three hive cells are now extruded, lit honeycomb cells with the watching eye on the
+  raised centre cell. Adds a full favicon set (SVG, 16/32 px PNG, Apple touch icon, 192/512 px app icons),
+  web app manifests for the dashboard and the phone page, a flat `logo-mono.svg` for tiny sizes, and a
+  social preview image (`docs/media/social-preview.png`).
+
 ## [0.2.0] - 2026-10-17
 
 Still beta. First release with macOS builds.
