@@ -105,6 +105,7 @@ Add a tool Overhive does not know yet:
 | Commits with links to your Git host | Commits tab |
 | Conflicts between agents | Conflict banner, `overhive status`, `overhive conflicts` |
 | Which lines overlap; warn the agents involved | Conflict banner / panel → **Warn agents**, `overhive conflicts warn <n>`; automatic with `"AutoWarnConflicts": true` |
+| Did the agent really do what it says? ("tests pass", "committed", "created X") | Agent panel → Verification; ✗ N on the agent's card and row |
 | Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |

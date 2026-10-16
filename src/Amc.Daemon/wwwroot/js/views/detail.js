@@ -13,6 +13,7 @@ import {
 import { renderDiff } from '../components/diff.js';
 import { insightHeadline, insightContent, warnButton, canWarn } from './conflictinsight.js';
 import { toast, confirmModal } from '../components/overlay.js';
+import { verificationSection, verificationSig } from './verification.js';
 import { guardSection, guardSigForAgent } from './guard.js';
 import { attentionOverview, attentionSig } from './attention.js';
 import { attention } from '../attention-store.js';
@@ -69,6 +70,7 @@ function sigFor(sel, ent) {
     for (const f of store.e.file.values()) if (f.agents && f.agents[sel.id]) parts.push(f.key, f.gitStatus, f.added, f.removed, JSON.stringify(f.agents[sel.id]));
     for (const id of ent.childIds || []) { const c2 = get('agent', id); parts.push(c2?.status, c2?.title); }
     const lt = store.lastTool.get(sel.id); parts.push(lt?.seq);
+    parts.push(verificationSig(sel.id));
     parts.push(guardSigForAgent(ent));
   }
   if (sel.kind === 'file') { const hst = history.get(sel.id); parts.push(hst?.at, hst?.loading); }
@@ -417,6 +419,7 @@ function agentDetail(a) {
     section('a-now', 'Now', null, now),
     usageSection(a, kids),
     (a.tasks || []).length ? section('a-tasks', 'Tasks', a.tasks.length, ...taskList(a)) : null,
+    verificationSection(a, section),
     section('a-msg', 'Messages', nMsgs, messageThread(a.id), composer(a, c)),
     section('a-files', 'Files changed', files.length, files.length ? filesByWorktree(files, a.id) : h('div', { class: 'muted small' }, 'No file changes attributed to this agent.')),
     subFilesSection(a),

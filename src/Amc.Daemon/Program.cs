@@ -85,6 +85,7 @@ builder.Services.AddSingleton<AgentOperations>();
 builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<StalenessMonitor>();
+builder.Services.AddHostedService<Amc.Daemon.Verification.VerificationMonitor>();
 builder.Services.AddHostedService<Amc.Daemon.Storage.RetentionService>();
 
 // Collectors & providers register themselves here (each module exposes one Add* extension).

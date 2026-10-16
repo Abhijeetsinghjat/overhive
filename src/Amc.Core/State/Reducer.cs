@@ -1,5 +1,6 @@
 using Amc.Core.Domain;
 using Amc.Core.Events;
+using Amc.Core.Verification;
 
 namespace Amc.Core.State;
 
@@ -17,10 +18,11 @@ public static class Reducer
         var changed = new HashSet<EntityRef>();
         foreach (var e in events) Apply(s, e, changed);
         ConflictDetector.Recompute(s, changed);
+        VerificationFold.Recompute(s, changed);
         return changed;
     }
 
-    /// <summary>Applies one event. Callers must run <see cref="ConflictDetector.Recompute"/> afterwards (ApplyBatch does).</summary>
+    /// <summary>Applies one event. Callers must run <see cref="ConflictDetector.Recompute"/> and <see cref="VerificationFold.Recompute"/> afterwards (ApplyBatch does).</summary>
     public static void Apply(WorldState s, AgentEvent e, HashSet<EntityRef> changed)
     {
         if (e.Seq > 0)
@@ -182,6 +184,7 @@ public static class Reducer
                 Guard.GuardReducer.Apply(s, e, changed);
                 break;
         }
+        VerificationFold.Apply(s, e); // claimed vs observed (Amc.Core/Verification)
     }
 
     private static bool IsActivity(string type) =>

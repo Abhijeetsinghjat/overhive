@@ -53,6 +53,7 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `conflict.analyzed` | `ConflictAnalysisData` (conflict key + changed line ranges per worktree pair) | `ConflictAnalyzer` (git diff against the merge base) | observed |
 | `conflict.warned` | `ConflictWarnedData` (conflict key, per-agent outcome) | "Warn agents" action or automatic warning | observed |
 | `audit.control` | `AuditData` | every control action (source `system` when automatic, e.g. the runaway guard's pause; also `warn-conflict` / `auto-warn-conflict`) | observed |
+| `verification.settled` | `VerificationSettledData` | settle window of a commit/file claim passed; whether the claimed path exists | observed |
 | `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
 | `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
 
@@ -62,7 +63,7 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 tool:<tool_use_id>:start      tool:<tool_use_id>:end      file:<tool_use_id>
 prompt:<session>:<prompt_id>  spawn:<agent_id>            end:<agent_id>
 test:<tool_use_id>:start      test:<tool_use_id>:end      commit:<worktree>:<sha>
-proc:<pid>:<procStart>:exit   msg:<message_id>:delivered
+proc:<pid>:<procStart>:exit   msg:<message_id>:delivered      verify:<claim_id>
 ```
 
 ## Derived state (not events)
@@ -74,6 +75,8 @@ conflict are events (`conflict.analyzed`, `conflict.warned`), folded by conflict
 `WorldState.ConflictInsights` and shown on the conflict as `insight`, so they survive the
 conflict being re-derived and a restart.
 
+Verification checks (claimed vs observed, see ARCHITECTURE.md §9) are computed from state on
+request; only their per-agent counts (`agent.verification`) are kept in state.
 The attention queue ("needs you") is derived the same way, by `AttentionDeriver` from state through
 `IAttentionProvider`s, after every batch; it is never stored as events (see NOTIFICATIONS.md).
 

@@ -4,6 +4,7 @@ import { store, register, get, invalidate } from '../store.js';
 import { ui, select, toggleCollapsed, isSelected, setCollapsed } from '../ui.js';
 import { roots, children, agentName, statusMeta, worktreeOfAgent, worktreeLabel, worktreeRef, agentColor } from '../model.js';
 import { agentPasses, filterCtx } from '../filters.js';
+import { verifyMark } from './verification.js';
 
 let visible = [];   // flattened [agent, depth, dim]
 
@@ -54,7 +55,7 @@ export function initTree() {
       }
       keyed(list, visible, ([a]) => a.id,
         ([a, depth, dim]) => [a.status, a.statusReason, a.title, a.lastActivityAt, a.currentTool, a.currentAction, a.currentWorktreeId,
-          depth, dim, ui.collapsed.has(a.id), isSelected('agent', a.id), ui.treeCursor === a.id, (a.childIds || []).length, a.tasks?.length].join('|'),
+          depth, dim, ui.collapsed.has(a.id), isSelected('agent', a.id), ui.treeCursor === a.id, (a.childIds || []).length, a.tasks?.length, a.verification?.contradicted].join('|'),
         ([a, depth, dim]) => row(a, depth, dim));
     },
   });
@@ -99,6 +100,7 @@ function row(a, depth, dim) {
     h('span', { class: `tn-status ${m.cls}` }, m.label),
     h('span', { class: 'tn-kind' }, isMain ? 'main' : (a.agentType || 'sub')),
     kids ? h('span', { class: 'tn-kids', title: `${kids} sub-agent(s)` }, `↳${kids}`) : null,
+    verifyMark(a),
     wt ? h('span', { class: 'chip', title: `Worktree ${wt.root} (inferred from tool paths)` }, '⑂ ', worktreeRef(wt)) :
       a.gitBranch ? h('span', { class: 'chip', title: 'Branch reported by the agent' }, '⑂ ', a.gitBranch) : null,
     null),

@@ -102,6 +102,8 @@ public sealed class Agent
     public int ToolFailures { get; set; }
     public int FilesChanged { get; set; }
     public List<AgentTask> Tasks { get; set; } = [];
+    /// <summary>Claimed vs observed counts (null when the agent made no checkable claim).</summary>
+    public Amc.Core.Verification.VerificationSummary? Verification { get; set; }
 
     [JsonIgnore] public bool IsTerminal => AgentStateMachine.IsTerminal(Status);
 }
