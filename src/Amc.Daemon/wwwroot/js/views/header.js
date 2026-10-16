@@ -8,6 +8,7 @@ import { RANGES } from '../filters.js';
 import { reconnectNow } from '../sync.js';
 import { showHelp } from './help.js';
 import { guardBadge } from './guard.js';
+import { attentionBadge } from './attention.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -60,7 +61,7 @@ export function initHeader() {
   mount(header,
     h('div', { class: 'brand' }, h('img', { class: 'logo-img', src: '/logo.svg', alt: '' }), h('span', { class: 'brand-name' }, 'Overhive'),
       h('span', { class: 'beta-tag', title: 'Overhive is in beta: tested on Linux; please report problems on GitHub' }, 'Beta')),
-    conn, countsEl, conflictBtn, guardBadge(),
+    conn, attentionBadge(), countsEl, conflictBtn, guardBadge(),
     h('div', { class: 'spacer' }),
     sessionSel, follow,
     h('div', { class: 'search-wrap' }, search, results),

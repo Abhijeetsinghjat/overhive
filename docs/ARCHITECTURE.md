@@ -261,6 +261,8 @@ GET  /api/terminals/{id}/buffer
 GET  /api/guard                      runaway guard: rules, live values per session, active alerts
 POST /api/guard/dismiss              {key} or {rootAgentId}
 POST /api/guard/pause                {rootAgentId}: pause the session tree
+GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
+POST /api/attention/dismiss|snooze|restore   {id, minutes?}
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
 ```
 
@@ -270,6 +272,7 @@ server → {t:"hello", seq, serverTime}
 server → {t:"event", e:{…}}             (replayed since `since`, then live)
 server → {t:"patch", kind, id, value}   entity upserts from the reducer
 server → {t:"live", processes:[…]}      ≤1 Hz volatile overlay
+server → {t:"attention", items, urgent, hidden}   attention queue, when it changes
 server → {t:"resync"}                    client too slow / gap → refetch /api/state
 client → {t:"sub", topics:[…]} | {t:"ping"}
 ```

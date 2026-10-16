@@ -29,14 +29,22 @@ You can message agents, pause or stop them, and start new sessions of any instal
 - **Local only.** One daemon on `127.0.0.1` and a private Unix socket. Data stays in SQLite under
   `~/.local/state/agent-mission-control`.
 
-> **Beta.** Overhive works and is used daily on Linux, but it has had few users so far. Expect rough edges and
-> please report them. macOS support comes next, then native Windows. On Windows today you can run it inside
-> WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
+> **Beta.** Overhive works and is used daily on Linux; macOS support is new and passes the full test suite
+> on Apple Silicon, but has had few real users yet. Expect rough edges and please report them. Native Windows
+> comes next; on Windows today you can run it inside WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
 
 ## Install
 
-From a release archive (no .NET needed). Download the archive for your machine (`linux-x64` or
-`linux-arm64`) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
+On macOS with [Homebrew](https://brew.sh) (from v0.2.0, the first release with macOS builds):
+
+```bash
+brew tap abhijeetsinghjat/overhive https://github.com/Abhijeetsinghjat/overhive
+brew install overhive
+brew services start overhive      # start now and at every login
+```
+
+From a release archive (no .NET needed). Download the archive for your machine (`linux-x64`, `linux-arm64`,
+`osx-arm64` for Apple Silicon, `osx-x64` for Intel Macs) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
@@ -52,7 +60,8 @@ git clone https://github.com/Abhijeetsinghjat/overhive && cd overhive
 scripts/install.sh
 ```
 
-Both install `amcd` (the daemon, run as a systemd user service that starts on login) and the CLI as
+Both install `amcd` (the daemon, started at login by a systemd user service on Linux or a launchd agent on
+macOS) and the CLI as
 `overhive` (also available as `agentctl`). Open the dashboard at **http://127.0.0.1:47821**.
 
 ## Connect your AI tools
@@ -88,6 +97,8 @@ Add a tool Overhive does not know yet:
 | Need | Where |
 |------|-------|
 | What is running, waiting, blocked, failed | Header counters, agent tree, `overhive agents` |
+| Which agent needs me now (any tool) | **⚑ Needs you** badge (key `a`), Overview panel, `overhive attention`; opt-in browser, desktop or self-hosted ntfy notifications ([details](docs/NOTIFICATIONS.md)) |
+| Check agents from a phone | `/m` through your own SSH tunnel or `tailscale serve` ([how](docs/REMOTE_ACCESS.md)) |
 | Agent → sub-agent hierarchy, models, token usage | Graph tab, Usage tab, `overhive usage` |
 | Repo / worktree / branch / HEAD per agent | Agent panel → Location, Worktrees & Files tab |
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
@@ -108,6 +119,7 @@ an agent as working, or as changing a file, without evidence.
 - [Agent integration](docs/AGENT_INTEGRATION.md): how each tool is discovered and tracked
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
 - [Runaway guard](docs/RUNAWAY_GUARD.md): warnings (and an optional automatic pause) for sub-agent fan-out and token burn
+- [Attention queue and notifications](docs/NOTIFICATIONS.md), [Phone access](docs/REMOTE_ACCESS.md)
 - [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Dependencies](docs/DEPENDENCIES.md)
 - [Development](docs/DEVELOPMENT.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Contributing](CONTRIBUTING.md)
 

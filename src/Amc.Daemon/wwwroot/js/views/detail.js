@@ -13,6 +13,8 @@ import {
 import { renderDiff } from '../components/diff.js';
 import { toast, confirmModal } from '../components/overlay.js';
 import { guardSection, guardSigForAgent } from './guard.js';
+import { attentionOverview, attentionSig } from './attention.js';
+import { attention } from '../attention-store.js';
 
 const caps = new Map();       // agentId → { data, error, loading, sig }
 const history = new Map();    // fileKey → { events, error, loading, at }
@@ -25,7 +27,7 @@ export function initDetail() {
   const right = document.getElementById('right');
   let lastSig = null;
   register({
-    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'guard', 'guard-live'],
+    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'guard', 'guard-live', 'attention'],
     render(d) {
       const sel = ui.selection;
       const ent = sel ? get(sel.kind, sel.id) : null;
@@ -51,7 +53,7 @@ export function initDetail() {
 }
 
 function overviewSig() {
-  const parts = ['none', store.e.repository.size, store.e.worktree.size, [...store.e.conflict.keys()].join(',')];
+  const parts = ['none', store.e.repository.size, store.e.worktree.size, [...store.e.conflict.keys()].join(','), attentionSig()];
   for (const a of store.e.agent.values()) if (['blocked', 'failed', 'disconnected'].includes(statusOf(a))) parts.push(a.id, a.status, a.statusReason);
   return parts.join('§');
 }
@@ -137,12 +139,11 @@ function conflictsFor(pred) {
 
 function overview() {
   const conflicts = all('conflict');
-  const blocked = all('agent').filter((a) => statusOf(a) === 'blocked');
   const failed = all('agent').filter((a) => statusOf(a) === 'failed' || statusOf(a) === 'disconnected');
   return h('div', { class: 'detail' },
     h('div', { class: 'd-head' }, h('div', { class: 'd-title' }, 'Overview'), h('div', { class: 'muted small' }, 'Select an agent, worktree, file or conflict to see details.')),
     conflicts.length ? section('ov-conf', 'Conflicts', conflicts.length, conflictsFor(() => true)) : null,
-    section('ov-blocked', 'Needs your input', blocked.length, blocked.length ? blocked.map((a) => h('div', { class: 'ov-item' }, agentLink(a.id), h('div', { class: 'small muted' }, a.statusReason || ''))) : h('div', { class: 'muted small' }, 'No agent is waiting for you.')),
+    section('ov-blocked', 'Needs you', attention.items.length, attentionOverview()),
     failed.length ? section('ov-failed', 'Failed / disconnected', failed.length, failed.map((a) => h('div', { class: 'ov-item' }, agentLink(a.id), h('div', { class: 'small muted' }, a.statusReason || '')))) : null,
     section('ov-repos', 'Repositories', store.e.repository.size, all('repository').map((r) => h('div', { class: 'ov-item' }, repoLink(r.id), h('span', { class: 'muted small' }, ` · ${all('worktree').filter((w) => w.repositoryId === r.id).length} worktrees`)))),
     section('ov-help', 'How data appears', null, h('ul', { class: 'small muted plain' },

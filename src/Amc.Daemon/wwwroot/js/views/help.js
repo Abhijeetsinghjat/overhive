@@ -5,7 +5,7 @@ import { STATUS, STATUS_DESCRIPTIONS, EVIDENCE, evBadge } from '../model.js';
 const KEYS = [
   ['/', 'Focus search'], ['1 – 6', 'Switch tab (Graph, Worktrees, Activity, Timeline, Processes, Health)'],
   ['j / k', 'Move in the agent tree'], ['Enter', 'Open the highlighted agent'], ['h / l', 'Collapse / expand tree node'],
-  ['d', 'Toggle bottom drawer'], ['f', 'Toggle "follow active"'], ['Esc', 'Close dialog / clear search / close drawer'], ['?', 'This help'],
+  ['a', 'Needs you: the attention queue'], ['d', 'Toggle bottom drawer'], ['f', 'Toggle "follow active"'], ['Esc', 'Close dialog / clear search / close drawer'], ['?', 'This help'],
 ];
 
 export function showHelp() {

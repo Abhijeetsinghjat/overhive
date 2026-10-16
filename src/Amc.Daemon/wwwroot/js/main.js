@@ -22,11 +22,13 @@ import { initDrawer } from './views/drawer.js';
 import { showHelp } from './views/help.js';
 import { initLayout } from './layout.js';
 import { newSessionDialog } from './views/newsession.js';
+import { initAttention, toggleAttentionPanel } from './views/attention.js';
 
 setTheme(ui.theme);
 readHash();
 window.addEventListener('hashchange', readHash);
 
+initAttention();
 initHeader();
 initFilterBar();
 initBanners();
@@ -76,6 +78,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '?') { showHelp(); return; }
   if (e.key === 'd') { toggleDrawer(); return; }
   if (e.key === 'n') { newSessionDialog(); return; }
+  if (e.key === 'a') { toggleAttentionPanel(); return; }
   if (e.key === 'f') { setFollow(!ui.follow); return; }
   if (e.key === 'Escape') {
     if (ui.filters.q) { setFilter('q', ''); const s = document.querySelector('.search'); if (s) s.value = ''; }

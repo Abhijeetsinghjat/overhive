@@ -11,6 +11,15 @@ version is 0.x, minor versions may change behaviour.
   agent-panel section with **Pause tree** / **Dismiss**, counters on the graph, `overhive guard` and
   `GET /api/guard`. Optional `Guard.AutoPause` (off by default) pauses a session on a critical alert, audited
   as automatic; it never kills. See [docs/RUNAWAY_GUARD.md](docs/RUNAWAY_GUARD.md).
+- "Needs you" attention queue across all tools: blocked and waiting agents, failures, unexpected exits and
+  conflicts, ordered by priority and age, each with its evidence label and main action. Header badge (key `a`),
+  Overview panel, `overhive attention`, `GET /api/attention`; snooze and dismiss kept by the daemon.
+- Opt-in notifications for new urgent items, rate-limited and combined: browser notifications from the
+  dashboard, desktop notifications from the daemon (`Notifications.Desktop`, notify-send / osascript), and push
+  through your own ntfy server (`Notifications.NtfyUrl`), the only outbound call and only when configured.
+- Phone page `/m` and a guide to reaching it through your own SSH tunnel or `tailscale serve`; optional
+  `AllowedHosts` (exact names, empty by default) for the `tailscale serve` host name.
+- Extension point `IAttentionProvider` so other features can add items with one registration line.
 
 ## [0.1.0] - 2026-10-15
 

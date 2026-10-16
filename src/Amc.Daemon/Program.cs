@@ -23,9 +23,22 @@ var options = builder.Configuration.Get<AmcOptions>() ?? new AmcOptions();
 if (options.BindAddress is not ("127.0.0.1" or "localhost" or "::1"))
     throw new InvalidOperationException(
         $"Refusing to bind to {options.BindAddress}. Remote access is not supported in this version; see SECURITY.md.");
+// Extra Host names (e.g. for `tailscale serve`) are checked by SecurityMiddleware; ASP.NET's own host filtering,
+// which reads the same "AllowedHosts" key, is turned off so the two can never disagree.
+options.AllowedHosts = HostAllowList.Resolve(builder.Configuration);
+builder.Services.PostConfigure<AmcOptions>(o => o.AllowedHosts = options.AllowedHosts);
+builder.Services.Configure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(o => o.AllowedHosts = ["*"]);
 // Files we create (db, WAL, logs, socket) are private to this user.
 if (!OperatingSystem.IsWindows()) Amc.Daemon.Infrastructure.NativeUmask.Set(0x3F /* 077 */);
 Directory.CreateDirectory(options.DataDir);
+// Unix socket paths are limited (104 bytes on macOS, 108 on Linux, counting the terminating NUL).
+var socketLimit = OperatingSystem.IsMacOS() ? 103 : 107;
+if (System.Text.Encoding.UTF8.GetByteCount(options.SocketPath) > socketLimit)
+{
+    Console.Error.WriteLine($"amcd: the private socket path is too long for this OS ({options.SocketPath}, max {socketLimit} bytes). " +
+                            "Set a shorter data directory, e.g. AMC_DataDir=~/.overhive, or shorten XDG_STATE_HOME.");
+    return 2;
+}
 if (File.Exists(options.SocketPath))
 {
     // Only remove the socket if it is stale: a second instance must never break a running one.
@@ -34,7 +47,8 @@ if (File.Exists(options.SocketPath))
     {
         probe.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(options.SocketPath));
         Console.Error.WriteLine($"amcd is already running (socket {options.SocketPath} is live). " +
-                                "If it runs as a service: systemctl --user status amcd");
+                                (OperatingSystem.IsMacOS() ? "If it runs as a service: launchctl print gui/$(id -u)/dev.overhive.amcd"
+                                                           : "If it runs as a service: systemctl --user status amcd"));
         return 1;
     }
     catch (System.Net.Sockets.SocketException) { File.Delete(options.SocketPath); } // stale socket from a crashed run
@@ -102,7 +116,11 @@ app.MapCollectorEndpoints();
 app.Services.GetRequiredService<EventPipeline>().Restore();
 
 app.Lifetime.ApplicationStarted.Register(() =>
-    app.Logger.LogInformation("Overhive listening on http://{Addr}:{Port}", options.BindAddress, options.Port));
+{
+    app.Logger.LogInformation("Overhive listening on http://{Addr}:{Port}", options.BindAddress, options.Port);
+    if (options.AllowedHosts.Count > 0)
+        app.Logger.LogWarning("Also accepting Host names {Hosts} (AllowedHosts). Anyone who can reach them through your proxy gets full access", string.Join(", ", options.AllowedHosts));
+});
 
 app.Run();
 return 0;
