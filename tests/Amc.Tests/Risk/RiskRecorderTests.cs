@@ -161,4 +161,23 @@ public class RiskRecorderTests
         Assert.Equal(DateTimeOffset.Parse("2026-10-01T00:00:00Z"), RiskModule.Since("2026-10-01T00:00:00Z", now));
         Assert.Null(RiskModule.Since(null, now));
     }
+
+    [Fact]
+    public void Cli_table_round_trips_api_json()
+    {
+        var risk = new Amc.Core.Risk.Risk
+        {
+            Id = "risk:x", AgentId = Agent, RuleId = RiskRules.GitForcePush, Severity = RiskSeverity.Critical,
+            Explanation = "Force-push rewrites remote history on main", Span = "git push -f origin main", Command = "git push -f origin main",
+            Evidence = Evidence.Reported, At = DateTimeOffset.UnixEpoch,
+        };
+        var back = Json.Deserialize<List<Amc.Core.Risk.Risk>>(Json.Serialize(new[] { risk }))!;
+        var w = new StringWriter();
+        Amc.Cli.Commands.RisksCommand.Build(back, new Amc.Cli.Infrastructure.Style(false), DateTimeOffset.UnixEpoch.AddMinutes(5)).Write(w, new Amc.Cli.Infrastructure.Style(false));
+        var text = w.ToString();
+        Assert.Contains("critical", text);
+        Assert.Contains("git-force-push", text);
+        Assert.Contains("reported", text);
+        Assert.Contains("git push -f origin main", text);
+    }
 }
