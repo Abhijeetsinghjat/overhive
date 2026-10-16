@@ -58,6 +58,8 @@ public sealed class WorldState
     public Dictionary<string, UsageMark> UsageMarks { get; set; } = [];
     public const int MaxUsageMarks = 20_000;
     public Dictionary<string, Conflict> Conflicts { get; set; } = [];
+    /// <summary>Overlap analysis and warning history by conflict key (survives the conflict being re-derived).</summary>
+    public Dictionary<string, ConflictInsight> ConflictInsights { get; set; } = [];
 
     public object? Get(EntityRef r) => r.Kind switch
     {

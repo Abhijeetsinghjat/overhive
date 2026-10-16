@@ -33,6 +33,11 @@ public sealed class AmcOptions
     public bool Simulate { get; set; }
     /// <summary>Allow UI-initiated process control (pause/resume/terminate). Message sending is always allowed.</summary>
     public bool EnableControl { get; set; } = true;
+    /// <summary>
+    /// Send the "Warn agents" heads-up automatically when a cross-worktree conflict has overlapping changes:
+    /// once per conflict and agent, again only when the overlapping lines change. Off by default.
+    /// </summary>
+    public bool AutoWarnConflicts { get; set; }
 
     public string DbPath => Path.Combine(DataDir, "amc.db");
     public string TokenPath => Path.Combine(DataDir, "token");

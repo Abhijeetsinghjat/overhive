@@ -1,4 +1,5 @@
 using Amc.Daemon.Collectors.Git;
+using Amc.Daemon.Conflicts;
 using Amc.Daemon.Infrastructure;
 using Amc.Daemon.Providers.Claude;
 using Amc.Daemon.Tools;
@@ -22,6 +23,7 @@ public static class Composition
         services.AddTerminals();
         services.AddClaude();
         services.AddTools(options);
+        services.AddConflicts();
         return services;
     }
 
@@ -32,6 +34,7 @@ public static class Composition
         app.MapTerminalEndpoints();
         ClaudeModule.MapClaudeEndpoints(app);
         ToolsModule.MapToolEndpoints(app);
+        app.MapConflictEndpoints();
         return app;
     }
 }

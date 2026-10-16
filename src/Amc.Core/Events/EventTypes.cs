@@ -73,6 +73,10 @@ public static class EventTypes
     // Control / audit
     public const string AuditControl = "audit.control";            // AuditData
 
+    // Conflict analysis and warnings to agents (see ConflictInsight)
+    public const string ConflictAnalyzed = "conflict.analyzed";    // ConflictAnalysisData (observed: git diffs)
+    public const string ConflictWarned = "conflict.warned";        // ConflictWarnedData
+
     public static bool IsFileChange(string type) =>
         type is FileCreated or FileModified or FileDeleted or FileRenamed;
 }

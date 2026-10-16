@@ -3,6 +3,7 @@ import { h, mount, norm, ago, oneLine, shortId } from '../util.js';
 import { store, register, all, get, invalidate } from '../store.js';
 import { ui, setFilter, clearFilters, activeFilterCount, setTab, select, setFollow, setTheme, TABS } from '../ui.js';
 import { newSessionDialog } from './newsession.js';
+import { insightHeadline, overlapLine, warnButton } from './conflictinsight.js';
 import { allUsage, usageTotal, usageTitle, fmtTok, counts, agentName, roots, EVENT_CATEGORIES, statusDot, worktreeLabel, repoName, conflictHeadline, conflictKindLabel } from '../model.js';
 import { RANGES } from '../filters.js';
 import { reconnectNow } from '../sync.js';
@@ -265,10 +266,10 @@ export function initBanners() {
         details.addEventListener('click', () => select('conflict', c.key));
         return h('div', { class: 'cb-row' },
           h('span', { class: 'cb-kind' }, conflictKindLabel(c.kind)),
-          h('b', null, conflictHeadline(c)), path ? [' · ', path] : null,
+          h('b', null, insightHeadline(c) || conflictHeadline(c)), path ? [' · ', path] : null,
           wts.length ? [' · in ', ...join(wts)] : null,
           agents.length ? [' · ', ...join(agents)] : null,
-          h('span', { class: 'spacer' }), details);
+          h('span', { class: 'spacer' }), warnButton(c), details, overlapLine(c));
       };
       const more = list.length > 1 ? h('button', { class: 'btn btn-sm btn-ghost' }, expanded ? 'Show less' : `+${list.length - 1} more`) : null;
       more?.addEventListener('click', () => { expanded = !expanded; invalidate('conflict'); });

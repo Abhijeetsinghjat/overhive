@@ -20,6 +20,7 @@ signal processes. It is designed for a single user on their own machine.
 | Destructive actions by mistake | Terminate/Kill need `confirm=true` (HTTP 428 otherwise); the UI requires typing the agent's short id; the CLI requires typed confirmation or `--yes`. Pause/resume are reversible. No action deletes files, resets Git state or force-pushes. |
 | Undocumented agent internals | Claude Code's per-session messaging sockets and their `.key` token files are not read or used. |
 | Audit | Every control action and message is an event (`audit.control`, `agent.message_*`) in the append-only log. |
+| Conflict warnings | "Warn agents" sends only a fixed, factual text (agent names, tool, branch, path, line numbers; passed through `Redactor`), never file contents. It needs `confirm=true` (428 otherwise) and the dashboard/CLI show each recipient's exact text first. Automatic warnings are off unless `AutoWarnConflicts` is set. The overlap check runs read-only `git diff`/`merge-base`; `git merge-tree --write-tree` (only when both branches committed a change to the file) adds unreferenced objects to the repository's object store, which `git gc` removes. |
 
 ## Hooks
 

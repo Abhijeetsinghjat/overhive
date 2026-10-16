@@ -50,7 +50,9 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `test.started` / `test.passed` / `test.failed` | `TestRunData` | test command + parsed output | inferred |
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
 | `terminal.started` / `terminal.exited` | `TerminalData` | `agentctl run` | observed |
-| `audit.control` | `AuditData` | every control action | observed |
+| `audit.control` | `AuditData` | every control action (also `warn-conflict` / `auto-warn-conflict`) | observed |
+| `conflict.analyzed` | `ConflictAnalysisData` (conflict key + changed line ranges per worktree pair) | `ConflictAnalyzer` (git diff against the merge base) | observed |
+| `conflict.warned` | `ConflictWarnedData` (conflict key, per-agent outcome) | "Warn agents" action or automatic warning | observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)
 
@@ -65,7 +67,10 @@ proc:<pid>:<procStart>:exit   msg:<message_id>:delivered
 
 Conflicts (`same-file`, `cross-worktree`, `same-worktree`, `git-unmerged`) are
 recomputed from state after every batch (`ConflictDetector`) so they always reflect the
-current truth and disappear when resolved.
+current truth and disappear when resolved. The overlap analysis and warnings of a
+conflict are events (`conflict.analyzed`, `conflict.warned`), folded by conflict key into
+`WorldState.ConflictInsights` and shown on the conflict as `insight`, so they survive the
+conflict being re-derived and a restart.
 
 ## Volatile data (not events)
 

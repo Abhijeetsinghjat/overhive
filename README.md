@@ -92,7 +92,8 @@ Add a tool Overhive does not know yet:
 | Repo / worktree / branch / HEAD per agent | Agent panel → Location, Worktrees & Files tab |
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
 | Commits with links to your Git host | Commits tab |
-| Conflicts between agents | Conflict banner, `overhive status` |
+| Conflicts between agents | Conflict banner, `overhive status`, `overhive conflicts` |
+| Which lines overlap; warn the agents involved | Conflict banner / panel → **Warn agents**, `overhive conflicts warn <n>`; automatic with `"AutoWarnConflicts": true` |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |

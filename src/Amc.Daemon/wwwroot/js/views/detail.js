@@ -11,6 +11,7 @@ import {
   commitsForAgent,
 } from '../model.js';
 import { renderDiff } from '../components/diff.js';
+import { insightHeadline, insightContent, warnButton, canWarn } from './conflictinsight.js';
 import { toast, confirmModal } from '../components/overlay.js';
 
 const caps = new Map();       // agentId → { data, error, loading, sig }
@@ -629,7 +630,7 @@ function conflictDetail(c) {
   return h('div', { class: 'detail' },
     h('div', { class: 'd-head d-conflict' },
       h('div', { class: 'd-kicker' }, 'Conflict · ', conflictKindLabel(c.kind), h('span', { class: 'spacer' }), backBtn()),
-      h('div', { class: 'd-title' }, '⚠ ', conflictHeadline(c)),
+      h('div', { class: 'd-title' }, '⚠ ', insightHeadline(c) || conflictHeadline(c)),
       h('div', { class: 'd-desc' }, c.description),
       h('div', { class: 'muted small' }, 'detected ', agoEl(c.detectedAt), ' · derived from observed git state and reported/inferred attributions')),
     section('c-where', 'Where', null, kv([
@@ -637,6 +638,7 @@ function conflictDetail(c) {
       ['Repository', c.repositoryId ? repoLink(c.repositoryId) : null],
       ['Worktrees', (c.worktreeIds || []).length ? h('div', { class: 'vlist-links' }, c.worktreeIds.map(wtLink)) : c.worktreeId ? wtLink(c.worktreeId) : null],
     ])),
+    canWarn(c) ? section('c-overlap', 'Changed lines', null, ...insightContent(c)) : null,
     section('c-agents', 'Agents involved', (c.agentIds || []).length, (c.agentIds || []).map((id) => {
       const a = get('agent', id);
       const f = fileKey ? get('file', fileKey) : null;
@@ -645,10 +647,11 @@ function conflictDetail(c) {
         h('div', { class: 'small muted' }, a ? statusMeta(a).label : '', att ? [` · ${att.edits} edit(s) · last `, agoEl(att.lastAt), ' ', evBadge(att.evidence)] : null));
     })),
     section('c-what', 'What you can do', null, h('ul', { class: 'small plain' },
+      canWarn(c) ? h('li', null, 'Warn agents: each involved agent gets a short heads-up naming the other agent, branch and lines.') : null,
       h('li', null, 'Message one of the agents to stop touching the file (Messages section of the agent).'),
       h('li', null, 'Pause an agent while you sort it out (if its controls allow).'),
       h('li', null, 'Open the file diff to see both agents\' changes.'))),
-    fileKey ? h('div', { class: 'd-actions' }, btn('Open file', '', () => select('file', fileKey)),
+    fileKey ? h('div', { class: 'd-actions' }, warnButton(c), btn('Open file', '', () => select('file', fileKey)),
       btn('Diff', '', () => openDrawer('diff', { kind: 'file', worktreeId: c.worktreeId || c.worktreeIds[0], path: c.path, title: c.path }))) : null);
 }
 

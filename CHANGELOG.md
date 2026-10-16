@@ -3,6 +3,21 @@
 All notable changes to Overhive. Versions follow [Semantic Versioning](https://semver.org/); while the
 version is 0.x, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Added
+- Line-level conflict check: when the same file is changed in several worktrees, Overhive compares the
+  changed lines of each worktree (committed and uncommitted) against the branches' merge base and shows
+  "overlapping lines — will likely conflict" or "different regions — likely merges cleanly", with the line
+  ranges per agent and branch (evidence: observed). `git merge-tree` confirms committed changes.
+- **Warn agents** on a conflict (dashboard, `overhive conflicts warn <n>`, `POST /api/conflicts/warn`):
+  each involved agent gets a short, factual heads-up through its usual message transport; the result is
+  reported per agent (delivered, queued, unsupported, failed) and audited. Requires confirmation.
+- `AutoWarnConflicts` option (off by default): warn automatically once per conflict and agent, again only
+  when the overlapping lines change.
+- `overhive conflicts` lists conflicts with their compared line ranges; `GET /api/conflicts/detail?key=`
+  shows the analysis and the exact warning text per agent.
+
 ## [0.1.0] - 2026-10-15
 
 First public release: a free, open-source, local control center for AI coding agents. Linux (x64, arm64).

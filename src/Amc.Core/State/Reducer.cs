@@ -10,7 +10,7 @@ namespace Amc.Core.State;
 public static class Reducer
 {
     /// <summary>Bump whenever folding semantics change: snapshots from another version are discarded and the log is replayed.</summary>
-    public const int Version = 7;
+    public const int Version = 8;
 
     public static HashSet<EntityRef> ApplyBatch(WorldState s, IEnumerable<AgentEvent> events)
     {
@@ -170,6 +170,11 @@ public static class Reducer
             case EventTypes.TerminalStarted:
             case EventTypes.TerminalExited:
                 OnTerminal(s, e, changed);
+                break;
+
+            case EventTypes.ConflictAnalyzed:
+            case EventTypes.ConflictWarned:
+                ConflictInsightFold.Apply(s, e, changed);
                 break;
         }
     }
