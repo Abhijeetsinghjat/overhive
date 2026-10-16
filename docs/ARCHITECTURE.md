@@ -255,6 +255,8 @@ GET  /api/processes                  live process overlay
 POST /api/agents/{id}/messages       {text}
 POST /api/agents/{id}/control        {action, confirm}
 GET  /api/terminals/{id}/buffer
+GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
+POST /api/attention/dismiss|snooze|restore   {id, minutes?}
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
 ```
 
@@ -264,6 +266,7 @@ server → {t:"hello", seq, serverTime}
 server → {t:"event", e:{…}}             (replayed since `since`, then live)
 server → {t:"patch", kind, id, value}   entity upserts from the reducer
 server → {t:"live", processes:[…]}      ≤1 Hz volatile overlay
+server → {t:"attention", items, urgent, hidden}   attention queue, when it changes
 server → {t:"resync"}                    client too slow / gap → refetch /api/state
 client → {t:"sub", topics:[…]} | {t:"ping"}
 ```

@@ -67,6 +67,9 @@ Conflicts (`same-file`, `cross-worktree`, `same-worktree`, `git-unmerged`) are
 recomputed from state after every batch (`ConflictDetector`) so they always reflect the
 current truth and disappear when resolved.
 
+The attention queue ("needs you") is derived the same way, by `AttentionDeriver` from state through
+`IAttentionProvider`s, after every batch; it is never stored as events (see NOTIFICATIONS.md).
+
 ## Volatile data (not events)
 
 CPU %, RSS and PTY output bytes are pushed over the WebSocket as `{"t":"live"}` and

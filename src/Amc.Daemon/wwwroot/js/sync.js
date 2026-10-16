@@ -9,6 +9,7 @@
 
 import { api, wsUrl, TOKEN_MISSING } from './api.js';
 import { store, invalidate, loadState, applyPatch, addEvents, clearEvents, lastEventSeq } from './store.js';
+import { setAttention } from './attention-store.js';
 
 const SEED_EVENTS = 2000;
 let ws = null;
@@ -115,6 +116,9 @@ function handle(msg, gen) {
         store.live.error = null;
         invalidate('live');
       }
+      break;
+    case 'attention':
+      setAttention(msg);
       break;
     case 'resync':
       cursor = 0;
