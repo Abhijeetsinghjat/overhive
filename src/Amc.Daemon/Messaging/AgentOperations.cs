@@ -65,7 +65,11 @@ public sealed class AgentOperations(IEnumerable<IAgentProvider> providers, State
         return new(r.Accepted, id, r.Transport, r.Detail, r.Accepted ? 202 : 409, r.Delivered);
     }
 
-    public async Task<OperationResult> ControlAsync(string agentId, ControlAction action, bool confirmed, CancellationToken ct)
+    /// <param name="automaticReason">Set when automation (not the user) acts, e.g. the runaway guard: the audit
+    /// event is then sourced "system", says why, and is also written when the action is skipped.
+    /// Automation never passes <paramref name="confirmed"/> for destructive actions.</param>
+    public async Task<OperationResult> ControlAsync(string agentId, ControlAction action, bool confirmed, CancellationToken ct,
+        string? automaticReason = null)
     {
         var a = Snapshot(agentId);
         if (a is null) return new(false, "Unknown agent", 404);
@@ -73,22 +77,30 @@ public sealed class AgentOperations(IEnumerable<IAgentProvider> providers, State
         if (provider is null) return new(false, $"No provider '{a.Provider}' loaded", 409);
         var caps = provider.Capabilities(a);
         if (!caps.Supports(action))
-            return new(false, caps.Controls.GetValueOrDefault(action) ?? $"{action} is not supported for this agent", 409);
-        if (DangerousActions.RequiresConfirmation(action) && !confirmed)
+        {
+            var why = caps.Controls.GetValueOrDefault(action) ?? $"{action} is not supported for this agent";
+            if (automaticReason is not null) await AuditAsync(a, action, "skipped", why, automaticReason, ct);
+            return new(false, why, 409);
+        }
+        if (DangerousActions.RequiresConfirmation(action) && (!confirmed || automaticReason is not null))
             return new(false, $"{action} is destructive and requires confirm=true", 428);
 
         ControlResult r;
         try { r = await provider.ControlAsync(a, action, ct); }
         catch (Exception ex) { r = new ControlResult(false, ex.Message); }
 
-        await sink.PublishAsync(new AgentEvent
-        {
-            Type = EventTypes.AuditControl, Source = EventSources.User, Evidence = Evidence.Observed,
-            AgentId = a.Id, SessionId = a.SessionId,
-            Data = Json.ToObject(new AuditData(action.ToString().ToLowerInvariant(), a.Id, r.Ok ? "ok" : "failed", r.Detail)),
-        }, ct);
+        await AuditAsync(a, action, r.Ok ? "ok" : "failed", r.Detail, automaticReason, ct);
         return new(r.Ok, r.Detail, r.Ok ? 200 : 500);
     }
+
+    private ValueTask AuditAsync(Agent a, ControlAction action, string outcome, string detail, string? automaticReason, CancellationToken ct) =>
+        sink.PublishAsync(new AgentEvent
+        {
+            Type = EventTypes.AuditControl, Source = automaticReason is null ? EventSources.User : EventSources.System, Evidence = Evidence.Observed,
+            AgentId = a.Id, SessionId = a.SessionId,
+            Data = Json.ToObject(new AuditData(action.ToString().ToLowerInvariant(), a.Id, outcome,
+                automaticReason is null ? detail : $"Automatic: {automaticReason}. {detail}")),
+        }, ct);
 
     /// <summary>Copies the agent out of state so providers never touch shared mutable entities.</summary>
     private Agent? Snapshot(string agentId) =>

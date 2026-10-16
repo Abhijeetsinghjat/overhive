@@ -29,8 +29,8 @@ AMC_DataDir=/tmp/amc AMC_Port=47900 dotnet run --project src/Amc.Daemon   # isol
 
 Configuration: `~/.config/agent-mission-control/config.json`, environment variables
 prefixed `AMC_` (for example `AMC_Port`, `AMC_DataDir`, `AMC_ClaudeHome`,
-`AMC_WorkspaceRoots__0`, `AMC_BackfillHours`), or command-line `--Key=value`. See
-`AmcOptions`.
+`AMC_WorkspaceRoots__0`, `AMC_BackfillHours`, `AMC_Guard__AutoPause`), or command-line `--Key=value`. See
+`AmcOptions` (runaway guard settings: `GuardSettings`, documented in RUNAWAY_GUARD.md).
 
 UI fixture (simulated data, clearly labelled in the UI):
 `AMC_FIXTURE_DIR=/tmp/amc-fixture dotnet test --filter Category=DevFixture`, then run the

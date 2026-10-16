@@ -6,6 +6,11 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Runaway guard: warns when a session fans out into too many sub-agents (at once, per 10 minutes, or too
+  deep) or burns tokens too fast (per minute, per hour, optional per-session budget). Banner, header badge,
+  agent-panel section with **Pause tree** / **Dismiss**, counters on the graph, `overhive guard` and
+  `GET /api/guard`. Optional `Guard.AutoPause` (off by default) pauses a session on a critical alert, audited
+  as automatic; it never kills. See [docs/RUNAWAY_GUARD.md](docs/RUNAWAY_GUARD.md).
 - "Needs you" attention queue across all tools: blocked and waiting agents, failures, unexpected exits and
   conflicts, ordered by priority and age, each with its evidence label and main action. Header badge (key `a`),
   Overview panel, `overhive attention`, `GET /api/attention`; snooze and dismiss kept by the daemon.

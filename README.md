@@ -104,6 +104,7 @@ Add a tool Overhive does not know yet:
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
 | Commits with links to your Git host | Commits tab |
 | Conflicts between agents | Conflict banner, `overhive status` |
+| Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |
@@ -117,6 +118,7 @@ an agent as working, or as changing a file, without evidence.
 - [Architecture](docs/ARCHITECTURE.md): system design, including what can and can't be known about an agent
 - [Agent integration](docs/AGENT_INTEGRATION.md): how each tool is discovered and tracked
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
+- [Runaway guard](docs/RUNAWAY_GUARD.md): warnings (and an optional automatic pause) for sub-agent fan-out and token burn
 - [Attention queue and notifications](docs/NOTIFICATIONS.md), [Phone access](docs/REMOTE_ACCESS.md)
 - [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Dependencies](docs/DEPENDENCIES.md)
 - [Development](docs/DEVELOPMENT.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Contributing](CONTRIBUTING.md)

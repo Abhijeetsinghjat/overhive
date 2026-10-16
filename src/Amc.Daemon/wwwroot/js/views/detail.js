@@ -12,6 +12,7 @@ import {
 } from '../model.js';
 import { renderDiff } from '../components/diff.js';
 import { toast, confirmModal } from '../components/overlay.js';
+import { guardSection, guardSigForAgent } from './guard.js';
 import { attentionOverview, attentionSig } from './attention.js';
 import { attention } from '../attention-store.js';
 
@@ -26,7 +27,7 @@ export function initDetail() {
   const right = document.getElementById('right');
   let lastSig = null;
   register({
-    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'attention'],
+    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'guard', 'guard-live', 'attention'],
     render(d) {
       const sel = ui.selection;
       const ent = sel ? get(sel.kind, sel.id) : null;
@@ -67,6 +68,7 @@ function sigFor(sel, ent) {
     for (const f of store.e.file.values()) if (f.agents && f.agents[sel.id]) parts.push(f.key, f.gitStatus, f.added, f.removed, JSON.stringify(f.agents[sel.id]));
     for (const id of ent.childIds || []) { const c2 = get('agent', id); parts.push(c2?.status, c2?.title); }
     const lt = store.lastTool.get(sel.id); parts.push(lt?.seq);
+    parts.push(guardSigForAgent(ent));
   }
   if (sel.kind === 'file') { const hst = history.get(sel.id); parts.push(hst?.at, hst?.loading); }
   if (sel.kind === 'worktree' || sel.kind === 'repository') parts.push(store.e.file.size, store.e.commit.size, store.e.agent.size);
@@ -408,6 +410,7 @@ function agentDetail(a) {
       st === 'blocked' ? h('div', { class: 'needs-input' }, '⚠ Needs your input — ', a.terminalId ? 'answer in its terminal (Terminal button) or send a message.' : 'answer in the terminal where this Claude Code session runs.') : null,
       a.description && !isMain ? h('div', { class: 'd-desc' }, a.description) : null),
     controlsRow(a, c),
+    guardSection(a, section),
     actions,
     section('a-where', 'Location', null, locationOf(a, wt)),
     section('a-now', 'Now', null, now),
