@@ -25,6 +25,7 @@ public static class Composition
         services.AddTerminals();
         services.AddClaude();
         services.AddTools(options);
+        services.AddRisk();
         services.AddConflicts();
         services.AddGuard();
         services.AddAttention(options);
@@ -38,6 +39,7 @@ public static class Composition
         app.MapTerminalEndpoints();
         ClaudeModule.MapClaudeEndpoints(app);
         ToolsModule.MapToolEndpoints(app);
+        app.MapRiskEndpoints();
         app.MapConflictEndpoints();
         app.MapGuardEndpoints();
         AttentionModule.MapAttentionEndpoints(app);

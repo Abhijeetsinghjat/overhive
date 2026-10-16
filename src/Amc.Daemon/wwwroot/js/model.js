@@ -169,6 +169,7 @@ export const EVENT_CATEGORIES = [
   ['worktree.*', 'Worktrees'],
   ['terminal.*', 'Terminals'],
   ['audit.*', 'Control / audit'],
+  ['risk.*', 'Risky actions'],
   ['guard.*', 'Runaway guard'],
 ];
 
@@ -182,7 +183,7 @@ const ICON = {
   agent: ['◆', 'ic-agent'], message: ['✉', 'ic-msg'], tool: ['⚙', 'ic-tool'], command: ['$', 'ic-cmd'],
   file: ['✎', 'ic-file'], read: ['◫', 'ic-read'], git: ['⑂', 'ic-git'], test: ['⚑', 'ic-test'],
   task: ['☰', 'ic-task'], process: ['⚙', 'ic-proc'], worktree: ['⑂', 'ic-git'], repository: ['⛁', 'ic-git'],
-  terminal: ['▣', 'ic-term'], audit: ['⛨', 'ic-audit'], fail: ['✕', 'ic-fail'], ok: ['✓', 'ic-ok'],
+  terminal: ['▣', 'ic-term'], audit: ['⛨', 'ic-audit'], risk: ['⛔', 'ic-fail'], fail: ['✕', 'ic-fail'], ok: ['✓', 'ic-ok'],
 };
 
 /** One-line structured description of an event: { icon, iconCls, text, detail, bad } */
@@ -244,6 +245,7 @@ export function describe(e) {
     }
     case 'terminal.started': text = `Terminal ${d.terminalId} started: ${d.command || ''}`; break;
     case 'terminal.exited': text = `Terminal ${d.terminalId} exited (${d.exitCode ?? '?'})`; break;
+    case 'risk.detected': text = `Risk (${d.severity || '?'}): ${oneLine(d.explanation || d.ruleId || '', 160)}`; detail = d.command || d.span || ''; bad = d.severity !== 'info'; break;
     case 'audit.control': text = `Control ${d.action} → ${d.outcome}`; detail = d.detail || ''; bad = d.outcome !== 'ok'; break;
     case 'conflict.analyzed': text = `Conflict lines compared: ${e.filePath || ''} — ${norm(d.overlap?.verdict) === 'overlapping' ? 'overlapping' : norm(d.overlap?.verdict) === 'separate' ? 'different regions' : 'not determined'}`; bad = norm(d.overlap?.verdict) === 'overlapping'; break;
     case 'conflict.warned': [icon, iconCls] = ICON.message; text = `Agents warned about ${e.filePath || 'a conflict'}${d.auto ? ' (automatic)' : ''}`; detail = (d.recipients || []).map((r) => `${r.agentId}: ${r.outcome}`).join(' · '); break;

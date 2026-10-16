@@ -4,6 +4,7 @@ import { store, register, get, invalidate } from '../store.js';
 import { ui, select, toggleCollapsed, isSelected, setCollapsed } from '../ui.js';
 import { roots, children, agentName, statusMeta, worktreeOfAgent, worktreeLabel, worktreeRef, agentColor } from '../model.js';
 import { agentPasses, filterCtx } from '../filters.js';
+import { riskBadge } from './risks.js';
 import { verifyMark } from './verification.js';
 
 let visible = [];   // flattened [agent, depth, dim]
@@ -55,7 +56,7 @@ export function initTree() {
       }
       keyed(list, visible, ([a]) => a.id,
         ([a, depth, dim]) => [a.status, a.statusReason, a.title, a.lastActivityAt, a.currentTool, a.currentAction, a.currentWorktreeId,
-          depth, dim, ui.collapsed.has(a.id), isSelected('agent', a.id), ui.treeCursor === a.id, (a.childIds || []).length, a.tasks?.length, a.verification?.contradicted].join('|'),
+          depth, dim, ui.collapsed.has(a.id), isSelected('agent', a.id), ui.treeCursor === a.id, (a.childIds || []).length, a.tasks?.length, a.risks?.critical, a.verification?.contradicted].join('|'),
         ([a, depth, dim]) => row(a, depth, dim));
     },
   });
@@ -95,6 +96,7 @@ function row(a, depth, dim) {
     h('span', { class: `sdot ${m.cls}`, 'aria-label': m.label }, m.glyph),
     h('span', { class: 'agent-swatch', style: { background: agentColor(a.id) } }),
     h('span', { class: 'tn-name' }, oneLine(agentName(a), 80)),
+    riskBadge(a),
     h('span', { class: 'tn-ago' }, agoEl(a.lastActivityAt, '', ''))),
   h('div', { class: 'tn-line2', style: { paddingLeft: depth * 14 + 34 + 'px' } },
     h('span', { class: `tn-status ${m.cls}` }, m.label),

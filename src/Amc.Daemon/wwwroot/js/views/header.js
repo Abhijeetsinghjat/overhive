@@ -2,6 +2,7 @@
 import { h, mount, norm, ago, oneLine, shortId } from '../util.js';
 import { store, register, all, get, invalidate } from '../store.js';
 import { ui, setFilter, clearFilters, activeFilterCount, setTab, select, setFollow, setTheme, TABS } from '../ui.js';
+import { criticalCount } from './risks.js';
 import { newSessionDialog } from './newsession.js';
 import { insightHeadline, overlapLine, warnButton } from './conflictinsight.js';
 import { allUsage, usageTotal, usageTitle, fmtTok, counts, agentName, roots, EVENT_CATEGORIES, statusDot, worktreeLabel, repoName, conflictHeadline, conflictKindLabel } from '../model.js';
@@ -204,11 +205,11 @@ export function initFilterBar() {
 
   // Tabs
   register({
-    name: 'tabs', deps: ['tab'],
+    name: 'tabs', deps: ['tab', 'risk'],
     render() {
       mount(tabs, TABS.map(([t, label], i) => {
         const b = h('button', { class: 'tab' + (ui.tab === t ? ' on' : ''), role: 'tab', 'aria-selected': ui.tab === t ? 'true' : 'false', title: `${label} (${i + 1})` },
-          h('kbd', null, String(i + 1)), label);
+          h('kbd', null, String(i + 1)), label, t === 'risks' && criticalCount() ? h('span', { class: 'risk-tab-count', title: 'Critical findings' }, String(criticalCount())) : null);
         b.addEventListener('click', () => setTab(t));
         return b;
       }));

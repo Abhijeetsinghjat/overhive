@@ -76,6 +76,8 @@ public static class EventTypes
     // Control / audit
     public const string AuditControl = "audit.control";            // AuditData
 
+    // Risky actions (flight recorder; payload in Amc.Core.Risk)
+    public const string RiskDetected = "risk.detected";            // RiskData — evidence of the source (observed / reported)
     // Conflict analysis and warnings to agents (see ConflictInsight)
     public const string ConflictAnalyzed = "conflict.analyzed";    // ConflictAnalysisData (observed: git diffs)
     public const string ConflictWarned = "conflict.warned";        // ConflictWarnedData

@@ -712,6 +712,26 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .ns-form label span { color: var(--muted); font-size: 12px; }
 .ns-field { width: 100%; max-width: none; }
 
+/* ---- risks (risky-action flight recorder) ---- */
+.risk-critical { --st: var(--red); }
+.risk-warn { --st: var(--orange); }
+.risk-info { --st: var(--grey); }
+.risk-badge { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; border-radius: 9px; padding: 0 6px; font-size: 10.5px; font-weight: 700; line-height: 16px; color: #fff; background: var(--red); cursor: pointer; white-space: nowrap; }
+.risk-tab-count { margin-left: 5px; border-radius: 8px; padding: 0 5px; font-size: 10px; font-weight: 700; line-height: 15px; color: #fff; background: var(--red); }
+.risks-table td.risk-rule { white-space: normal; min-width: 220px; max-width: 420px; }
+.risk-rule-name { font-weight: 600; }
+.risk-expl { color: var(--text2); font-size: 11.5px; }
+.risks-table td.cmd { max-width: 340px; }
+.risks-table tbody tr { cursor: pointer; }
+.risk-row-critical td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.risk-row-warn td:first-child { box-shadow: inset 3px 0 0 var(--orange); }
+.risk-row-info { opacity: .8; }
+.risk-agent { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 900px) {
+  .risk-note { display: none; }
+  .risks-table td.risk-rule { min-width: 180px; }
+  .risks-table td.cmd { max-width: 240px; }
+}
 /* ---- conflict-notify (hunk overlap + warn agents) ---- */
 .ci-line { flex-basis: 100%; font-size: 11.5px; color: var(--muted); padding-left: 2px; }
 .ci-line.ci-bad, .ci-pair.ci-bad { color: var(--orange); }

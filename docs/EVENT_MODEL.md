@@ -56,6 +56,7 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `verification.settled` | `VerificationSettledData` | settle window of a commit/file claim passed; whether the claimed path exists | observed |
 | `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
 | `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
+| `risk.detected` | `RiskData` (rule, severity, explanation, matched span, target, redacted command) | risk recorder on commands, child processes and file events ([RISKS.md](RISKS.md)) | of the source: reported / observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)
 
@@ -64,6 +65,7 @@ tool:<tool_use_id>:start      tool:<tool_use_id>:end      file:<tool_use_id>
 prompt:<session>:<prompt_id>  spawn:<agent_id>            end:<agent_id>
 test:<tool_use_id>:start      test:<tool_use_id>:end      commit:<worktree>:<sha>
 proc:<pid>:<procStart>:exit   msg:<message_id>:delivered      verify:<claim_id>
+risk:<agent>:<rule>:<evidence>:<hash of target or matched command>
 ```
 
 ## Derived state (not events)

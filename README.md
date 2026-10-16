@@ -105,6 +105,7 @@ Add a tool Overhive does not know yet:
 | Commits with links to your Git host | Commits tab |
 | Conflicts between agents | Conflict banner, `overhive status`, `overhive conflicts` |
 | Which lines overlap; warn the agents involved | Conflict banner / panel → **Warn agents**, `overhive conflicts warn <n>`; automatic with `"AutoWarnConflicts": true` |
+| Risky actions (deletes outside the worktree, force-pushes, credential files, `curl \| sh`, publishes, DB drops) | Risks tab, red badge on the agent, `overhive risks` ([rules](docs/RISKS.md)) |
 | Did the agent really do what it says? ("tests pass", "committed", "created X") | Agent panel → Verification; ✗ N on the agent's card and row |
 | Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
@@ -122,7 +123,7 @@ an agent as working, or as changing a file, without evidence.
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
 - [Runaway guard](docs/RUNAWAY_GUARD.md): warnings (and an optional automatic pause) for sub-agent fan-out and token burn
 - [Attention queue and notifications](docs/NOTIFICATIONS.md), [Phone access](docs/REMOTE_ACCESS.md)
-- [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Dependencies](docs/DEPENDENCIES.md)
+- [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Risky-action rules](docs/RISKS.md), [Dependencies](docs/DEPENDENCIES.md)
 - [Development](docs/DEVELOPMENT.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Contributing](CONTRIBUTING.md)
 
 ## License

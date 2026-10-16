@@ -8,6 +8,7 @@ export const TABS = [
   ['activity', 'Activity'],
   ['timeline', 'Timeline'],
   ['commits', 'Commits'],
+  ['risks', 'Risks'],
   ['processes', 'Processes'],
   ['usage', 'Usage'],
   ['health', 'Health'],
