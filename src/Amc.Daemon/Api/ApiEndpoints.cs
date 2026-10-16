@@ -60,6 +60,7 @@ public static class ApiEndpoints
             var caps = ops.Capabilities(id);
             return Results.Content($$"""{"agent":{{a}},"capabilities":{{Json.Serialize(caps)}}}""", "application/json");
         });
+        Amc.Daemon.Verification.VerificationEndpoints.Map(api); // GET /agents/{id}/verification
         api.MapGet("/repositories", (StateStore state) => Snap(state, s => s.Repositories.Values.ToList()));
         api.MapGet("/worktrees", (StateStore state) => Snap(state, s => s.Worktrees.Values.OrderBy(w => w.Root).ToList()));
         api.MapGet("/files", (HttpRequest r, StateStore state) =>

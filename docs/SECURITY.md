@@ -19,6 +19,7 @@ signal processes. It is designed for a single user on their own machine.
 | Command injection | No shell is ever used: every subprocess uses `ProcessStartInfo.ArgumentList`. Signals go through `kill(2)` via P/Invoke. |
 | Monitoring itself disturbing agents | All git calls use `GIT_OPTIONAL_LOCKS=0` (never take `index.lock`), `core.fsmonitor=false`. Hooks fail open (`curl -sf … || true`, 3 s timeout) so a down daemon never blocks an agent. |
 | Destructive actions by mistake | Terminate/Kill need `confirm=true` (HTTP 428 otherwise); the UI requires typing the agent's short id; the CLI requires typed confirmation or `--yes`. Pause/resume are reversible. No action deletes files, resets Git state or force-pushes. |
+| Claim verification probing the filesystem | The only filesystem access is an existence check of a path an agent claimed to create, change or delete, canonicalized and only inside a worktree that agent used. File contents are never read for it. |
 | Undocumented agent internals | Claude Code's per-session messaging sockets and their `.key` token files are not read or used. |
 | Automatic actions | Only the runaway guard acts on its own, only when `Guard.AutoPause` is turned on, and only to pause (reversible). It never terminates or kills: automation cannot pass the confirmation for destructive actions. Each automatic action is audited with source `system` and the reason. |
 | Audit | Every control action and message is an event (`audit.control`, `agent.message_*`) in the append-only log. |

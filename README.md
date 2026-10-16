@@ -105,6 +105,7 @@ Add a tool Overhive does not know yet:
 | Commits with links to your Git host | Commits tab |
 | Conflicts between agents | Conflict banner, `overhive status` |
 | Risky actions (deletes outside the worktree, force-pushes, credential files, `curl \| sh`, publishes, DB drops) | Risks tab, red badge on the agent, `overhive risks` ([rules](docs/RISKS.md)) |
+| Did the agent really do what it says? ("tests pass", "committed", "created X") | Agent panel → Verification; ✗ N on the agent's card and row |
 | Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |

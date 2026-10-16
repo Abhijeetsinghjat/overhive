@@ -12,6 +12,12 @@ version is 0.x, minor versions may change behaviour.
   outside the worktree, publishes/deploys and database drops. Findings carry severity, an explanation and
   the evidence label; see the **Risks** tab, the red badge on agents, `overhive risks` and `GET /api/risks`
   ([rules](docs/RISKS.md)). Credential files are matched by path only and never opened.
+- Claimed vs observed: when an agent says "all tests pass", "the build succeeds", "I committed the changes"
+  or "created `src/x.ts`", Overhive checks it against the commands it ran, Git and the files, and shows
+  each claim as confirmed, contradicted or unverified with the evidence behind it (agent panel →
+  Verification, `GET /api/agents/{id}/verification`). Contradicted claims show as ✗ N on the agent's card
+  and tree row. A review hint (inferred) flags sessions where tests went from failing to passing after the
+  tests themselves were changed.
 - Runaway guard: warns when a session fans out into too many sub-agents (at once, per 10 minutes, or too
   deep) or burns tokens too fast (per minute, per hour, optional per-session budget). Banner, header badge,
   agent-panel section with **Pause tree** / **Dismiss**, counters on the graph, `overhive guard` and

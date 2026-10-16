@@ -230,6 +230,30 @@ disables it with the reason.
   * `same-worktree` — ≥2 active agents writing in one worktree,
   * `git-unmerged` — unmerged index entries / in-progress merge or rebase.
 
+### Claimed vs observed (`Amc.Core/Verification`)
+
+An agent's own text often says what it achieved. A few high-precision English claims are
+extracted from `agent.output` (hedged, conditional, negated or quoted text is skipped):
+*tests pass*, *build succeeds*, *committed*, and *created / changed / deleted `<path>`*.
+Each is checked against evidence of the agent **and its sub-agents**:
+
+| Claim | Confirmed when | Contradicted when | Evidence of the check |
+|-------|----------------|-------------------|-----------------------|
+| tests pass / build succeeds | the last test/build command that ended before the claim exited 0 | it failed (or parsed output reports failures) | reported by the tool runtime (parsed counts: inferred) |
+| committed | a commit by the agent, or unattributed in its worktree, appeared up to 30 min before the claim | none appeared and the claim has settled | observed |
+| file created / changed / deleted | Git status or a file event shows that path changed | settled, path never changed and the file does not exist (deleted: still exists) | observed / reported |
+
+Anything else is **unverified** (e.g. no test run seen, or files changed after the last passing
+run). A separate **review hint** (`inferred`) is raised when, in one session, a test run failed,
+test files were then changed and a later run passed, while source files were also changed.
+
+The reducer only folds ingredients (claims, finished test/build commands, file writes) and keeps
+per-agent counts (`agent.verification`); the checks are a pure function of state, computed on
+request (`GET /api/agents/{id}/verification`). The one input that needs IO is settling: 60 s after
+a commit/file claim, `VerificationMonitor` publishes `verification.settled` (observed) with whether
+the claimed path exists (existence only, never contents, only inside the agent's worktrees). Until
+then such claims stay unverified rather than "contradicted" too early.
+
 ## 10. Persistence (SQLite, WAL)
 
 ```
@@ -254,6 +278,7 @@ GET  /api/worktrees | /api/repositories
 GET  /api/worktrees/{id}/diff?path=   (path validated inside worktree)
 GET  /api/worktrees/{id}/file?path=
 GET  /api/agents/{id}/diff           diff of files attributed to agent
+GET  /api/agents/{id}/verification   claims checked against evidence (claimed vs observed)
 GET  /api/processes                  live process overlay
 POST /api/agents/{id}/messages       {text}
 POST /api/agents/{id}/control        {action, confirm}
