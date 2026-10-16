@@ -22,8 +22,11 @@ public sealed record ConflictAnalyzerSettings
     public int MaxDiffChars { get; init; } = 512 * 1024;
     public TimeSpan GitTimeout { get; init; } = TimeSpan.FromSeconds(10);
     public int Margin { get; init; } = OverlapMath.DefaultMargin;
-    /// <summary>Confirm committed state with `git merge-tree --write-tree` (writes unreferenced objects that `git gc` removes).</summary>
-    public bool UseMergeTree { get; init; } = true;
+    /// <summary>
+    /// Confirm committed state with `git merge-tree --write-tree`. Off unless AmcOptions.ConflictMergeTree is set:
+    /// it writes unreferenced objects into the repository (removed by `git gc`), and Overhive otherwise never writes to repositories.
+    /// </summary>
+    public bool UseMergeTree { get; init; }
 }
 
 /// <summary>
@@ -39,7 +42,7 @@ public sealed class ConflictAnalyzer(
     ConflictWarner warner, TimeProvider clock, ILogger<ConflictAnalyzer> log, ConflictAnalyzerSettings? settings = null) : BackgroundService
 {
     public const string HealthName = "conflict-analysis";
-    private readonly ConflictAnalyzerSettings _s = settings ?? new();
+    private readonly ConflictAnalyzerSettings _s = settings ?? new() { UseMergeTree = options.Value.ConflictMergeTree };
 
     private sealed record Side(string WorktreeId, string Root, string? Head, string? GitStatus, string? OldPath);
     private sealed record Candidate(string Key, string Path, List<Side> Sides, string InputKey, DateTimeOffset LastChange, int Total);

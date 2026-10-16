@@ -78,7 +78,7 @@ public sealed class ConflictAnalyzerTests
         var ops = new AgentOperations([provider], env.State, env.Sink);
         var warner = new ConflictWarner(env.State, ops, env.Sink, new ToolRegistry(Options.Create(env.Options)), TimeProvider.System);
         var analyzer = new ConflictAnalyzer(env.Git, env.State, env.Sink, env.Health, Options.Create(env.Options), warner, TimeProvider.System,
-            NullLogger<ConflictAnalyzer>.Instance, new ConflictAnalyzerSettings { Debounce = TimeSpan.Zero });
+            NullLogger<ConflictAnalyzer>.Instance, new ConflictAnalyzerSettings { Debounce = TimeSpan.Zero, UseMergeTree = true });
         return new Setup(env, main, x, y, wtX, wtY, provider, warner, analyzer);
     }
 

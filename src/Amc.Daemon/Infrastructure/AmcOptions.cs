@@ -38,6 +38,11 @@ public sealed class AmcOptions
     /// once per conflict and agent, again only when the overlapping lines change. Off by default.
     /// </summary>
     public bool AutoWarnConflicts { get; set; }
+    /// <summary>
+    /// Also confirm conflicts in committed state with `git merge-tree --write-tree`. Off by default: it writes
+    /// unreferenced objects into the repository (git gc removes them), and Overhive otherwise only reads repositories.
+    /// </summary>
+    public bool ConflictMergeTree { get; set; }
 
     public string DbPath => Path.Combine(DataDir, "amc.db");
     public string TokenPath => Path.Combine(DataDir, "token");
