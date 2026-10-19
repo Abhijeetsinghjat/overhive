@@ -82,13 +82,16 @@ through the open protocol and make real changes in a sample repository.
 
 ```bash
 cd scripts/demo && npm i --no-save puppeteer-core ffmpeg-static   # recording tools only; not shipped
+python3 -m pip install --user pillow   # encodes the README WebP (ffmpeg's encoder smears the dark 3D areas)
 ./setup.sh                      # demo instance on http://127.0.0.1:47900 with a sample repo and agents
-node record.js /tmp/ovh-demo    # pass 1: scripted tour, timestamped 2x screenshots, mouse path, steps
+node record.js /tmp/ovh-demo    # pass 1: scripted tour, timestamped 2x screencast frames, mouse path, steps
 node compose.js /tmp/ovh-demo   # pass 2: title, captions, zooms and pointer; writes overhive-demo.mp4/.webp
 ./setup.sh stop                 # stop the demo instance and delete its directory
 ```
 
-Captions and zoom areas are the `step(...)` calls in `record.js`; the look is `compose.html`.
+Captions and zoom areas are the `step(...)` calls in `record.js`; the look is `compose.html`. The tour opens on
+the 3D Hive, which is WebGL: `record.js` renders on the GPU (`CHROME_GL=swiftshader` uses the software
+renderer instead, which works without a GPU but records the 3D motion less smoothly).
 
 To publish a new recording, replace `docs/media/overhive-demo.webp` (the README animation; GitHub never
 autoplays video, but animated images play on their own). For the 1080p video, drag `overhive-demo.mp4` into

@@ -57,6 +57,12 @@ TS
   printf '# Acme Shop\n\n## Orders API\n\n`createOrder(items, prices)` returns an order with a rounded total.\n' > "$MAIN/README.md"
   emit copilot "$CP" file '{"path":"'$MAIN'/README.md","change":"modified","toolId":"p2"}'
   emit copilot "$CP" tool_end '{"id":"p2"}'
+  # A risky command (Risks tab and "Needs you") and a claim the evidence contradicts (the test run failed).
+  emit gemini "$GM" tool_start '{"id":"g5","name":"shell","command":"git push --force origin fix/flaky-tests"}'
+  emit gemini "$GM" tool_end '{"id":"g5","command":"git push --force origin fix/flaky-tests","exitCode":0}'
+  emit copilot "$CP" tool_start '{"id":"p3","name":"shell","command":"npm test -- docs"}'
+  emit copilot "$CP" tool_end '{"id":"p3","command":"npm test -- docs","exitCode":1,"output":"FAIL tests/docs.test.ts: README example is out of date"}'
+  emit copilot "$CP" output '{"text":"Docs are done. All tests pass."}'
   emit copilot "$CP" status '{"status":"waiting","reason":"Waiting for your review"}'
 }
 
