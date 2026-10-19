@@ -76,7 +76,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === '/') { e.preventDefault(); document.querySelector('.search')?.focus(); return; }
-  if (e.key >= '1' && e.key <= String(TABS.length)) { setTab(TABS[+e.key - 1][0]); return; }
+  if (/^[1-9]$/.test(e.key) && +e.key <= TABS.length) { setTab(TABS[+e.key - 1][0]); return; }
   if (e.key === '?') { showHelp(); return; }
   if (e.key === 'd') { toggleDrawer(); return; }
   if (e.key === 'n') { newSessionDialog(); return; }

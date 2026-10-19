@@ -60,6 +60,7 @@ body.hide-left .main { --lw: 0px; } body.hide-left .left { display: none; }
 body.hide-right .main { --rw: 0px; } body.hide-right .right { display: none; }
 .center-bar { display: flex; align-items: stretch; min-width: 0; border-bottom: 1px solid var(--border); }
 .center-bar .tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; border-bottom: 0; }
+.center-bar .tab { white-space: nowrap; flex: 0 0 auto; }  /* scroll the tab strip instead of wrapping labels */
 .pane-toggle { flex: 0 0 auto; width: 34px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; }
 .pane-toggle:hover { color: var(--text); background: var(--panel2); }
 .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 39; }
@@ -707,10 +708,36 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 
 /* New session */
 .new-session-btn { border-radius: var(--r-pill); padding: 4px 14px; white-space: nowrap; }
-.ns-form { display: flex; flex-direction: column; gap: 10px; min-width: min(560px, 80vw); }
-.ns-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
+.ns-form { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ns-form label, .ns-row { display: flex; flex-direction: column; gap: 4px; font-weight: 500; min-width: 0; }
 .ns-form label span { color: var(--muted); font-size: 12px; }
-.ns-field { width: 100%; max-width: none; }
+.ns-field { width: 100%; max-width: none; box-sizing: border-box; }
+/* Working-directory combobox: the suggestion list is anchored to the input and kept inside the dialog body. */
+.ns-combo { position: relative; min-width: 0; }
+.ns-combo .ns-field { padding-right: 30px; text-overflow: ellipsis; }
+.ns-dir-toggle { position: absolute; top: 1px; right: 1px; bottom: 1px; width: 28px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 0 6px 6px 0; }
+.ns-dir-toggle:hover { color: var(--text); }
+.ns-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; box-sizing: border-box; max-height: 300px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  background: var(--panel2); border: 1px solid var(--border2); border-radius: var(--r); box-shadow: var(--shadow); padding: 4px; font-weight: 400; }
+.ns-list.up { top: auto; bottom: calc(100% + 4px); }
+.ns-opt { display: flex; flex-direction: column; gap: 1px; padding: 5px 8px; border-radius: 6px; cursor: pointer; min-width: 0; }
+.ns-opt.active { background: var(--accent-bg); }
+.ns-opt-label { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.ns-opt-repo { flex: 0 1 auto; min-width: 4em; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ns-opt-branch { flex: 0 1 auto; min-width: 3em; color: var(--text2); overflow: hidden; text-overflow: ellipsis; }
+.ns-opt.cur .ns-opt-label::before { content: "\2713"; color: var(--accent); }
+.ns-opt-tag { flex: 0 0 auto; font-size: 10.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border2); border-radius: var(--r-pill); padding: 0 6px; }
+/* Long paths lose their middle: the folder name (tail) stays, the common prefix (head) is cut with an ellipsis. */
+.ns-opt-path { display: flex; min-width: 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ns-path-head { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; }
+.ns-path-tail { flex: 0 0 auto; max-width: calc(100% - 2.5em); overflow: hidden; text-overflow: ellipsis; }
+.ns-empty { padding: 6px 8px; }
+/* Narrow windows: the header wraps onto more rows instead of pushing New session, Health, theme and help off-screen. */
+@media (max-width: 1250px) {
+  .header { flex-wrap: wrap; height: auto; min-height: 54px; row-gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+}
+/* Phone width: the graph toolbar wraps so the zoom / Fit buttons stay on screen. */
+@media (max-width: 600px) { #view-graph .view-toolbar { flex-wrap: wrap; row-gap: 6px; } }
 
 /* ---- risks (risky-action flight recorder) ---- */
 .risk-critical { --st: var(--red); }
@@ -802,7 +829,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .attn-age { flex: 0 0 auto; }
 .attn-detail { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .attn-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
-.attn-snooze { font-size: 11.5px; padding: 1px 6px; }
+.attn-snooze { font-size: 11.5px; padding: 1px 22px 1px 6px; }  /* right padding keeps the text clear of the select's arrow */
 @media (max-width: 1520px) { .attn-badge .lbl { display: none; } }
 /* phone page */
 body.attn-m { overflow: auto; height: auto; min-height: 100%; }
@@ -815,6 +842,7 @@ body.attn-m { overflow: auto; height: auto; min-height: 100%; }
 .attn-m .attn-title { white-space: normal; }
 .attn-m .attn-line { flex-wrap: wrap; }
 .attn-m .btn, .attn-m .attn-snooze { padding: 7px 14px; font-size: 14px; min-height: 38px; }
+.attn-m .attn-snooze { padding-right: 28px; }
 .attn-m-composer { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 4px; }
 .attn-m-composer textarea { width: 100%; font-size: 15px; }
 .attn-m-foot { text-align: center; }
