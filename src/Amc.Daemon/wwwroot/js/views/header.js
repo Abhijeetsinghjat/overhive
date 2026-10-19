@@ -168,6 +168,13 @@ function renderResults(box, q, sel) {
     }),
     out.length > shown.length ? h('div', { class: 'sr-empty' }, `${out.length - shown.length} more…`) : null);
   box.hidden = false;
+  // Keep the results inside the window: on narrow screens the search box may sit near the left edge.
+  const wrap = box.parentElement.getBoundingClientRect();
+  const w = Math.min(440, window.innerWidth - 16);
+  const left = Math.min(Math.max(8, wrap.right - w), window.innerWidth - w - 8);
+  box.style.width = w + 'px';
+  box.style.right = 'auto';
+  box.style.left = (left - wrap.left) + 'px';
 }
 
 // ---- filter bar -----------------------------------------------------------------
@@ -230,6 +237,13 @@ export function initFilterBar() {
         return b;
       }));
       for (const v of document.querySelectorAll('.view')) v.classList.toggle('on', v.dataset.tab === ui.tab);
+      // The tab strip scrolls on narrow windows: keep the current tab visible (e.g. after pressing 1–9).
+      const on = tabs.querySelector('.tab.on');
+      if (on && tabs.scrollWidth > tabs.clientWidth) {
+        const l = on.getBoundingClientRect().left - tabs.getBoundingClientRect().left + tabs.scrollLeft, r = l + on.offsetWidth;
+        if (l < tabs.scrollLeft) tabs.scrollLeft = l - 8;
+        else if (r > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = r - tabs.clientWidth + 8;
+      }
     },
   });
 }

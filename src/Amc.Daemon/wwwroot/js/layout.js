@@ -35,9 +35,20 @@ export function initLayout() {
     body.classList.toggle('hide-right', on); save('hideRight', on);
   });
   document.getElementById('scrim').addEventListener('click', closeOverlays);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlays(); });
+  // Escape closes an open slide-over and nothing else (main.js would otherwise also close the drawer / selection).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !(body.classList.contains('show-left') || body.classList.contains('show-right'))) return;
+    e.stopImmediatePropagation();
+    closeOverlays();
+  });
   for (const mq of [NARROW_LEFT, NARROW_RIGHT]) mq.addEventListener('change', () => { closeOverlays(); measureTop(); });
-  new ResizeObserver(measureTop).observe(document.getElementById('header'));
+  // The slide-overs start below the header, filter bar and any visible banner; banners come and go
+  // (conflicts, runaway guard, simulated data) and change #main's height, so watch them all.
+  const ro = new ResizeObserver(measureTop);
+  for (const id of ['header', 'filterbar', 'sim-banner', 'conflict-banner', 'guard-banner', 'main']) {
+    const el = document.getElementById(id);
+    if (el) ro.observe(el);
+  }
   window.addEventListener('resize', measureTop);
   measureTop();
 

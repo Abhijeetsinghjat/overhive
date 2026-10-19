@@ -9,7 +9,6 @@ import { modalOpen } from './components/overlay.js';
 import { initHeader, initFilterBar, initBanners } from './views/header.js';
 import { initTree, treeKey } from './views/tree.js';
 import { initGraph } from './views/graph.js';
-import { initHive } from './views/hive.js';
 import { initWorktrees } from './views/worktrees.js';
 import { initActivity } from './views/activity.js';
 import { initTimeline } from './views/timeline.js';
@@ -25,9 +24,7 @@ import { showHelp } from './views/help.js';
 import { initLayout } from './layout.js';
 import { newSessionDialog } from './views/newsession.js';
 import { initAttention, toggleAttentionPanel } from './views/attention.js';
-import { initEffects, replay } from './effects.js';
 
-initEffects();
 setTheme(ui.theme);
 readHash();
 window.addEventListener('hashchange', readHash);
@@ -39,7 +36,6 @@ initBanners();
 initGuard();
 initTree();
 initLayout();
-initHive();
 initGraph();
 initWorktrees();
 initActivity();
@@ -63,17 +59,6 @@ register({
   },
 });
 
-// A new selection swings the details panel in (3D effects; skipped when off or reduced motion).
-let fxSel;
-register({
-  name: 'fx-selection', deps: ['selection'],
-  render() {
-    const key = ui.selection ? ui.selection.kind + ':' + ui.selection.id : '';
-    if (fxSel !== undefined && key !== fxSel) replay(document.getElementById('right'));
-    fxSel = key;
-  },
-});
-
 setInterval(() => { tickAgo(); invalidate('tick'); }, 1000);
 
 // Deep link: #…&ev=<seq> opens that event in the Tool output drawer.
@@ -91,7 +76,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === '/') { e.preventDefault(); document.querySelector('.search')?.focus(); return; }
-  if (e.key >= '1' && e.key <= '9' && +e.key <= TABS.length) { setTab(TABS[+e.key - 1][0]); return; }
+  if (/^[1-9]$/.test(e.key) && +e.key <= TABS.length) { setTab(TABS[+e.key - 1][0]); return; }
   if (e.key === '?') { showHelp(); return; }
   if (e.key === 'd') { toggleDrawer(); return; }
   if (e.key === 'n') { newSessionDialog(); return; }

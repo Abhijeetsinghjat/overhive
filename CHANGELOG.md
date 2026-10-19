@@ -27,6 +27,16 @@ version is 0.x, minor versions may change behaviour.
   web app manifests for the dashboard and the phone page, a flat `logo-mono.svg` for tiny sizes, and a
   social preview image (`docs/media/social-preview.png`).
 
+### Fixed
+- Dashboard dialogs and narrow windows: the New session working-directory picker no longer opens a native
+  list that spills outside the dialog; it is a searchable list anchored inside the dialog that scrolls,
+  shortens long paths in the middle (full path on hover) and works with the arrow keys, Enter and Escape.
+  Dialogs keep Tab focus inside and return focus to what opened them; the header no longer runs off
+  the right edge (it cut off the 3D and help buttons even at 1920 px): it stays one row from 1280 px up by
+  dropping button words first, and wraps below that; search results, the "Needs you"
+  panel and the agent-tree slide-over stay on screen and below the header and banners; Escape closes only
+  the topmost panel; the current tab scrolls into view; the help lists every tab shortcut and `n`.
+
 ## [0.2.0] - 2026-10-17
 
 Still beta. First release with macOS builds.

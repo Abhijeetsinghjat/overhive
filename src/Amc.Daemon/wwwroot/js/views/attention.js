@@ -12,6 +12,7 @@ import {
 
 let panel = null;
 let showHidden = false;
+let opener = null;   // element focused when the panel opened; focus returns there on Escape
 
 export function initAttention() {
   onAttention(() => invalidate('attention'));
@@ -33,7 +34,14 @@ export function initAttention() {
   document.addEventListener('mousedown', (e) => {
     if (!panel.hidden && !panel.contains(e.target) && !e.target.closest?.('.attn-badge')) closeAttentionPanel();
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) closeAttentionPanel(); });
+  // Escape closes only the panel (not also the drawer / selection / slide-overs handled by later listeners).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || panel.hidden) return;
+    e.stopImmediatePropagation();
+    closeAttentionPanel();
+    if (opener?.isConnected && opener !== document.body) opener.focus();
+  });
+  window.addEventListener('resize', () => { if (!panel.hidden) placePanel(); });
   register({ name: 'attention-panel', deps: ['attention', 'agent'], render: () => { if (!panel.hidden) renderPanel(); } });
 }
 
@@ -54,7 +62,14 @@ export function attentionBadge() {
 }
 
 export function toggleAttentionPanel() {
-  if (panel.hidden) { panel.hidden = false; renderPanel(); refreshAttention({ all: showHidden }); } else closeAttentionPanel();
+  if (panel.hidden) { opener = document.activeElement; panel.hidden = false; placePanel(); renderPanel(); refreshAttention({ all: showHidden }); } else closeAttentionPanel();
+}
+
+/** Open just below the header, whose height changes when it wraps on narrow windows. */
+function placePanel() {
+  const top = Math.round((document.getElementById('header')?.getBoundingClientRect().bottom ?? 46) + 6);
+  panel.style.top = top + 'px';
+  panel.style.maxHeight = `calc(100vh - ${top + 12}px)`;
 }
 
 function closeAttentionPanel() { panel.hidden = true; }
