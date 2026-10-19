@@ -11,6 +11,7 @@ import { reconnectNow } from '../sync.js';
 import { showHelp } from './help.js';
 import { guardBadge } from './guard.js';
 import { attentionBadge } from './attention.js';
+import { effectsSetting, setEffects } from '../effects.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -53,10 +54,25 @@ export function initHeader() {
   newSession.addEventListener('click', newSessionDialog);
   // Labelled with the theme it switches TO, so it reads as an action.
   const theme = h('button', { class: 'theme-btn', title: 'Switch between dark and light theme' });
-  const labelTheme = () => { theme.textContent = ui.theme === 'dark' ? '☀ Light' : '☾ Dark'; };
+  const labelTheme = () => {
+    const dark = ui.theme === 'dark';
+    mount(theme, h('span', { class: 'glyph', 'aria-hidden': 'true' }, dark ? '☀' : '☾'), h('span', { class: 'lbl' }, dark ? ' Light' : ' Dark'));
+    theme.setAttribute('aria-label', dark ? 'Switch to the light theme' : 'Switch to the dark theme');
+  };
   theme.addEventListener('click', () => { setTheme(ui.theme === 'dark' ? 'light' : 'dark'); labelTheme(); });
   labelTheme();
   register({ name: 'theme-btn', deps: ['theme'], render: labelTheme });
+  // 3D effects (depth motion, card tilt, the lattice floor, glass blur). Stored as amc.effects3d.
+  const fx = h('button', { class: 'fx-btn', type: 'button' });
+  const labelFx = () => {
+    const on = effectsSetting() === 'on';
+    fx.setAttribute('aria-pressed', String(on));
+    fx.title = `3D effects are ${on ? 'on' : 'off'}: depth motion, card tilt and the lattice floor. Click to turn them ${on ? 'off' : 'on'}.`
+      + (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? '\nYour system asks for reduced motion, so motion and tilt stay off.' : '');
+    mount(fx, h('span', { class: 'fx-cube', 'aria-hidden': 'true' }, '⬡'), '3D');
+  };
+  fx.addEventListener('click', () => { setEffects(effectsSetting() === 'on' ? 'off' : 'on'); labelFx(); });
+  labelFx();
   const help = h('button', { class: 'icon-btn', title: 'Keyboard shortcuts (?)' }, '?');
   help.addEventListener('click', showHelp);
 
@@ -67,7 +83,7 @@ export function initHeader() {
     h('div', { class: 'spacer' }),
     sessionSel, follow,
     h('div', { class: 'search-wrap' }, search, results),
-    newSession, healthDot, theme, help);
+    newSession, healthDot, theme, fx, help);
 
   register({
     name: 'header', deps: ['conn', 'agent', 'conflict', 'health', 'follow', 'tick'],

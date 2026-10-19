@@ -9,6 +9,8 @@ import { agentPasses, filterCtx } from '../filters.js';
 import { riskBadge } from './risks.js';
 import { verifyMark } from './verification.js';
 import { guardCardRow, guardSig } from './guard.js';
+import { hiveToggleButton } from './hive.js';
+import { webglAvailable } from '../hive3d.js';
 
 const W = 280, H = 150, COL_GAP = 56, ROW_GAP = 16, PAD = 20, BAND_GAP = 36;
 const MIN_ZOOM = 0.35, MAX_ZOOM = 1.6, MIN_FIT = 0.6;
@@ -55,7 +57,7 @@ export function initGraph() {
     h('label', { class: 'toggle' }, hideBox, h('span', { class: 'lbl' }, 'Hide finished')),
     legend, h('span', { class: 'spacer' }),
     zoomBtn('−', 'Zoom out (Ctrl+wheel)', () => setZoom(zoom - 0.1)), zoomLabel,
-    zoomBtn('+', 'Zoom in (Ctrl+wheel)', () => setZoom(zoom + 0.1)), fitBtn);
+    zoomBtn('+', 'Zoom in (Ctrl+wheel)', () => setZoom(zoom + 0.1)), fitBtn, hiveToggleButton(webglAvailable()));
   scroller.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();

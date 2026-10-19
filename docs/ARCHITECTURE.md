@@ -340,10 +340,26 @@ entities keyed by (kind, id), fed by `/api/state` + WebSocket patches; views
 subscribe to slices and re-render via keyed DOM diffing, batched per animation
 frame. Long lists (timeline, events, terminal) are windowed. Dark theme default.
 
-Views: Agent tree (left) · center tabs: Graph, Worktrees & Files, Activity,
-Timeline, Processes, Health · Detail panel (right): agent / worktree / file /
-repo · Bottom drawer: diff viewer, terminal, tool output, message thread.
-`xterm.js` is vendored (MIT) for PTY sessions.
+Views: Agent tree (left) · center tabs: Hive (3D), Graph, Worktrees & Files,
+Activity, Timeline, Commits, Risks, Processes, Usage, Health · Detail panel
+(right): agent / worktree / file / repo · Bottom drawer: diff viewer, terminal,
+tool output, message thread. `xterm.js` is vendored (MIT) for PTY sessions.
+
+**Hive (3D).** `views/hive.js` turns the store into a snapshot (same filters and
+"hide finished" rules as the Graph tab) and draws labels and tooltips as HTML;
+`views/hive-layout.js` is a pure layout (sessions as honeycomb clusters, nested
+sub-agents next to their parent, clusters grouped into one zone per worktree,
+slots remembered so cells do not jump); `views/hive-scene.js` renders it with
+three.js (vendored, MIT, in `wwwroot/vendor/three`; addon imports rewritten to
+relative paths because the CSP forbids an inline import map). The scene module
+and three.js are imported only when the tab opens and are disposed (renderer,
+geometries, materials, GPU context) when it is left. Frames are drawn on demand
+(camera moves, layout transitions, pulses) and never while the browser tab is
+hidden; device pixel ratio is capped at 2; `prefers-reduced-motion` turns off
+pulses, sparks, auto-orbit and animated transitions. Labels that would overlap
+a more important one are dropped (sessions first fall back to a one-line chip).
+Without WebGL 2, or with 3D turned off (`amc.hive3d` in localStorage), the Hive
+tab is not shown and the 2D Graph tab is the default.
 
 ## 14. Performance budget
 

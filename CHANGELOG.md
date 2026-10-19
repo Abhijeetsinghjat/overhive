@@ -5,7 +5,23 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Added
+- **Hive**, a 3D view of all agents and the new default tab when the browser supports WebGL: every
+  session is a hexagonal cell with its sub-agents tiled around it, grouped by repository worktree. Glow
+  shows status (running pulses, waiting/blocked amber, failed red, finished dimmed), height shows token
+  usage, red arcs connect agents in conflict, runaway-guard alerts ring the session, critical risks float
+  a red marker. Orbit, zoom, hover for details, click to open the agent, double-click to focus, arrow keys
+  to move between agents. Honours the filters, both themes and reduced motion. **2D** (or no WebGL) falls
+  back to the Graph tab. three.js (MIT) is vendored and loaded only when the tab opens.
+- A spatial, 3D look for the whole dashboard and the phone page: layered elevation lit from one direction,
+  glass for floating panels, a faint hex-lattice floor behind the views, cards that tilt toward the pointer,
+  and short 3D entry motion for tabs, the details panel, the drawer, dialogs, the "Needs you" panel and
+  toasts. The **3D** button in the header turns the effects off (stored in the browser as
+  `amc.effects3d`); they are also reduced automatically when the system asks for reduced motion.
+
 ### Changed
+- Better text contrast: dark text on amber primary buttons, a darker amber accent in the light theme and
+  lighter "faint" text in the dark theme (WCAG AA).
 - New 3D logo: the three hive cells are now extruded, lit honeycomb cells with the watching eye on the
   raised centre cell. Adds a full favicon set (SVG, 16/32 px PNG, Apple touch icon, 192/512 px app icons),
   web app manifests for the dashboard and the phone page, a flat `logo-mono.svg` for tiny sizes, and a
@@ -15,8 +31,9 @@ version is 0.x, minor versions may change behaviour.
 - Dashboard dialogs and narrow windows: the New session working-directory picker no longer opens a native
   list that spills outside the dialog; it is a searchable list anchored inside the dialog that scrolls,
   shortens long paths in the middle (full path on hover) and works with the arrow keys, Enter and Escape.
-  Dialogs keep Tab focus inside and return focus to what opened them; at 1250 px and below the header
-  wraps instead of pushing New session, Health, theme and help off-screen; search results, the "Needs you"
+  Dialogs keep Tab focus inside and return focus to what opened them; the header no longer runs off
+  the right edge (it cut off the 3D and help buttons even at 1920 px): it stays one row from 1280 px up by
+  dropping button words first, and wraps below that; search results, the "Needs you"
   panel and the agent-tree slide-over stay on screen and below the header and banners; Escape closes only
   the topmost panel; the current tab scrolls into view; the help lists every tab shortcut and `n`.
 
