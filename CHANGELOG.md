@@ -5,7 +5,16 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Added
+- A spatial, 3D look for the whole dashboard and the phone page: layered elevation lit from one direction,
+  glass for floating panels, a faint hex-lattice floor behind the views, cards that tilt toward the pointer,
+  and short 3D entry motion for tabs, the details panel, the drawer, dialogs, the "Needs you" panel and
+  toasts. The **3D** button in the header turns the effects off (stored in the browser as
+  `amc.effects3d`); they are also reduced automatically when the system asks for reduced motion.
+
 ### Changed
+- Better text contrast: dark text on amber primary buttons, a darker amber accent in the light theme and
+  lighter "faint" text in the dark theme (WCAG AA).
 - New 3D logo: the three hive cells are now extruded, lit honeycomb cells with the watching eye on the
   raised centre cell. Adds a full favicon set (SVG, 16/32 px PNG, Apple touch icon, 192/512 px app icons),
   web app manifests for the dashboard and the phone page, a flat `logo-mono.svg` for tiny sizes, and a

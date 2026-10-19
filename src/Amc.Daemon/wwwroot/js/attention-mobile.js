@@ -4,6 +4,7 @@ import { h, mount, tickAgo } from './util.js';
 import { api, TOKEN_MISSING } from './api.js';
 import { toast } from './components/overlay.js';
 import { attentionItem } from './components/attention-item.js';
+import { initEffects } from './effects.js';
 import {
   attention, onAttention, refreshAttention, dismiss, snooze, notifyPrefs, setNotifyPref,
   enableNotifications, notificationPermission, onNotificationClick,
@@ -15,6 +16,7 @@ const conn = { state: 'connecting' };
 const composers = new Map(); // item id → composer element (typing survives re-renders)
 
 try { const t = JSON.parse(localStorage.getItem('amc.theme') || '"dark"'); document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'; } catch { /* default */ }
+initEffects(); // amc.effects3d set in the dashboard also applies here
 
 function dashboardLink(action) {
   if (action.kind === 'open-risks') return '/#' + new URLSearchParams({ tab: 'risks' }).toString();
