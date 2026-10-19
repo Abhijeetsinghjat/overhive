@@ -13,6 +13,7 @@ Users run AI tools on their own subscriptions; the project never pays for, proxi
 | SQLitePCLRaw (bundle_e_sqlite3) | Apache-2.0 |
 | SQLite | Public domain |
 | xterm.js, @xterm/addon-fit (vendored in `wwwroot/vendor`) | MIT |
+| three.js (vendored in `wwwroot/vendor/three`, Hive 3D view) | MIT |
 | git, curl, systemd (system tools, not bundled) | GPL-2.0 / curl licence / LGPL — used as external programs |
 
 ## Development and tests

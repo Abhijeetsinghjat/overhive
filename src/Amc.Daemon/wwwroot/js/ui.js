@@ -1,7 +1,9 @@
 // UI state (tab, selection, filters, drawer). Tab + selection are mirrored to the URL hash
 // so views can be deep-linked (and screenshotted).
 import { invalidate, get } from './store.js';
+import { hiveEnabled, saveHivePref } from './hive3d.js';
 
+const HIVE_TAB = ['hive', 'Hive'];
 export const TABS = [
   ['graph', 'Graph'],
   ['worktrees', 'Worktrees & Files'],
@@ -13,6 +15,8 @@ export const TABS = [
   ['usage', 'Usage'],
   ['health', 'Health'],
 ];
+// The 3D Hive tab exists only while 3D is on and WebGL works; then it is first and the default.
+if (hiveEnabled()) TABS.unshift(HIVE_TAB);
 
 function load(key, dflt) {
   try { const v = localStorage.getItem('amc.' + key); return v == null ? dflt : JSON.parse(v); } catch { return dflt; }
@@ -20,7 +24,7 @@ function load(key, dflt) {
 function save(key, v) { try { localStorage.setItem('amc.' + key, JSON.stringify(v)); } catch { /* private mode */ } }
 
 export const ui = {
-  tab: 'graph',
+  tab: TABS[0][0],
   selection: null,          // { kind, id }
   filters: { repo: '', agent: '', worktree: '', branch: '', status: '', type: '', range: '', q: '' },
   session: '',              // '' = all sessions (graph)
@@ -37,6 +41,17 @@ export function setTab(tab) {
   ui.tab = tab;
   writeHash();
   invalidate('tab');
+}
+
+/** Turn the 3D Hive view on/off. Off (or no WebGL) leaves the 2D Graph tab, which is always there. */
+export function setHive3d(on, { persist = true } = {}) {
+  if (persist) saveHivePref(on);
+  const has = TABS[0] === HIVE_TAB;
+  if (on && hiveEnabled() && !has) TABS.unshift(HIVE_TAB);
+  if (!on && has) TABS.shift();
+  ui.tab = on && TABS[0] === HIVE_TAB ? 'hive' : ui.tab === 'hive' ? 'graph' : ui.tab;
+  writeHash();
+  invalidate('tab', 'hive3d');
 }
 
 export function select(kind, id, { fromFollow = false } = {}) {

@@ -1,0 +1,74 @@
+/* Hive: the 3D view (views/hive.js, views/hive-scene.js). Labels are HTML over the WebGL canvas. */
+
+.hive-toolbar { flex-wrap: nowrap; }
+.hive-legend { margin-left: 4px; }
+.hv-lg { display: inline-block; width: 10px; height: 11px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--muted); }
+.hv-lg-run { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.hv-lg-wait { background: var(--accent); }
+.hv-lg-fail { background: var(--red); }
+.hv-lg-done { background: var(--faint); opacity: .6; }
+.hv-lg-arc { width: 18px; height: 8px; clip-path: none; background: none; border-top: 2px dashed var(--red); border-radius: 50% 50% 0 0; }
+
+.hive-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; outline: none; background: var(--bg); touch-action: none; }
+.hive-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-ring); }
+.hive-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hive-labels { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.hive-empty, .hive-status { position: absolute; z-index: 3; left: 50%; top: 42%; transform: translate(-50%, -50%); max-width: min(520px, calc(100% - 32px)); text-align: center; color: var(--muted); background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); backdrop-filter: blur(6px); }
+.hive-status { top: 50%; font-size: 12px; padding: 8px 14px; }
+.hive-hint { position: absolute; z-index: 2; left: 12px; bottom: 10px; font-size: 11px; color: var(--faint); pointer-events: none; text-shadow: 0 1px 0 var(--bg); }
+
+/* Cell labels (positioned by CSS2DRenderer at the top of each cell) */
+.hive-label-anchor { pointer-events: auto; cursor: pointer; padding-bottom: 14px; }
+.hv-label { --glass: color-mix(in srgb, var(--panel) 82%, transparent); color: var(--text); font: 11px/1.3 var(--sans); white-space: nowrap; max-width: 230px; transition: opacity .2s, transform .2s; }
+.hv-root { position: relative; background: var(--glass); border: 1px solid color-mix(in srgb, var(--border2) 80%, transparent); border-radius: 10px; padding: 5px 9px 5px; box-shadow: 0 4px 18px rgba(0,0,0,.28); backdrop-filter: blur(5px); }
+.hv-root::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 14px; background: linear-gradient(color-mix(in srgb, var(--text) 45%, transparent), transparent); }
+.hv-l1 { display: flex; align-items: center; gap: 6px; font-size: 10.5px; }
+.hv-tool { font-weight: 700; color: var(--ac, var(--accent)); letter-spacing: .01em; }
+.hv-st { display: inline-flex; gap: 3px; align-items: center; color: var(--st, var(--muted)); font-weight: 600; }
+.hv-l2 { font-weight: 650; font-size: 12px; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.hv-l3 { font-family: var(--mono); font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.hv-sub { display: inline-flex; align-items: center; gap: 4px; background: var(--glass); border: 1px solid color-mix(in srgb, var(--border2) 70%, transparent); border-radius: 999px; padding: 1px 8px 1px 6px; font-size: 10.5px; box-shadow: 0 2px 10px rgba(0,0,0,.22); backdrop-filter: blur(4px); }
+.hv-sub .glyph { color: var(--st, var(--muted)); font-size: 9.5px; }
+.hv-sub-t { overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.hv-b { display: inline-flex; align-items: center; border-radius: 6px; padding: 0 4px; font-size: 10px; font-weight: 700; line-height: 15px; }
+.hv-b-conf, .hv-b-guard { color: var(--orange); background: color-mix(in srgb, var(--orange) 16%, transparent); }
+.hv-b-guard.crit, .hv-b-risk { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
+.hv-b-vf { color: var(--purple); background: color-mix(in srgb, var(--purple) 16%, transparent); }
+.hive-label-anchor.dim .hv-label { opacity: .45; }
+.hive-label-anchor.hov .hv-label { border-color: var(--text2); }
+.hive-label-anchor.sel .hv-label { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 6px 22px rgba(0,0,0,.35); }
+.hv-root.st-blocked { border-color: color-mix(in srgb, var(--orange) 70%, transparent); }
+.hv-root.st-failed { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+
+/* Zone labels (repository · worktree) sit on the floor plates */
+.hv-zone { display: inline-flex; gap: 8px; align-items: baseline; pointer-events: none; font: 600 11.5px/1.2 var(--sans); color: var(--text2); white-space: nowrap; text-shadow: 0 1px 2px var(--bg); }
+.hv-zone-repo { letter-spacing: .01em; }
+.hv-zone-wt { font-family: var(--mono); font-weight: 500; font-size: 10.5px; color: var(--accent); }
+
+/* Hover tooltip */
+.hive-tip { position: absolute; z-index: 5; pointer-events: none; width: max-content; max-width: 340px; background: var(--panel); border: 1px solid var(--border2); border-radius: var(--r); box-shadow: var(--shadow); padding: 8px 10px; font-size: 11.5px; }
+.hv-tip-head { display: flex; align-items: center; gap: 6px; }
+.hv-tip-title { font-weight: 650; font-size: 12.5px; margin: 5px 0 3px; padding-left: 7px; border-left: 3px solid; }
+.hv-tip-act { font-family: var(--mono); font-size: 10.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hv-tip-meta { color: var(--muted); font-size: 11px; }
+.hv-tip-badges { display: flex; gap: 4px; margin-top: 3px; }
+.hv-tip-foot { margin-top: 4px; font-size: 10.5px; }
+
+@media (max-width: 1100px) { .hive-legend { display: none; } }
+@media (max-width: 700px) {
+  .hive-toolbar { flex-wrap: wrap; row-gap: 4px; }
+  .hive-hint { display: none; }
+  .hv-label { max-width: 170px; }
+}
+@media (prefers-reduced-motion: reduce) { .hv-label { transition: none; } }
+
+/* One more tab than before: let the tab strip scroll instead of clipping the last tabs */
+.tabs { overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs .tab { white-space: nowrap; flex: 0 0 auto; }
+.hive-label-anchor.far .hv-l3 { display: none; }
+.hive-label-anchor.far .hv-root { padding: 3px 8px; }
+.hive-label-anchor.mini .hv-l1, .hive-label-anchor.mini .hv-l3 { display: none; }
+.hive-label-anchor.mini .hv-root { padding: 1px 9px; border-radius: 999px; border-left: 3px solid var(--st, var(--border2)); }
+.hive-label-anchor.mini .hv-l2 { font-size: 11px; font-weight: 600; margin: 0; }
+.hive-label-anchor.mini .hv-root::after { height: 10px; }
