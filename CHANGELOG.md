@@ -20,6 +20,9 @@ version is 0.x, minor versions may change behaviour.
   `amc.effects3d`); they are also reduced automatically when the system asks for reduced motion.
 
 ### Changed
+- The README demo is re-recorded around the 3D Hive (orbit, hover, open an agent), the "Needs you" queue,
+  risky commands and claim checks. The recorder renders WebGL on the GPU and captures with Chrome's
+  screencast (about 37 frames/s at 2x instead of 8).
 - Better text contrast: dark text on amber primary buttons, a darker amber accent in the light theme and
   lighter "faint" text in the dark theme (WCAG AA).
 - New 3D logo: the three hive cells are now extruded, lit honeycomb cells with the watching eye on the

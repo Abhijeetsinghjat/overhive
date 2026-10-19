@@ -1,6 +1,6 @@
 // Pass 2: renders compose.html frame by frame over the pass-1 recording, then encodes
 // overhive-demo.mp4 and overhive-demo.webp.  Usage: node compose.js <pass-1 dir> [fps]
-// Needs: npm i puppeteer-core ffmpeg-static.
+// Needs: npm i puppeteer-core ffmpeg-static, and python3 with Pillow (pip install pillow) for the WebP.
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
@@ -40,8 +40,17 @@ const repo = path.resolve(__dirname, '../..');
   ff(...frames, ...x264, '-pass', '2', '-movflags', '+faststart', path.join(DIR, 'overhive-demo.mp4'));
   // Animated WebP for the README (GitHub never autoplays video, but animated images play on their own),
   // encoded from the frames, not the MP4, at 1600 px so it stays sharp on high-density screens; kept under
-  // 10 MB, above which GitHub serves files as a generic download instead of an image.
-  ff(...frames, '-vf', 'fps=12,scale=1600:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '80',
-     '-compression_level', '3', '-loop', '0', path.join(DIR, 'overhive-demo.webp'));
+  // 10 MB, above which GitHub serves files as a generic download instead of an image. webp.py (Pillow) is used
+  // when available: ffmpeg's encoder leaves blocky smears in the dark 3D Hive areas (see webp.py).
+  const webp = path.join(DIR, 'overhive-demo.webp');
+  try {
+    execFileSync('python3', ['-I', path.join(__dirname, 'webp.py'), out, webp, '10', '1600', '48'], { stdio: 'inherit' });
+  } catch {
+    console.warn('webp.py failed (pip install pillow); falling back to ffmpeg, which can smear dark 3D areas');
+    ff(...frames, '-vf', 'fps=10,scale=1600:-1:flags=lanczos', '-c:v', 'libwebp_anim', '-quality', '56',
+       '-compression_level', '3', '-loop', '0', webp);
+  }
+  const mb = fs.statSync(webp).size / 1e6;
+  if (mb >= 10) console.warn(`overhive-demo.webp is ${mb.toFixed(1)} MB: over GitHub's 10 MB image limit, lower the quality or fps`);
   console.log('done', n, 'frames');
 })().catch((e) => { console.error(e); process.exit(1); });
