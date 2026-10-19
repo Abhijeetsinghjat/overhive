@@ -5,6 +5,17 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Added
+- A spatial, 3D look for the whole dashboard and the phone page: layered elevation lit from one direction,
+  glass for floating panels, a faint hex-lattice floor behind the views, cards that tilt toward the pointer,
+  and short 3D entry motion for tabs, the details panel, the drawer, dialogs, the "Needs you" panel and
+  toasts. The **3D** button in the header turns the effects off (stored in the browser as
+  `amc.effects3d`); they are also reduced automatically when the system asks for reduced motion.
+
+### Changed
+- Better text contrast: dark text on amber primary buttons, a darker amber accent in the light theme and
+  lighter "faint" text in the dark theme (WCAG AA).
+
 ## [0.2.0] - 2026-10-17
 
 Still beta. First release with macOS builds.
