@@ -25,7 +25,12 @@ export function initWorktrees() {
 
   let edgeList = [];
   const drawEdges = () => {
-    const base = grid.getBoundingClientRect();
+    // Layout offsets, not client rects: cards may be mid-transform (tab entry, hover lift, tilt).
+    const box = (el) => {
+      let x = 0, y = 0;
+      for (let n = el; n && n !== grid; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
+      return { left: x, top: y, right: x + el.offsetWidth, height: el.offsetHeight };
+    };
     const width = grid.scrollWidth, height = grid.scrollHeight;
     svg.setAttribute('width', width);
     svg.setAttribute('height', height);
@@ -33,9 +38,9 @@ export function initWorktrees() {
     for (const e of edgeList) {
       const a = e.from._el, b = e.to._el;
       if (!a || !b || !a.isConnected || !b.isConnected) continue;
-      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-      const x1 = ra.right - base.left, y1 = ra.top - base.top + Math.min(ra.height / 2, 22);
-      const x2 = rb.left - base.left, y2 = rb.top - base.top + Math.min(rb.height / 2, 18);
+      const ra = box(a), rb = box(b);
+      const x1 = ra.right, y1 = ra.top + Math.min(ra.height / 2, 22);
+      const x2 = rb.left, y2 = rb.top + Math.min(rb.height / 2, 18);
       const dx = (x2 - x1) / 2;
       const p = s('path', { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, class: 'wt-edge ' + e.cls });
       if (e.color) p.style.stroke = e.color;
