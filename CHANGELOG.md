@@ -28,6 +28,9 @@ version is 0.x, minor versions may change behaviour.
   social preview image (`docs/media/social-preview.png`).
 
 ### Fixed
+- The Hive tab was blank and the **3D** button did nothing on `main`: a merge had dropped the Hive and 3D
+  effects start-up from the dashboard's entry module. Restored, with a test that every view's start-up
+  function is called.
 - Dashboard dialogs and narrow windows: the New session working-directory picker no longer opens a native
   list that spills outside the dialog; it is a searchable list anchored inside the dialog that scrolls,
   shortens long paths in the middle (full path on hover) and works with the arrow keys, Enter and Escape.

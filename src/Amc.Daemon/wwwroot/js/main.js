@@ -9,6 +9,7 @@ import { modalOpen } from './components/overlay.js';
 import { initHeader, initFilterBar, initBanners } from './views/header.js';
 import { initTree, treeKey } from './views/tree.js';
 import { initGraph } from './views/graph.js';
+import { initHive } from './views/hive.js';
 import { initWorktrees } from './views/worktrees.js';
 import { initActivity } from './views/activity.js';
 import { initTimeline } from './views/timeline.js';
@@ -24,7 +25,9 @@ import { showHelp } from './views/help.js';
 import { initLayout } from './layout.js';
 import { newSessionDialog } from './views/newsession.js';
 import { initAttention, toggleAttentionPanel } from './views/attention.js';
+import { initEffects, replay } from './effects.js';
 
+initEffects();
 setTheme(ui.theme);
 readHash();
 window.addEventListener('hashchange', readHash);
@@ -36,6 +39,7 @@ initBanners();
 initGuard();
 initTree();
 initLayout();
+initHive();
 initGraph();
 initWorktrees();
 initActivity();
@@ -56,6 +60,17 @@ register({
     let best = null;
     for (const a of store.e.agent.values()) if (isActive(a) && (!best || ms(a.lastActivityAt) > ms(best.lastActivityAt))) best = a;
     if (best && !(ui.selection?.kind === 'agent' && ui.selection.id === best.id)) select('agent', best.id, { fromFollow: true });
+  },
+});
+
+// A new selection swings the details panel in (3D effects; skipped when off or reduced motion).
+let fxSel;
+register({
+  name: 'fx-selection', deps: ['selection'],
+  render() {
+    const key = ui.selection ? ui.selection.kind + ':' + ui.selection.id : '';
+    if (fxSel !== undefined && key !== fxSel) replay(document.getElementById('right'));
+    fxSel = key;
   },
 });
 

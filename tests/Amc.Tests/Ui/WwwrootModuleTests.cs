@@ -15,6 +15,9 @@ public sealed partial class WwwrootModuleTests
     [GeneratedRegex("""<script\b[^>]*>""", RegexOptions.IgnoreCase)]
     private static partial Regex ScriptTag();
 
+    [GeneratedRegex("""export\s+(?:async\s+)?function\s+(init\w*)""")]
+    private static partial Regex ExportedInit();
+
     private static string Wwwroot([CallerFilePath] string source = "")
     {
         // From this source file (works wherever the build output lives), else from the test binaries.
@@ -41,6 +44,20 @@ public sealed partial class WwwrootModuleTests
             var target = spec.StartsWith('/') ? Path.Combine(root, spec.TrimStart('/')) : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, spec));
             Assert.True(File.Exists(target), $"{Path.GetRelativePath(root, file)} imports missing '{spec}'");
         }
+    }
+
+    // A merge once dropped initHive() and initEffects() from main.js: every module still parsed, but the Hive
+    // tab stayed blank and the 3D setting did nothing. Every exported init… function must be called by a page.
+    [Fact]
+    public void EveryViewInitIsCalledByAnEntryModule()
+    {
+        var root = Wwwroot();
+        var entries = string.Concat(new[] { "main.js", "attention-mobile.js" }.Select(f => File.ReadAllText(Path.Combine(root, "js", f))));
+        var inits = Directory.EnumerateFiles(Path.Combine(root, "js"), "*.js", SearchOption.AllDirectories)
+            .SelectMany(f => ExportedInit().Matches(File.ReadAllText(f)).Select(m => (File: Path.GetRelativePath(root, f), Name: m.Groups[1].Value)))
+            .ToList();
+        Assert.Contains(inits, i => i.Name == "initHive");
+        Assert.All(inits, i => Assert.True(Regex.IsMatch(entries, $@"(?<![\w.]){i.Name}\s*\("), $"{i.Name} ({i.File}) is exported but never called from main.js or attention-mobile.js"));
     }
 
     [Fact]
