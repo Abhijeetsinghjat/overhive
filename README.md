@@ -1,4 +1,4 @@
-<p align="center"><img src="src/Amc.Daemon/wwwroot/logo.svg" width="88" alt="Overhive logo"></p>
+<p align="center"><img src="src/Amc.Daemon/wwwroot/logo.svg" width="112" alt="Overhive logo"></p>
 
 <h1 align="center">Overhive</h1>
 
