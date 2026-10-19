@@ -9,6 +9,7 @@ import { modalOpen } from './components/overlay.js';
 import { initHeader, initFilterBar, initBanners } from './views/header.js';
 import { initTree, treeKey } from './views/tree.js';
 import { initGraph } from './views/graph.js';
+import { initHive } from './views/hive.js';
 import { initWorktrees } from './views/worktrees.js';
 import { initActivity } from './views/activity.js';
 import { initTimeline } from './views/timeline.js';
@@ -36,6 +37,7 @@ initBanners();
 initGuard();
 initTree();
 initLayout();
+initHive();
 initGraph();
 initWorktrees();
 initActivity();
@@ -76,7 +78,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === '/') { e.preventDefault(); document.querySelector('.search')?.focus(); return; }
-  if (e.key >= '1' && e.key <= String(TABS.length)) { setTab(TABS[+e.key - 1][0]); return; }
+  if (e.key >= '1' && e.key <= '9' && +e.key <= TABS.length) { setTab(TABS[+e.key - 1][0]); return; }
   if (e.key === '?') { showHelp(); return; }
   if (e.key === 'd') { toggleDrawer(); return; }
   if (e.key === 'n') { newSessionDialog(); return; }

@@ -99,7 +99,8 @@ Add a tool Overhive does not know yet:
 | What is running, waiting, blocked, failed | Header counters, agent tree, `overhive agents` |
 | Which agent needs me now (any tool) | **⚑ Needs you** badge (key `a`), Overview panel, `overhive attention`; opt-in browser, desktop or self-hosted ntfy notifications ([details](docs/NOTIFICATIONS.md)) |
 | Check agents from a phone | `/m` through your own SSH tunnel or `tailscale serve` ([how](docs/REMOTE_ACCESS.md)) |
-| Agent → sub-agent hierarchy, models, token usage | Graph tab, Usage tab, `overhive usage` |
+| Everything at a glance, in 3D | **Hive** tab (default when the browser has WebGL): each session is a honeycomb cell with its sub-agents around it, grouped by repository worktree; glow = status, height = tokens, red arcs = conflicts. Drag to orbit, click to open, **2D** switches to the Graph tab |
+| Agent → sub-agent hierarchy, models, token usage | Hive or Graph tab, Usage tab, `overhive usage` |
 | Repo / worktree / branch / HEAD per agent | Agent panel → Location, Worktrees & Files tab |
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
 | Commits with links to your Git host | Commits tab |

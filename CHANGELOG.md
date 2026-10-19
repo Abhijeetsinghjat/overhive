@@ -5,6 +5,15 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Added
+- **Hive**, a 3D view of all agents and the new default tab when the browser supports WebGL: every
+  session is a hexagonal cell with its sub-agents tiled around it, grouped by repository worktree. Glow
+  shows status (running pulses, waiting/blocked amber, failed red, finished dimmed), height shows token
+  usage, red arcs connect agents in conflict, runaway-guard alerts ring the session, critical risks float
+  a red marker. Orbit, zoom, hover for details, click to open the agent, double-click to focus, arrow keys
+  to move between agents. Honours the filters, both themes and reduced motion. **2D** (or no WebGL) falls
+  back to the Graph tab. three.js (MIT) is vendored and loaded only when the tab opens.
+
 ## [0.2.0] - 2026-10-17
 
 Still beta. First release with macOS builds.
