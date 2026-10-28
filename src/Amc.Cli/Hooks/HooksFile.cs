@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Amc.Cli.Infrastructure;
 using Amc.Core.Providers.Claude;
+using Amc.Core.Security;
 
 namespace Amc.Cli.Hooks;
 
@@ -122,16 +123,19 @@ public static class HooksFile
         var target = plan.TargetPath;
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         UnixFileMode? mode = null;
+        string? acl = null; // Windows: the file's access entries, preserved the way its mode is on Unix
         string? backup = null;
 #pragma warning disable CA1416 // guarded by OperatingSystem.IsWindows()
         if (File.Exists(target))
         {
-            if (!OperatingSystem.IsWindows()) mode = File.GetUnixFileMode(target);
+            if (OperatingSystem.IsWindows()) acl = OwnerOnly.CaptureAccess(target);
+            else mode = File.GetUnixFileMode(target);
             backup = BackupPath(target, now);
             File.Copy(target, backup, overwrite: false);
             if (mode is { } m) File.SetUnixFileMode(backup, m);
+            if (acl is not null) OwnerOnly.CopyAccess(backup, acl);
         }
-        WriteAtomic(target, Serialize(plan.After), mode ?? (UnixFileMode.UserRead | UnixFileMode.UserWrite));
+        WriteAtomic(target, Serialize(plan.After), mode ?? (UnixFileMode.UserRead | UnixFileMode.UserWrite), acl);
 #pragma warning restore CA1416
         return backup;
     }
@@ -144,8 +148,12 @@ public static class HooksFile
         return candidate;
     }
 
-    /// <summary>Temp file in the same directory (same filesystem), fsync, then rename over the target.</summary>
-    public static void WriteAtomic(string target, string content, UnixFileMode mode)
+    /// <summary>
+    /// Temp file in the same directory (same filesystem), fsync, then rename over the target. The file gets
+    /// <paramref name="mode"/> on Unix; on Windows the access entries in <paramref name="windowsAcl"/> (SDDL from
+    /// <see cref="OwnerOnly.CaptureAccess"/>), or owner-only when null.
+    /// </summary>
+    public static void WriteAtomic(string target, string content, UnixFileMode mode, string? windowsAcl = null)
     {
         var dir = Path.GetDirectoryName(target)!;
         var tmp = Path.Combine(dir, $".{Path.GetFileName(target)}.amc-tmp-{Guid.NewGuid():N}");
@@ -160,6 +168,8 @@ public static class HooksFile
                 fs.Flush(flushToDisk: true);
             }
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tmp, mode); // exact mode, independent of umask
+            else if (windowsAcl is not null) OwnerOnly.CopyAccess(tmp, windowsAcl);
+            else OwnerOnly.Restrict(tmp);
             File.Move(tmp, target, overwrite: true);
         }
         finally

@@ -295,7 +295,8 @@ public sealed class ClaudeHookReceiver : BackgroundService
                 if (fi.Exists && fi.Length + line.Length > HookLogMaxBytes) File.Move(path, path + ".1", overwrite: true);
                 var isNew = !File.Exists(path);
                 File.AppendAllText(path, line);
-                if (isNew && !OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                if (isNew && OperatingSystem.IsWindows()) Amc.Core.Security.OwnerOnly.Restrict(path);
+                else if (isNew) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

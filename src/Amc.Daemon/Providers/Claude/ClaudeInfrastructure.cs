@@ -99,6 +99,7 @@ public static class Signals
     public static readonly int SigCont = OperatingSystem.IsMacOS() ? 19 : 18, SigStop = OperatingSystem.IsMacOS() ? 17 : 19;
 }
 
+/// <summary>POSIX kill(2). Windows has no signals: sends go through <see cref="Amc.Daemon.Collectors.Processes.ProcessSignals"/> and libc is never loaded.</summary>
 public sealed class LibcSignalSender : ISignalSender
 {
     [DllImport("libc", EntryPoint = "kill", SetLastError = true)]

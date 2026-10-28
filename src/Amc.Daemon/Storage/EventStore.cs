@@ -29,8 +29,9 @@ public sealed class EventStore : IDisposable
         _connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath, Cache = SqliteCacheMode.Private, Pooling = true }.ToString();
         _writer = Open();
         Migrate();
-        if (!OperatingSystem.IsWindows() && File.Exists(dbPath))
-            File.SetUnixFileMode(dbPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        if (!File.Exists(dbPath)) return;
+        if (OperatingSystem.IsWindows()) Amc.Core.Security.OwnerOnly.Restrict(dbPath);
+        else File.SetUnixFileMode(dbPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private SqliteConnection Open()

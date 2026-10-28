@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Amc.Cli.Hooks;
 using Amc.Cli.Infrastructure;
 using Amc.Core.Providers.Claude;
+using Amc.Core.Security;
 
 namespace Amc.Cli.Commands;
 
@@ -46,7 +47,14 @@ public static class DoctorCommand
         var tokenPath = settings.TokenPath;
         if (ctx.TokenOverride is null && !File.Exists(tokenPath))
             checks.Add(new("token file", false, $"{tokenPath} missing", "start amcd once; it creates the token"));
-        else if (ctx.TokenOverride is null && !OperatingSystem.IsWindows())
+        else if (ctx.TokenOverride is null && OperatingSystem.IsWindows())
+        {
+            var others = OwnerOnly.OthersWithAccess(tokenPath);
+            checks.Add(new("token file", others.Count == 0,
+                others.Count == 0 ? $"{tokenPath} owner-only" : $"{tokenPath} readable by {string.Join(", ", others.Select(OwnerOnly.Name))}",
+                $"icacls \"{tokenPath}\" /inheritance:r /grant:r *{OwnerOnly.CurrentUserSid}:F /remove {string.Join(' ', others.Select(o => "*" + o))}"));
+        }
+        else if (ctx.TokenOverride is null)
         {
             var mode = File.GetUnixFileMode(tokenPath);
             var tooOpen = (mode & (UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |

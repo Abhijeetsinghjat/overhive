@@ -12,7 +12,7 @@ namespace Amc.Tests.Pipeline;
 public sealed class TempDir : IDisposable
 {
     public string Path { get; } = Directory.CreateTempSubdirectory("amc-test-").FullName;
-    public void Dispose() { try { Directory.Delete(Path, true); } catch (IOException) { } }
+    public void Dispose() => Fixtures.TempDirs.Delete(Path);
 }
 
 public class EventStoreTests : IDisposable
