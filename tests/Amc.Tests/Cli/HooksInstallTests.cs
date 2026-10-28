@@ -1,7 +1,10 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json.Nodes;
 using Amc.Cli.Hooks;
 using Amc.Cli.Infrastructure;
 using Amc.Core.Providers.Claude;
+using Amc.Core.Security;
 
 namespace Amc.Tests.Cli;
 
@@ -23,11 +26,34 @@ public class HooksInstallTests : IDisposable
 
     public void Dispose() => _h.Dispose();
 
-    private void WriteSettings(string json, UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite)
+    private void WriteSettings(string json, UnixFileMode mode = Private)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Settings)!);
         File.WriteAllText(Settings, json);
-        File.SetUnixFileMode(Settings, mode);
+        SetMode(Settings, mode);
+    }
+
+    private const UnixFileMode Private = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+    /// <summary>The Unix mode; on Windows its stand-in: owner-only, plus read for BUILTIN\Users if the group or others may read.</summary>
+    private static void SetMode(string path, UnixFileMode mode)
+    {
+        if (!OperatingSystem.IsWindows()) { File.SetUnixFileMode(path, mode); return; }
+        OwnerOnly.Restrict(path);
+        if ((mode & (UnixFileMode.GroupRead | UnixFileMode.OtherRead)) == 0) return;
+        var fi = new FileInfo(path);
+        var acl = fi.GetAccessControl();
+        acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Read, AccessControlType.Allow));
+        fi.SetAccessControl(acl);
+    }
+
+    /// <summary>Comparable protection: the Unix mode, or the Windows access entries.</summary>
+    private static string Mode(string path) => OperatingSystem.IsWindows() ? OwnerOnly.CaptureAccess(path) : File.GetUnixFileMode(path).ToString();
+
+    private static void AssertPrivate(string path)
+    {
+        if (OperatingSystem.IsWindows()) Assert.True(OwnerOnly.IsOwnerOnly(path), OwnerOnly.CaptureAccess(path));
+        else Assert.Equal(Private, File.GetUnixFileMode(path));
     }
 
     private JsonObject Read() => (JsonObject)JsonNode.Parse(File.ReadAllText(Settings))!;
@@ -43,14 +69,15 @@ public class HooksInstallTests : IDisposable
         Assert.Equal(0, await _h.Run("hooks", "install", "--settings", Settings, "--yes"));
         Assert.True(ClaudeHooksConfig.IsInstalled(Read()));
         Assert.Empty(Backups());
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Settings));
+        AssertPrivate(Settings);
         Assert.Contains("+ SessionStart", _h.Out.ToString());
     }
 
     [Fact]
     public async Task Install_preserves_foreign_hooks_and_settings_and_backs_up_first()
     {
-        WriteSettings(Foreign, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
+        WriteSettings(Foreign, Private | UnixFileMode.GroupRead);
+        var mode = Mode(Settings);
         Assert.Equal(0, await _h.Run("hooks", "install", "--settings", Settings, "--yes"));
 
         var after = Read();
@@ -65,7 +92,8 @@ public class HooksInstallTests : IDisposable
 
         var backup = Assert.Single(Backups());
         Assert.Equal(Foreign, File.ReadAllText(backup));
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, File.GetUnixFileMode(Settings)); // mode preserved
+        Assert.Equal(mode, Mode(Settings)); // mode preserved
+        Assert.Equal(mode, Mode(backup));
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Settings)!, "*.amc-tmp-*", SearchOption.AllDirectories));     // no temp leftovers
         Assert.Contains("= 2 other hook(s) left untouched", _h.Out.ToString());
         Assert.Contains("backup: ", _h.Out.ToString());
@@ -171,7 +199,9 @@ public class HooksInstallTests : IDisposable
         File.WriteAllText(Settings, "old");
         HooksFile.WriteAtomic(Settings, "{}\n", UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherRead);
         Assert.Equal("{}\n", File.ReadAllText(Settings));
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherRead, File.GetUnixFileMode(Settings));
+        // Unix: exactly the mode given. Windows: no preserved ACL was passed, so owner-only.
+        if (OperatingSystem.IsWindows()) AssertPrivate(Settings);
+        else Assert.Equal(Private | UnixFileMode.OtherRead, File.GetUnixFileMode(Settings));
         Assert.Single(Directory.GetFiles(Path.GetDirectoryName(Settings)!));
     }
 

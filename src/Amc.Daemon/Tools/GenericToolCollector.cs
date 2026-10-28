@@ -48,7 +48,8 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
         return (c[0].Pid, c[0].ProcStart);
     }
     private readonly Dictionary<string, Tracked> _tracked = [];
-    private readonly int _uid = (int)Mono_Uid();
+    /// <summary>Our uid as /proc prints it; null on Windows, which has no uids (and no libc to ask).</summary>
+    private static readonly string? Uid = OperatingSystem.IsWindows() ? null : GetUid().ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -184,13 +185,15 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
         return sum;
     }
 
+    /// <summary>Only our own processes are agents. Ownership comes from the /proc status Uid line, so without one it is false.</summary>
     private bool OwnedByMe(int pid)
     {
+        if (Uid is null) return false;
         var status = _proc.ReadStatus(pid);
         var line = status?.Split('\n').FirstOrDefault(l => l.StartsWith("Uid:", StringComparison.Ordinal));
-        return line is not null && line.Split((char[])['\t', ' '], StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1) == _uid.ToString();
+        return line is not null && line.Split((char[])['\t', ' '], StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1) == Uid;
     }
 
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "getuid")]
-    private static extern uint Mono_Uid();
+    private static extern uint GetUid();
 }

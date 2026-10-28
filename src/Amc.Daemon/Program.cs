@@ -28,9 +28,11 @@ if (options.BindAddress is not ("127.0.0.1" or "localhost" or "::1"))
 options.AllowedHosts = HostAllowList.Resolve(builder.Configuration);
 builder.Services.PostConfigure<AmcOptions>(o => o.AllowedHosts = options.AllowedHosts);
 builder.Services.Configure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(o => o.AllowedHosts = ["*"]);
-// Files we create (db, WAL, logs, socket) are private to this user.
+// Files we create (db, WAL, logs, socket) are private to this user: umask 077 on Unix; on Windows an owner-only,
+// inheritable ACL on the data directory, which every file created in it inherits.
 if (!OperatingSystem.IsWindows()) Amc.Daemon.Infrastructure.NativeUmask.Set(0x3F /* 077 */);
 Directory.CreateDirectory(options.DataDir);
+if (OperatingSystem.IsWindows()) Amc.Core.Security.OwnerOnly.Restrict(options.DataDir);
 // Unix socket paths are limited (104 bytes on macOS, 108 on Linux, counting the terminating NUL).
 var socketLimit = OperatingSystem.IsMacOS() ? 103 : 107;
 if (System.Text.Encoding.UTF8.GetByteCount(options.SocketPath) > socketLimit)

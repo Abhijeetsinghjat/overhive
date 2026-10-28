@@ -76,10 +76,7 @@ public sealed class CliHarness : IDisposable
 
     public Task<int> Run(params string[] argv) => Run("", false, argv);
 
-    public void Dispose()
-    {
-        try { Directory.Delete(Dir, recursive: true); } catch (IOException) { }
-    }
+    public void Dispose() => Fixtures.TempDirs.Delete(Dir);
 
     public static Agent Agent(string id, string? title = null, AgentStatus status = AgentStatus.Running, string? parent = null,
         TimeSpan? lastActivityAgo = null, int? pid = null) => new()
