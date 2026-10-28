@@ -9,6 +9,8 @@ public static class EntryPoint
 {
     public static async Task<int> Main(string[] args)
     {
+        // Hooks run this on every tool event: skip all CLI setup, and never turn an argument problem into a hook failure.
+        if (args.Length > 0 && args[0] == Amc.Core.Providers.HookForwarder.Subcommand) return await Hooks.HookForward.MainAsync(args[1..]);
         Console.OutputEncoding = Encoding.UTF8;
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>

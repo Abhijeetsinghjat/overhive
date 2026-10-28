@@ -92,6 +92,13 @@ public sealed class CliContext
     /// <summary>Test hook: token to use instead of reading the token file.</summary>
     public string? TokenOverride { get; init; }
     public string? UrlOverride { get; set; }
+    /// <summary>Whether hook commands are written in their Windows form (test hook: defaults to the real OS).</summary>
+    public bool IsWindows { get; init; } = OperatingSystem.IsWindows();
+    /// <summary>Test hook: the agentctl that Windows hooks run, instead of this process.</summary>
+    public Amc.Core.Providers.HookForwarder? ForwarderOverride { get; init; }
+
+    /// <summary>The <c>agentctl hook-forward</c> invocation the Windows hooks use.</summary>
+    public Amc.Core.Providers.HookForwarder Forwarder => ForwarderOverride ?? Hooks.HookForward.Current();
 
     private CliSettings? _settings;
     private AmcClient? _client;

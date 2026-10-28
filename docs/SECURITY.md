@@ -17,7 +17,7 @@ signal processes. It is designed for a single user on their own machine.
 | Repository-configured git filters | `git status` runs `clean`/`process` filters that a repository's own `.git/config` + `.gitattributes` define, exactly as any shell prompt with git integration does. Only point `WorkspaceRoots` at directories whose repositories you trust (default `~/dev`). |
 | Path traversal via diff/file endpoints | Paths must be relative, contain no NUL, not start with `-`; they are canonicalized, symlinks resolved, and must stay inside a known worktree root; `--` always precedes paths in git invocations. |
 | Command injection | No shell is ever used: every subprocess uses `ProcessStartInfo.ArgumentList`. Signals go through `kill(2)` via P/Invoke. |
-| Monitoring itself disturbing agents | All git calls use `GIT_OPTIONAL_LOCKS=0` (never take `index.lock`), `core.fsmonitor=false`. Hooks fail open (`curl -sf … || true`, 3 s timeout) so a down daemon never blocks an agent. |
+| Monitoring itself disturbing agents | All git calls use `GIT_OPTIONAL_LOCKS=0` (never take `index.lock`), `core.fsmonitor=false`. Hooks fail open (`curl -sf … || true`, or `agentctl hook-forward` on Windows; 3 s timeout) so a down daemon never blocks an agent. |
 | Destructive actions by mistake | Terminate/Kill need `confirm=true` (HTTP 428 otherwise); the UI requires typing the agent's short id; the CLI requires typed confirmation or `--yes`. Pause/resume are reversible. No action deletes files, resets Git state or force-pushes. |
 | Claim verification probing the filesystem | The only filesystem access is an existence check of a path an agent claimed to create, change or delete, canonicalized and only inside a worktree that agent used. File contents are never read for it. |
 | Undocumented agent internals | Claude Code's per-session messaging sockets and their `.key` token files are not read or used. |
@@ -33,7 +33,9 @@ getting confirmation, writes a timestamped backup first, writes atomically, and 
 touches entries marked `agent-mission-control`. `agentctl hooks uninstall` removes them.
 
 The hook command is `curl --unix-socket <state dir>/amcd.sock … || true` (shell-quoted
-path, fail-open). It carries no token, so nothing secret appears in `settings.json` or in
+path, fail-open). On Windows it is `agentctl hook-forward … --socket <state dir>\amcd.sock`,
+which connects to the same socket and fails open the same way (see AGENT_INTEGRATION.md,
+"Hooks on Windows"). Neither carries a token, so nothing secret appears in `settings.json` or in
 `ps`. `agentctl --token` (an override flag) does put the token in argv; the default is to
 read it from the 0600 token file.
 

@@ -53,6 +53,10 @@ public sealed class CliHarness : IDisposable
     public FakeDaemon Daemon { get; } = new();
     public StringWriter Out { get; } = new();
     public StringWriter Err { get; } = new();
+    /// <summary>Write hook commands in their Windows form; off by default so the POSIX shape is pinned on every OS.</summary>
+    public bool Windows { get; set; }
+    /// <summary>The agentctl Windows hooks run (a path with a space and an apostrophe, to exercise quoting).</summary>
+    public Amc.Core.Providers.HookForwarder Forwarder { get; set; } = new(@"C:\Users\Jane O'Neil\AppData\Local\Overhive\agentctl.exe");
 
     public CliContext Context(string input = "", bool interactive = false) => new()
     {
@@ -67,6 +71,8 @@ public sealed class CliHarness : IDisposable
         Now = () => Now,
         HttpHandler = Daemon,
         TokenOverride = "test-token",
+        IsWindows = Windows,
+        ForwarderOverride = Forwarder,
         SettingsOverride = new CliSettings(new Uri("http://127.0.0.1:47821/"), 47821, Path.Combine(Dir, "state"),
             Path.Combine(Dir, "state", "token"), Path.Combine(Dir, "config.json"), Path.Combine(Dir, ".claude")),
     };

@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Amc.Cli.Infrastructure;
+using Amc.Core.Providers;
 using Amc.Core.Providers.Claude;
 using Amc.Core.Security;
 
@@ -61,7 +62,7 @@ public static class HooksFile
         }
     }
 
-    public static HooksPlan PlanInstall(string path, string command, string? rewakeCommand = null)
+    public static HooksPlan PlanInstall(string path, ClaudeHooksConfig.HookCommand command, ClaudeHooksConfig.HookCommand? rewakeCommand = null)
     {
         var (exists, before) = Load(path);
         var after = ClaudeHooksConfig.Install(before, command, rewakeCommand);
@@ -109,11 +110,14 @@ public static class HooksFile
 
     private static IEnumerable<string> Keys(JsonObject s) => s["hooks"] is JsonObject h ? h.Select(kv => kv.Key) : [];
 
+    /// <summary>Entries of one event: inside matcher groups (Claude-like) or listed directly (Cursor, Copilot).</summary>
     private static List<string> Commands(JsonObject s, string ev, bool ours) =>
         s["hooks"]?[ev] is JsonArray groups
-            ? groups.OfType<JsonObject>().SelectMany(g => g["hooks"] as JsonArray ?? [])
-                .Where(h => ClaudeHooksConfig.IsOurs(h) == ours).Select(h => h?.ToJsonString() ?? "").ToList()
+            ? groups.OfType<JsonObject>().SelectMany(g => g["hooks"] is JsonArray hs ? hs : new JsonNode?[] { g }.AsEnumerable())
+                .Where(h => IsOurs(h) == ours).Select(h => h?.ToJsonString() ?? "").ToList()
             : [];
+
+    private static bool IsOurs(JsonNode? h) => ClaudeHooksConfig.IsOurs(h) || ToolHooksConfig.IsOurs(h);
 
     public static string Serialize(JsonObject settings) => settings.ToJsonString(WriteOptions) + "\n";
 

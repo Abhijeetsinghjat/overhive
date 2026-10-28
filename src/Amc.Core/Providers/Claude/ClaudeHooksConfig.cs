@@ -59,6 +59,39 @@ public static class ClaudeHooksConfig
 
     public const string RewakeLogFileName = "rewake.log";
 
+    /// <summary>
+    /// The hook on Windows: Claude Code's exec form (<c>command</c> = absolute agentctl.exe, <c>args</c> = argv), spawned
+    /// directly with no shell, so it behaves the same whether Claude Code would pick Git Bash or PowerShell and needs
+    /// no quoting. agentctl hook-forward does what the curl one-liner does (see <see cref="BuildCommand"/>).
+    /// </summary>
+    public static HookCommand BuildWindowsCommand(HookForwarder forwarder, string socketPath) =>
+        new(forwarder.Executable, forwarder.Args("claude", null, socketPath));
+
+    /// <summary>The Windows asyncRewake waiter (see <see cref="BuildRewakeCommand"/>): agentctl hook-forward --wait.</summary>
+    public static HookCommand BuildWindowsRewakeCommand(HookForwarder forwarder, string socketPath) =>
+        new(forwarder.Executable, forwarder.Args("claude", null, socketPath, wait: true));
+
+    /// <summary>A command hook's <c>command</c>, plus <c>args</c> for the exec form (no shell) when not null.</summary>
+    public sealed record HookCommand(string Command, IReadOnlyList<string>? Args = null)
+    {
+        /// <summary>A shell-form command (the POSIX one-liners).</summary>
+        public static implicit operator HookCommand(string command) => new(command);
+
+        /// <summary>True when <paramref name="hook"/> runs exactly this command.</summary>
+        public bool Matches(JsonNode? hook) =>
+            hook?["command"]?.GetValue<string>() == Command &&
+            (hook?["args"] is JsonArray a
+                ? Args is not null && a.Select(x => x?.GetValue<string>()).SequenceEqual(Args)
+                : Args is null);
+
+        internal JsonObject ToJson()
+        {
+            var o = new JsonObject { ["type"] = "command", ["command"] = Command };
+            if (Args is not null) o["args"] = new JsonArray(Args.Select(a => (JsonNode)JsonValue.Create(a)).ToArray());
+            return o;
+        }
+    }
+
     public static bool IsRewakeInstalled(JsonObject settings) =>
         settings["hooks"] is JsonObject hooks &&
         RewakeEvents.All(r => hooks[r.Event] is JsonArray groups &&
@@ -67,8 +100,10 @@ public static class ClaudeHooksConfig
     /// <summary>POSIX single-quote escaping.</summary>
     public static string ShellQuote(string s) => "'" + s.Replace("'", "'\\''") + "'";
 
+    /// <summary>Ours when the marker is in the command or, for the exec form, in one of its args.</summary>
     public static bool IsOurs(JsonNode? hook) =>
-        hook?["command"]?.GetValue<string>()?.Contains(Marker, StringComparison.Ordinal) == true;
+        hook?["command"]?.GetValue<string>()?.Contains(Marker, StringComparison.Ordinal) == true ||
+        (hook?["args"] as JsonArray)?.Any(a => a is JsonValue v && v.TryGetValue<string>(out var s) && s.Contains(Marker, StringComparison.Ordinal)) == true;
 
     public static bool IsInstalled(JsonObject settings) =>
         settings["hooks"] is JsonObject hooks &&
@@ -76,7 +111,7 @@ public static class ClaudeHooksConfig
                          groups.Any(g => g?["hooks"] is JsonArray hs && hs.Any(IsOurs)));
 
     /// <summary>Returns a copy of <paramref name="settings"/> with our hooks installed (idempotent; replaces old versions of ours).</summary>
-    public static JsonObject Install(JsonObject settings, string command, string? rewakeCommand = null)
+    public static JsonObject Install(JsonObject settings, HookCommand command, HookCommand? rewakeCommand = null)
     {
         var result = Uninstall(settings);
         var hooks = result["hooks"] as JsonObject ?? new JsonObject();
@@ -87,12 +122,7 @@ public static class ClaudeHooksConfig
             hooks[ev] = groups;
             var group = new JsonObject
             {
-                ["hooks"] = new JsonArray(new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = command,
-                    ["timeout"] = TimeoutSeconds,
-                }),
+                ["hooks"] = new JsonArray(With(command.ToJson(), ("timeout", TimeoutSeconds))),
             };
             // Tool events take a matcher; "*" (all tools) is explicit rather than relying on omission.
             if (ev is "PreToolUse" or "PostToolUse" or "PostToolUseFailure") group["matcher"] = "*";
@@ -105,19 +135,18 @@ public static class ClaudeHooksConfig
                 hooks[ev] = groups;
                 var group = new JsonObject
                 {
-                    ["hooks"] = new JsonArray(new JsonObject
-                    {
-                        ["type"] = "command",
-                        ["command"] = rewakeCommand,
-                        ["async"] = true,
-                        ["asyncRewake"] = true,
-                        ["timeout"] = RewakeTimeoutSeconds,
-                    }),
+                    ["hooks"] = new JsonArray(With(rewakeCommand.ToJson(), ("async", true), ("asyncRewake", true), ("timeout", RewakeTimeoutSeconds))),
                 };
                 if (matcher is not null) group["matcher"] = matcher;
                 groups.Add(group);
             }
         return result;
+    }
+
+    private static JsonObject With(JsonObject o, params (string Key, JsonNode? Value)[] fields)
+    {
+        foreach (var (k, v) in fields) o[k] = v;
+        return o;
     }
 
     /// <summary>Returns a copy with every hook entry of ours removed; empty groups/events are pruned. Foreign hooks are preserved.</summary>
