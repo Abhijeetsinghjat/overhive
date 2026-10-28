@@ -25,6 +25,11 @@ public interface IProcSource
     string? ReadLink(int pid, string name);
     /// <summary>Only ever called for agent processes (see <see cref="ProcParsers.EnvSummary"/>).</summary>
     byte[]? ReadEnviron(int pid);
+    /// <summary>
+    /// Whether the process runs as the daemon's user, when the source can tell directly (Windows: token SID).
+    /// Null means unknown: callers fall back to the Uid line of <see cref="ReadStatus"/>.
+    /// </summary>
+    bool? OwnedByCurrentUser(int pid) => null;
     long ClockTicksPerSecond { get; }
     DateTimeOffset BootTime { get; }
 }

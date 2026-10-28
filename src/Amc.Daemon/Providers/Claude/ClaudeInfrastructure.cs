@@ -107,6 +107,8 @@ public sealed class LibcSignalSender : ISignalSender
     public int Send(int pid, int signal)
     {
         if (pid <= 1) return 1; // never signal init or process groups
+        // Windows: the Linux numbers in Signals are mapped to suspend/resume/terminate (see ProcessSignals).
+        if (OperatingSystem.IsWindows()) return Amc.Daemon.Collectors.Processes.ProcessSignals.Send(pid, (Amc.Daemon.Collectors.Processes.Signal)signal) ? 0 : 1;
         return Kill(pid, signal) == 0 ? 0 : Marshal.GetLastWin32Error();
     }
 }

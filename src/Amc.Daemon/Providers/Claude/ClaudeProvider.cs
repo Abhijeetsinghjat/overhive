@@ -88,7 +88,8 @@ public sealed class ClaudeProvider(
             case ControlAction.Kill:
             {
                 var sig = action == ControlAction.Kill ? Signals.SigKill : Signals.SigTerm;
-                var targets = action == ControlAction.Kill ? Tree(pid) : [pid];
+                // Windows terminates without cleanup in the agent, so its children would be orphaned: take the tree.
+                var targets = action == ControlAction.Kill || OperatingSystem.IsWindows() ? Tree(pid) : [pid];
                 if (proc.State(pid) == 'T') signals.Send(pid, Signals.SigCont); // a stopped process cannot handle SIGTERM
                 var err = signals.Send(pid, sig);
                 foreach (var child in targets.Where(p => p != pid)) signals.Send(child, sig);

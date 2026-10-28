@@ -5,6 +5,7 @@ using Amc.Core.Domain;
 using Amc.Core.Events;
 using Amc.Daemon.Infrastructure;
 using Amc.Daemon.Pipeline;
+using Amc.Daemon.Platform;
 
 namespace Amc.Daemon.Collectors.Processes;
 
@@ -68,7 +69,8 @@ public sealed class LiveProcessCollector(
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        if (!(OperatingSystem.IsMacOS() || (OperatingSystem.IsLinux() && Directory.Exists("/proc/self"))))
+        if (!(OperatingSystem.IsMacOS() || (OperatingSystem.IsWindows() && WinProc.IsSupported)
+              || (OperatingSystem.IsLinux() && Directory.Exists("/proc/self"))))
         {
             health.Disabled(HealthName, "process information not available on this OS yet");
             return;
