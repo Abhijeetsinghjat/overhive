@@ -126,6 +126,6 @@ public sealed class GitTestEnv : IAsyncDisposable
         Collector.Dispose();
         await Pipeline.StopAsync(CancellationToken.None);
         Store.Dispose();
-        try { Directory.Delete(Dir, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        Fixtures.TempDirs.Delete(Dir);
     }
 }
