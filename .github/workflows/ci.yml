@@ -102,9 +102,12 @@ jobs:
             }
             if (-not $ok) { Get-Content "$env:RUNNER_TEMP\amcd.out", "$env:RUNNER_TEMP\amcd.err" -ErrorAction SilentlyContinue; throw "daemon did not answer /api/health" }
             "dashboard: HTTP $((Invoke-WebRequest http://127.0.0.1:47821/ -UseBasicParsing).StatusCode)"
-            & "$env:LOCALAPPDATA\Overhive\cli\agentctl.exe" doctor
-            "doctor exit=$LASTEXITCODE"
+            # Informational: the runner has no Claude Code, so its checks fail there; git and curl must be found.
+            $doctor = & "$env:LOCALAPPDATA\Overhive\cli\agentctl.exe" doctor
+            $doctor; "doctor exit=$LASTEXITCODE"
+            if ($doctor -match '^\S+\s+(git|curl)\s+not found') { throw "doctor did not find git or curl on PATH" }
           } finally { Stop-Process -Id $amcd.Id -Force -ErrorAction SilentlyContinue }
+          exit 0
         timeout-minutes: 8
       # One step per test area, each with its own limit, so a hang in one area still reports the others.
       - name: Tests by area
