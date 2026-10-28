@@ -130,7 +130,9 @@ public class TerminalHubTests
         Assert.False(await host.Hub.WriteAsync("T1", "x"u8.ToArray(), CancellationToken.None));
 
         // Log file on disk survives (used after daemon restart).
-        Assert.Equal("hello world", File.ReadAllText(Path.Combine(host.DataDir, "terminals", "T1.log")));
+        // Readable while the hub still holds it open for writing (Windows needs the reader to share write access).
+        using var log = new FileStream(Path.Combine(host.DataDir, "terminals", "T1.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        Assert.Equal("hello world", new StreamReader(log).ReadToEnd());
     }
 
     [Fact]

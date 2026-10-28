@@ -3,6 +3,8 @@ namespace Amc.Daemon.Terminals;
 /// <summary>
 /// Append-only raw output log per terminal (&lt;TerminalDir&gt;/&lt;id&gt;.log, 0600), rotated to
 /// &lt;id&gt;.log.1 when it exceeds <see cref="MaxBytes"/> (so at most 2× on disk per terminal).
+/// Opened with ReadWrite|Delete sharing on every OS so it can be read, and rotated, while being written (Windows
+/// otherwise refuses other opens and renames).
 /// </summary>
 public sealed class TerminalLog : IDisposable
 {
@@ -38,7 +40,7 @@ public sealed class TerminalLog : IDisposable
 
     private FileStream Open()
     {
-        var o = new FileStreamOptions { Mode = FileMode.Append, Access = FileAccess.Write, Share = FileShare.Read };
+        var o = new FileStreamOptions { Mode = FileMode.Append, Access = FileAccess.Write, Share = FileShare.ReadWrite | FileShare.Delete };
         if (!OperatingSystem.IsWindows()) o.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         return new FileStream(_path, o);
     }
@@ -59,7 +61,7 @@ public sealed class TerminalLog : IDisposable
 
     private static byte[] Tail(string path, int max)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var n = (int)Math.Min(max, fs.Length);
         fs.Seek(-n, SeekOrigin.End);
         var buf = new byte[n];

@@ -69,3 +69,21 @@ internal sealed class TerminalHost : IAsyncDisposable
         try { Directory.Delete(DataDir, true); } catch (IOException) { }
     }
 }
+
+/// <summary>A fact that only runs on Linux/macOS (real PTY semantics: controlling tty, sessions, signals).</summary>
+public sealed class UnixFactAttribute : FactAttribute
+{
+    public UnixFactAttribute()
+    {
+        if (OperatingSystem.IsWindows()) Skip = "Unix PTY semantics";
+    }
+}
+
+/// <summary>A fact that only runs on Windows (ConPTY).</summary>
+public sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Windows ConPTY";
+    }
+}

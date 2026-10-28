@@ -30,7 +30,7 @@ internal static class ScriptFallback
         foreach (var (k, v) in env) psi.Environment[k] = v;
 
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("cannot start script(1)");
-        var interactive = o.Output is null && o.Input is null && Libc.IsTty(0);
+        var interactive = o.Output is null && o.Input is null && Term.IsTerminal(0);
         using var raw = interactive ? RawModeGuard.Enter(0) : null;
         var stdin = proc.StandardInput.BaseStream;
         var stdinLock = new SemaphoreSlim(1, 1);
@@ -52,7 +52,7 @@ internal static class ScriptFallback
                     ["cols"] = (int)size.Cols, ["rows"] = (int)size.Rows,
                 },
                 b => _ = WriteIn(b), (_, _) => { },
-                msg => Libc.WriteAll(2, Encoding.UTF8.GetBytes($"\x1b[2m[agentctl] {msg}\x1b[0m\r\n")));
+                msg => Term.WriteAll(2, Encoding.UTF8.GetBytes($"\x1b[2m[agentctl] {msg}\x1b[0m\r\n")));
             link.Start();
         }
 
@@ -64,7 +64,7 @@ internal static class ScriptFallback
             int n;
             while ((n = await src.ReadAsync(buf)) > 0)
             {
-                if (o.Output is not null) o.Output.Write(buf, 0, n); else Libc.WriteAll(1, buf.AsSpan(0, n));
+                if (o.Output is not null) o.Output.Write(buf, 0, n); else Term.WriteAll(1, buf.AsSpan(0, n));
                 link?.EnqueueOutput(buf.AsSpan(0, n));
             }
         });

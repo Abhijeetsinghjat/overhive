@@ -64,6 +64,21 @@ jobs:
           AMC_Port=1 "$cli" run -- /bin/echo plain
           echo "exit=$?"
         timeout-minutes: 3
+      - name: ConPTY smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cli = "src/Amc.Cli/bin/Release/net10.0/agentctl.exe"
+          $d = Join-Path $env:RUNNER_TEMP "amc-smoke"; New-Item -ItemType Directory -Force $d | Out-Null; Set-Content "$d/token" x  # no daemon needed
+          $env:AMC_DataDir = $d; $env:AMC_Port = "1"
+          & $cli run -- cmd.exe /d /c "echo hello-from-conpty& exit 3"
+          "exit=$LASTEXITCODE"
+          & $cli run -- powershell -NoProfile -Command "'console=' + -not [Console]::IsOutputRedirected"
+          "exit=$LASTEXITCODE"
+          & $cli run -- definitely-not-here-amc
+          "exit=$LASTEXITCODE"
+          exit 0
+        timeout-minutes: 3
       # One step per test area, each with its own limit, so a hang in one area still reports the others.
       - name: Tests by area
         shell: bash

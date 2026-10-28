@@ -4,9 +4,11 @@ using System.Text;
 
 namespace Amc.Cli.Native;
 
-public sealed class PtySpawnException(string message, int errno) : Exception(message)
+public sealed class PtySpawnException(string message, int errno, int? commandExitCode = null) : Exception(message)
 {
     public int Errno { get; } = errno;
+    /// <summary>Shell-style exit code when the command itself could not be run: 127 not found, 126 not executable.</summary>
+    public int? CommandExitCode { get; } = commandExitCode;
 }
 
 /// <summary>
@@ -19,7 +21,7 @@ public sealed class PtySpawnException(string message, int errno) : Exception(mes
 /// Signal dispositions are reset to default and the mask cleared, because the .NET runtime ignores
 /// SIGPIPE and ignored dispositions survive exec.
 /// </summary>
-public sealed class PtyProcess : IDisposable
+public sealed class PtyProcess : IPtyProcess
 {
     private readonly object _writeLock = new();
     private int _master;
@@ -68,7 +70,9 @@ public sealed class PtyProcess : IDisposable
             var envPtrs = env.Select(e => Track(Marshal.StringToCoTaskMemUTF8(e), allocated)).Append(IntPtr.Zero).ToArray();
 
             var rc = Libc.posix_spawnp(out var pid, argv[0], fa, attr, argvPtrs, envPtrs);
-            if (rc != 0) throw new PtySpawnException($"cannot execute '{argv[0]}': {Marshal.GetPInvokeErrorMessage(rc)}", rc);
+            if (rc != 0)
+                throw new PtySpawnException($"cannot execute '{argv[0]}': {Marshal.GetPInvokeErrorMessage(rc)}", rc,
+                    rc == Libc.ENOENT ? 127 : rc == Libc.EACCES ? 126 : null);
             // posix_spawn returns after the child exec'd (glibc: CLONE_VFORK; macOS: in-kernel), so the slave was already opened.
             Libc.close(slave);
             slave = -1;
@@ -97,6 +101,24 @@ public sealed class PtyProcess : IDisposable
     }
 
     public bool Resize(WinSize size) => size.IsValid && _master >= 0 && Libc.SetWinSize(_master, size);
+
+    /// <summary>A background grandchild may keep the slave open after the child exited; stop after 300 ms of quiet.</summary>
+    public int IdleAfterExitMs => 300;
+
+    /// <summary>poll + read on the master; EIO/EOF (all slave fds closed) is -1.</summary>
+    public int Read(Span<byte> buffer, int timeoutMs)
+    {
+        var p = new PollFd { Fd = _master, Events = Libc.POLLIN };
+        var pr = Libc.poll(ref p, 1, timeoutMs);
+        if (pr < 0) return Libc.Errno == Libc.EINTR ? 0 : -1;
+        if (pr == 0) return 0;
+        var n = Libc.read(_master, ref MemoryMarshal.GetReference(buffer), buffer.Length);
+        if (n > 0) return (int)n;
+        if (n < 0 && (Libc.Errno is var e && (e == Libc.EINTR || e == Libc.EAGAIN))) return 0;
+        return -1;
+    }
+
+    public void Hangup() => SignalGroup(Libc.SIGHUP);
 
     /// <summary>Blocks until the child exits. Returns the shell-style exit code (128+signal when killed).</summary>
     public int WaitForExit()
@@ -150,13 +172,12 @@ public sealed class PtyProcess : IDisposable
     }
 }
 
-/// <summary>Puts a terminal fd in raw mode and guarantees restoration (idempotent, callable from any thread).</summary>
+/// <summary>Puts the local terminal in raw mode and guarantees restoration (idempotent, callable from any thread).</summary>
 public sealed class RawModeGuard : IDisposable
 {
-    private readonly int _fd;
-    private byte[]? _saved;
+    private Action? _restore;
 
-    private RawModeGuard(int fd, byte[] saved) { _fd = fd; _saved = saved; }
+    internal RawModeGuard(Action restore) => _restore = restore;
 
     public static RawModeGuard? Enter(int fd)
     {
@@ -166,14 +187,10 @@ public sealed class RawModeGuard : IDisposable
         var raw = (byte[])saved.Clone();
         Libc.cfmakeraw(raw);
         if (Libc.tcsetattr(fd, Libc.TCSANOW, raw) != 0) return null;
-        return new RawModeGuard(fd, saved);
+        return new RawModeGuard(() => Libc.tcsetattr(fd, Libc.TCSANOW, saved));
     }
 
-    public void Restore()
-    {
-        var s = Interlocked.Exchange(ref _saved, null);
-        if (s is not null) Libc.tcsetattr(_fd, Libc.TCSANOW, s);
-    }
+    public void Restore() => Interlocked.Exchange(ref _restore, null)?.Invoke();
 
     public void Dispose() => Restore();
 }
