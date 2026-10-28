@@ -184,19 +184,12 @@ public static class Verifier
 
     private static FileChange? FindFile(WorldState s, string path, HashSet<string> wts)
     {
-        var abs = path.StartsWith('/') || (path.Length > 2 && path[1] == ':');
+        var abs = PathText.IsAbsolute(path);
+        if (!abs) path = PathText.Slashes(path);
         foreach (var w in wts)
         {
-            var wt = s.Worktrees[w];
-            string rel;
-            if (abs)
-            {
-                var root = wt.Root.TrimEnd('/', '\\') + "/";
-                if (!path.Replace('\\', '/').StartsWith(root.Replace('\\', '/'), StringComparison.Ordinal)) continue;
-                rel = path.Replace('\\', '/')[root.Length..];
-            }
-            else rel = path;
-            if (s.Files.TryGetValue(Ids.FileKey(w, rel), out var f)) return f;
+            var rel = abs ? PathText.Relative(s.Worktrees[w].Root, path) : path;
+            if (rel is not null && s.Files.TryGetValue(Ids.FileKey(w, rel), out var f)) return f;
         }
         if (abs) return null;
         // A path relative to a sub-directory: match by suffix within the agent's worktrees.

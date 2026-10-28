@@ -35,10 +35,13 @@ public static class Ids
     public static string MainAgent(string provider, string sessionId) => $"{provider}:{sessionId}";
     /// <summary>Colon-separated (never "/") so ids are safe as single URL path segments.</summary>
     public static string SubAgent(string provider, string sessionId, string agentId) => $"{provider}:{sessionId}:{agentId}";
-    public static string Repository(string commonDir) => "repo:" + Hash(commonDir);
-    public static string Worktree(string root) => "wt:" + Hash(root);
+    /// <summary>On Windows the directory is hashed in <see cref="PathText"/> canonical form, so "C:\r\.git" and "C:/r/.git" agree.</summary>
+    public static string Repository(string commonDir) => "repo:" + Hash(PathKey(commonDir));
+    public static string Worktree(string root) => "wt:" + Hash(PathKey(root));
     public static string Process(int pid, string procStart) => $"pid:{pid}:{procStart}";
     public static string FileKey(string worktreeId, string relPath) => worktreeId + "|" + relPath;
+
+    private static string PathKey(string path) => PathText.Windows ? PathText.Normalize(path) : path;
 
     private static string Hash(string s) =>
         Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(s)))[..12];

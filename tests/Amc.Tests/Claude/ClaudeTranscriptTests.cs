@@ -212,4 +212,12 @@ public sealed class ClaudeTranscriptTests : IDisposable
         Assert.Equal(["/work/repo/src", "/work/wt-feature", "/work/x.txt", "/home/u"], c);
         Assert.Equal(["/home/u/sub", "/home/u"], ClaudeEventMapper.BashPathCandidates("cd sub && make", "/home/u").ToList());
     }
+
+    [Fact]
+    public void Bash_path_candidates_understand_windows_paths()
+    {
+        if (!OperatingSystem.IsWindows()) return; // drive letters and Git Bash "/c/" only mean something there
+        var c = ClaudeEventMapper.BashPathCandidates(@"cd C:\work\repo && git -C /c/work/wt status; type D:/x.txt", @"C:\Users\u").ToList();
+        Assert.Equal(["C:/work/repo", "C:/work/wt", "D:/x.txt", @"C:\Users\u"], c);
+    }
 }

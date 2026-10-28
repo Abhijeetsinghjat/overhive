@@ -65,11 +65,15 @@ public static class AgentToolCatalog
         var byId = Defaults().ToDictionary(t => t.Id);
         foreach (var t in user ?? [])
         {
-            if (!AgentTool.ValidId(t.Id) || string.IsNullOrWhiteSpace(t.Command) || t.Command.Contains('/') && !t.Command.StartsWith('/')) continue;
+            if (!AgentTool.ValidId(t.Id) || string.IsNullOrWhiteSpace(t.Command) || IsRelativePath(t.Command)) continue;
             if (t.ProcessNames.Count == 0) t.ProcessNames = [Path.GetFileName(t.Command)];
             if (string.IsNullOrEmpty(t.Name)) t.Name = t.Id;
             byId[t.Id] = t;
         }
         return [.. byId.Values];
     }
+
+    /// <summary>A command with a directory part that is not absolute ("bin/x", and on Windows "bin\x"): ambiguous, so refused.</summary>
+    private static bool IsRelativePath(string command) =>
+        (command.Contains('/') || PathText.Windows && command.Contains('\\')) && !PathText.IsAbsolute(command);
 }

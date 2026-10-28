@@ -88,13 +88,12 @@ public static class WorktreeRef
         var idPrefix = worktrees.Where(w => w.Id.StartsWith(query, StringComparison.Ordinal) || w.Id.StartsWith("wt:" + query, StringComparison.Ordinal)).ToList();
         if (idPrefix.Count == 1) return idPrefix[0];
 
-        if (query.StartsWith('/') || query.StartsWith('.') || query.StartsWith('~'))
+        if (PathText.IsAbsolute(query) || query.StartsWith('.') || query.StartsWith('~'))
         {
-            var expanded = query.StartsWith('~')
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), query[1..].TrimStart('/'))
-                : Path.Combine(cwd, query);
-            var full = Path.GetFullPath(expanded).TrimEnd('/');
-            var containing = live.Where(w => full == w.Root.TrimEnd('/') || full.StartsWith(w.Root.TrimEnd('/') + "/", StringComparison.Ordinal))
+            var full = query.StartsWith('~')
+                ? PathText.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), query[1..].TrimStart('/', PathText.Windows ? '\\' : '/'))
+                : PathText.Combine(cwd, query);
+            var containing = live.Where(w => PathText.IsUnder(w.Root, full))
                 .OrderByDescending(w => w.Root.Length).FirstOrDefault();
             if (containing is not null) return containing;
             throw new CliException($"no known worktree contains {full}");

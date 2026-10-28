@@ -177,7 +177,7 @@ public sealed class ClaudeRegistryTests : IDisposable
         var created = Assert.Single(_h.Sink.OfType(EventTypes.AgentCreated));
         var d = created.Payload<AgentCreatedData>()!;
         Assert.Equal((AgentKind.Main, 4242, "987654"), (d.Kind, d.Pid!.Value, d.ProcStart!));
-        Assert.EndsWith($"-work-repo/{S}.jsonl", d.TranscriptPath);
+        Assert.EndsWith(Path.Combine("-work-repo", $"{S}.jsonl"), d.TranscriptPath); // a native file path
         var st = Assert.Single(_h.Sink.OfType(EventTypes.AgentStatusChanged));
         Assert.Equal((AgentStatus.Running, Evidence.Reported), (st.Payload<AgentStatusData>()!.Status, st.Evidence));
 

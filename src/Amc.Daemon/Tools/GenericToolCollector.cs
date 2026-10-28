@@ -104,7 +104,7 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
                     Type = EventTypes.AgentCreated, Source = EventSources.Process, Evidence = Evidence.Observed, AgentId = id,
                     DedupeKey = $"created:{id}",
                     Data = Json.ToObject(new AgentCreatedData(AgentKind.Main, tool.Id, AgentType: tool.Name,
-                        Title: $"{tool.Name} in {Path.GetFileName(cwd?.TrimEnd('/') ?? "") ?? "?"}", Cwd: cwd, Pid: pid, ProcStart: st.ProcStart)),
+                        Title: $"{tool.Name} in {Path.GetFileName(cwd?.TrimEnd('/', Path.DirectorySeparatorChar) ?? "") ?? "?"}", Cwd: cwd, Pid: pid, ProcStart: st.ProcStart)),
                 }, ct);
             }
             if (cwd != t.Cwd)

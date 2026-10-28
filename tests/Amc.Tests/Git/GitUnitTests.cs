@@ -1,3 +1,4 @@
+using Amc.Core.Domain;
 using Amc.Daemon;
 using Amc.Daemon.Collectors.Git;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,9 +96,9 @@ public sealed class GitUnitTests
             File.CreateSymbolicLink(Path.Combine(root, "loop"), Path.Combine(root, "loop"));
 
             Assert.True(GitPaths.TryResolve(root, "src/new/file.cs", out var rel, out var full, out _));
-            Assert.Equal(("src/new/file.cs", Path.Combine(root, "src/new/file.cs")), (rel, full));
+            Assert.Equal(("src/new/file.cs", PathText.Normalize(Path.Combine(root, "src/new/file.cs"))), (rel, full));
             Assert.True(GitPaths.TryResolve(root, "./inner-link//x.cs", out rel, out full, out _));
-            Assert.Equal(("inner-link/x.cs", Path.Combine(root, "src", "x.cs")), (rel, full));
+            Assert.Equal(("inner-link/x.cs", PathText.Normalize(Path.Combine(root, "src", "x.cs"))), (rel, full));
             Assert.False(GitPaths.TryResolve(root, "src/up/" + Path.GetFileName(outside), out _, out _, out var err));
             Assert.Equal("path escapes the worktree", err);
             Assert.False(GitPaths.TryResolve(root, "loop/x", out _, out _, out _));
@@ -120,7 +121,7 @@ public sealed class GitUnitTests
         {
             foreach (var d in new[] { "a/.git", "node_modules/x/.git", ".hidden/y/.git", "b/c/.git", "b/c/nested/.git", "d/e/f/g/.git" })
                 Directory.CreateDirectory(Path.Combine(root, d));
-            var found = GitCollector.FindWorkingTrees([root], 3).Select(p => Path.GetRelativePath(root, p)).Order().ToList();
+            var found = GitCollector.FindWorkingTrees([root], 3).Select(p => PathText.Relative(root, p)).Order().ToList();
             Assert.Equal(["a", "b/c"], found);
         }
         finally { Directory.Delete(root, true); }

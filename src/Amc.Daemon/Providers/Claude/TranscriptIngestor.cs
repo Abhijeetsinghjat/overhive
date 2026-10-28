@@ -65,8 +65,8 @@ public sealed partial class TranscriptIngestor
     public (string ProjectDir, string SessionId)? SessionOf(string path)
     {
         var rel = Path.GetRelativePath(ProjectsDir, path);
-        if (rel.StartsWith("..", StringComparison.Ordinal)) return null;
-        var parts = rel.Split(Path.DirectorySeparatorChar);
+        if (rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel)) return null; // rooted: another drive
+        var parts = rel.Split(['/', Path.DirectorySeparatorChar]);
         var projectDir = Path.Combine(ProjectsDir, parts[0]);
         if (parts.Length == 2 && parts[1].EndsWith(".jsonl", StringComparison.Ordinal)) return (projectDir, parts[1][..^".jsonl".Length]);
         if (parts.Length >= 4 && parts[2] == "subagents") return (projectDir, parts[1]);

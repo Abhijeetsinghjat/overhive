@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Amc.Core.Domain;
 using Amc.Core.Events;
 using Amc.Daemon.Collectors.Git;
 using Amc.Daemon.Infrastructure;
@@ -55,7 +56,7 @@ public sealed class GitTestEnv : IAsyncDisposable
         return env;
     }
 
-    /// <summary>Creates a repository with one commit containing the given files.</summary>
+    /// <summary>Creates a repository with one commit containing the given files; returns its root in <see cref="PathText"/> form (as git reports it).</summary>
     public string InitRepo(string relDir, params (string Path, string Content)[] files)
     {
         var dir = Path.Combine(Dir, relDir);
@@ -65,7 +66,7 @@ public sealed class GitTestEnv : IAsyncDisposable
         if (files.Length == 0) Write(dir, "README.md", "readme\n");
         RunGit(dir, "add", "-A");
         RunGit(dir, "commit", "-q", "-m", "initial");
-        return dir;
+        return PathText.Normalize(dir);
     }
 
     public static void Write(string dir, string rel, string content)

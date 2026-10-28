@@ -1,3 +1,4 @@
+using Amc.Core.Domain;
 using System.Globalization;
 
 namespace Amc.Daemon.Collectors.Git;
@@ -36,7 +37,7 @@ public static class GitParsers
             var (key, value) = Split(field, ' ');
             switch (key)
             {
-                case "worktree": root = value; break;
+                case "worktree": root = PathText.Normalize(value); break; // git prints "C:/x" on Windows; canonicalize the drive case
                 case "HEAD": head = value; break;
                 case "branch": branch = value.StartsWith(BranchPrefix, StringComparison.Ordinal) ? value[BranchPrefix.Length..] : value; break;
                 case "detached": detached = true; break;

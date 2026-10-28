@@ -85,7 +85,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
     private string? ValidateCwd(string? raw, out string why)
     {
         why = "";
-        if (string.IsNullOrWhiteSpace(raw) || raw.Contains('\0') || !raw.StartsWith('/')) { why = "Working directory must be an absolute path"; return null; }
+        if (string.IsNullOrWhiteSpace(raw) || raw.Contains('\0') || !PathText.IsAbsolute(raw)) { why = "Working directory must be an absolute path"; return null; }
         string real;
         try
         {
@@ -95,10 +95,10 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { why = "Working directory is not accessible"; return null; }
         real = Path.TrimEndingDirectorySeparator(real);
-        static bool Inside(string root, string p) => p == root || p.StartsWith(Path.TrimEndingDirectorySeparator(root) + "/", StringComparison.Ordinal);
-        if (!Inside(AmcOptions.Home, real) && !Inside("/tmp", real)) { why = "Working directory must be inside your home directory"; return null; }
+        static bool Inside(string root, string p) => PathText.IsUnder(root, p);
+        if (!Inside(AmcOptions.Home, real) && !Inside(OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp", real)) { why = "Working directory must be inside your home directory"; return null; }
         var known = state.Read(s => s.Worktrees.Values.Where(w => !w.Removed).Select(w => w.Root).ToList());
-        if (known.Any(r => Inside(r, real)) || _options.EffectiveWorkspaceRoots.Any(r => Inside(Path.TrimEndingDirectorySeparator(r), real)))
+        if (known.Any(r => Inside(r, real)) || _options.EffectiveWorkspaceRoots.Any(r => Inside(r, real)))
             return real;
         why = "Working directory must be a known repository/worktree or inside a workspace root";
         return null;
@@ -107,7 +107,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
     private static string? FindAgentctl()
     {
         var sibling = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "cli", "agentctl"));
-        return File.Exists(sibling) ? sibling : ToolRegistry.FindExecutable("agentctl");
+        return ToolRegistry.Executables(sibling).FirstOrDefault(File.Exists) ?? ToolRegistry.FindExecutable("agentctl");
     }
 
 }
