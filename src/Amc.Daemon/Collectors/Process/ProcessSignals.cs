@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
+using Amc.Daemon.Platform;
 
 namespace Amc.Daemon.Collectors.Processes;
 
@@ -43,6 +45,11 @@ internal static class ProcNative
 /// as soon as it reads the terminal. Under `agentctl run` the parent does not use job control, so
 /// pause/resume is transparent.</item>
 /// <item>A stopped TUI keeps its terminal in raw mode; the user's keystrokes queue in the PTY.</item>
+/// <item>Windows has no signals; <see cref="Send"/> maps them: STOP/TSTP suspend every thread (NtSuspendProcess),
+/// CONT resumes (NtResumeProcess; suspends are counted, one resume undoes one suspend), TERM and KILL both
+/// TerminateProcess with exit code 128 + signal. There is no graceful stop: a background daemon cannot deliver Ctrl-C
+/// to another console without attaching to it, so TERM runs no cleanup code in the target. HUP, INT, QUIT, USR1/2 and
+/// WINCH are not delivered (Send returns false); interrupting goes through the terminal instead.</item>
 /// </list>
 /// Always verify identity (<see cref="SendVerified"/>) before signalling a pid taken from stored state:
 /// pids are reused.
@@ -55,8 +62,18 @@ public static class ProcessSignals
     public static bool Send(int pid, Signal sig)
     {
         if (pid <= 1) return false; // never signal init or "all processes" (0/-1)
+        if (OperatingSystem.IsWindows()) return SendWindows(pid, sig, null);
         return ProcNative.kill(pid, Native(sig)) == 0;
     }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static bool SendWindows(int pid, Signal sig, long? start) => sig switch
+    {
+        Signal.Stop or Signal.Tstp => WinProc.Suspend(pid, start),
+        Signal.Cont => WinProc.Resume(pid, start),
+        Signal.Term or Signal.Kill => WinProc.Terminate(pid, (uint)(128 + (int)sig), start),
+        _ => false,
+    };
 
     /// <summary>The OS signal number. macOS numbers differ for these (STOP is 17 there, 19 means CONT).</summary>
     public static int Native(Signal sig) => !OperatingSystem.IsMacOS() ? (int)sig : sig switch
@@ -68,19 +85,23 @@ public static class ProcessSignals
     /// <summary>Signals a process group (kill(-pgid, sig)).</summary>
     public static bool SendGroup(int pgid, Signal sig)
     {
-        if (pgid <= 1) return false;
+        if (pgid <= 1 || OperatingSystem.IsWindows()) return false; // no process groups on Windows
         return ProcNative.kill(-pgid, Native(sig)) == 0;
     }
 
     /// <summary>Signals only if /proc still shows the same starttime (PID-reuse safe; tiny TOCTOU window remains).</summary>
     public static bool SendVerified(int pid, string procStart, Signal sig, IProcSource? proc = null)
     {
+        // Windows: the creation time is checked on the same handle the signal goes through, so there is no window at all.
+        if (OperatingSystem.IsWindows() && proc is null or WinProcSource)
+            return pid > 1 && long.TryParse(procStart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var start) && SendWindows(pid, sig, start);
         var st = ProcParsers.ParseStat((proc ?? DefaultProc).ReadStat(pid));
         return st is not null && st.ProcStart == procStart && Send(pid, sig);
     }
 
     public static bool IsAlive(int pid) =>
-        pid > 0 && (ProcNative.kill(pid, 0) == 0 || Marshal.GetLastPInvokeError() != Esrch);
+        pid > 0 && (OperatingSystem.IsWindows() ? WinProc.IsAlive(pid)
+            : ProcNative.kill(pid, 0) == 0 || Marshal.GetLastPInvokeError() != Esrch);
 
     public static bool IsAlive(int pid, string? procStart, IProcSource? proc = null)
     {
@@ -88,9 +109,10 @@ public static class ProcessSignals
         return st is not null && st.State != 'Z' && (procStart is null || st.ProcStart == procStart);
     }
 
-    /// <summary>Process group id, or null when the process is gone.</summary>
+    /// <summary>Process group id, or null when the process is gone (always null on Windows, which has none).</summary>
     public static int? GetProcessGroup(int pid)
     {
+        if (OperatingSystem.IsWindows()) return null;
         var g = ProcNative.getpgid(pid);
         return g > 0 ? g : null;
     }

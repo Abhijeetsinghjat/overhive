@@ -99,18 +99,17 @@ public static class Signals
     public static readonly int SigCont = OperatingSystem.IsMacOS() ? 19 : 18, SigStop = OperatingSystem.IsMacOS() ? 17 : 19;
 }
 
-/// <summary>POSIX kill(2). Windows has no signals: there every send fails with ENOSYS, and libc is never loaded.</summary>
+/// <summary>POSIX kill(2). Windows has no signals: sends go through <see cref="Amc.Daemon.Collectors.Processes.ProcessSignals"/> and libc is never loaded.</summary>
 public sealed class LibcSignalSender : ISignalSender
 {
-    private const int Enosys = 38;
-
     [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
     private static extern int Kill(int pid, int sig);
 
     public int Send(int pid, int signal)
     {
         if (pid <= 1) return 1; // never signal init or process groups
-        if (OperatingSystem.IsWindows()) return Enosys;
+        // Windows: the Linux numbers in Signals are mapped to suspend/resume/terminate (see ProcessSignals).
+        if (OperatingSystem.IsWindows()) return Amc.Daemon.Collectors.Processes.ProcessSignals.Send(pid, (Amc.Daemon.Collectors.Processes.Signal)signal) ? 0 : 1;
         return Kill(pid, signal) == 0 ? 0 : Marshal.GetLastWin32Error();
     }
 }
