@@ -41,7 +41,7 @@ detail (for example tool-call counts older than the detail window) restart from 
 
 ## Windows via WSL2
 
-Until native Windows support lands, Overhive can run inside WSL2 (the Linux on Windows that many AI coding
+Until native Windows support is complete (see the README for the early native preview), Overhive can run inside WSL2 (the Linux on Windows that many AI coding
 CLIs already use). This setup is **not yet verified**; if you try it, please report how it went.
 
 1. Run your AI tools inside WSL (Ubuntu or another distribution), and install Overhive there with the Linux
