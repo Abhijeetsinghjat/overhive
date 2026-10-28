@@ -11,26 +11,40 @@ namespace Amc.Daemon.Platform;
 /// <see cref="MacProcSource"/>. Time unit: 1 tick = 100 ns counted from 1601-01-01 (FILETIME), so a process's start
 /// stamp (stat field 22) is its creation FILETIME, and CPU is reported in the same unit. A suspended process shows
 /// state 'T'. There are no process groups or controlling terminals: pgrp is the pid, session is the Windows session id,
-/// and "fd/0" is never reported. <see cref="ListPids"/> takes the system snapshot; per-pid stat/status reads are served
-/// from it while it is fresh (<see cref="MaxSnapshotAge"/>) and otherwise take a new one.
+/// and "fd/0" is never reported. <see cref="ListPids"/> takes one system snapshot, and stat reads made on the same
+/// thread while its pids are being enumerated (the scan loop) are served from it; any other stat read takes a fresh
+/// snapshot, so liveness and state checks are never stale. Status (RSS only) may come from a snapshot up to
+/// <see cref="MaxStatusAge"/> old.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WinProcSource : IProcSource
 {
-    /// <summary>How long a snapshot answers single-process reads (state checks while pausing poll faster than this matters).</summary>
-    public static readonly TimeSpan MaxSnapshotAge = TimeSpan.FromMilliseconds(250);
+    /// <summary>How old a snapshot may be to answer <see cref="ReadStatus"/> (working set only).</summary>
+    public static readonly TimeSpan MaxStatusAge = TimeSpan.FromSeconds(2);
 
     private sealed record Snapshot(Dictionary<int, WinProcInfo> ByPid, long TakenAt);
 
+    [ThreadStatic] private static Snapshot? _scanning;
     private readonly Lock _gate = new();
     private byte[]? _buffer;
-    private volatile Snapshot? _snap;
+    private volatile Snapshot? _last;
 
-    public IEnumerable<int> ListPids() => Take().ByPid.Keys.Where(p => p > 0).ToList();
+    public IEnumerable<int> ListPids()
+    {
+        var snap = Take();
+        var outer = _scanning;
+        _scanning = snap;
+        try
+        {
+            foreach (var pid in snap.ByPid.Keys)
+                if (pid > 0) yield return pid;
+        }
+        finally { _scanning = outer; }
+    }
 
     public string? ReadStat(int pid)
     {
-        if (Info(pid) is not { } p) return null;
+        if ((_scanning ?? Take()).ByPid.GetValueOrDefault(pid) is not { } p) return null;
         var state = p.Threads == 0 ? 'Z' : p.Suspended ? 'T' : 'R';
         var comm = WinProcText.Comm(p.Name);
         // Fields 3..22 of proc(5), as MacProcSource: state ppid pgrp session tty_nr … utime … starttime. CPU goes in utime.
@@ -44,7 +58,7 @@ public sealed class WinProcSource : IProcSource
     public byte[]? ReadEnviron(int pid) => WinProc.EnvironmentOf(pid) is { } env ? Join(env) : null;
 
     public string? ReadStatus(int pid) =>
-        Info(pid) is { } p ? string.Create(CultureInfo.InvariantCulture, $"VmRSS:\t{p.WorkingSetBytes / 1024} kB\n") : null;
+        (_scanning ?? (_last is { } l && Stopwatch.GetElapsedTime(l.TakenAt) <= MaxStatusAge ? l : Take())).ByPid.GetValueOrDefault(pid) is { } p ? string.Create(CultureInfo.InvariantCulture, $"VmRSS:\t{p.WorkingSetBytes / 1024} kB\n") : null;
 
     /// <summary>"cwd" only (read from the process's PEB; null for processes we may not read).</summary>
     public string? ReadLink(int pid, string name) => name == "cwd" ? WinProc.Cwd(pid) : null;
@@ -55,13 +69,6 @@ public sealed class WinProcSource : IProcSource
     public long ClockTicksPerSecond => TimeSpan.TicksPerSecond;
     public DateTimeOffset BootTime { get; } = new(1601, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private WinProcInfo? Info(int pid)
-    {
-        var s = _snap;
-        if (s is null || Stopwatch.GetElapsedTime(s.TakenAt) > MaxSnapshotAge) s = Take();
-        return s.ByPid.GetValueOrDefault(pid);
-    }
-
     private Snapshot Take()
     {
         lock (_gate)
@@ -69,7 +76,7 @@ public sealed class WinProcSource : IProcSource
             var list = WinProc.Processes(ref _buffer);
             var byPid = new Dictionary<int, WinProcInfo>(list.Count);
             foreach (var p in list) byPid.TryAdd(p.Pid, p);
-            return _snap = new Snapshot(byPid, Stopwatch.GetTimestamp());
+            return _last = new Snapshot(byPid, Stopwatch.GetTimestamp());
         }
     }
 
