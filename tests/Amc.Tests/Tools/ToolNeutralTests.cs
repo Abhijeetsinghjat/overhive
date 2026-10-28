@@ -77,3 +77,24 @@ public class ProtocolReceiverTests
         Assert.False((await r.ReportAsync(R("file", new() { ["path"] = "/etc/passwd" }), default)).Ok);
     }
 }
+
+public class ToolHookPathTests
+{
+    [Fact]
+    public void Patch_and_path_fields_are_made_absolute_against_the_cwd_lexically()
+    {
+        var input = new JsonObject { ["input"] = "*** Begin Patch\n*** Add File: src/new.ts\n+x\n*** Update File: /work/repo/src/old.ts\n*** Delete File: ../other/x.ts\n*** End Patch" };
+        Assert.Equal([("/work/repo/src/new.ts", "created"), ("/work/repo/src/old.ts", "modified"), ("/work/other/x.ts", "deleted")],
+            ToolHookReceiver.FilesOf(input, "/work/repo"));
+        Assert.Equal([("/work/repo/app.py", "modified")], ToolHookReceiver.FilesOf(new JsonObject { ["file_path"] = "app.py" }, "/work/repo"));
+        Assert.Empty(ToolHookReceiver.FilesOf(new JsonObject { ["file_path"] = "app.py" }, null)); // no cwd: not attributable
+    }
+
+    [Fact]
+    public void Windows_tool_paths_come_out_in_canonical_form()
+    {
+        if (!OperatingSystem.IsWindows()) return; // drive letters only mean something there
+        Assert.Equal([("C:/work/repo/src/a.ts", "modified")], ToolHookReceiver.FilesOf(new JsonObject { ["file_path"] = @"src\a.ts" }, @"c:\work\repo"));
+        Assert.Equal([("D:/x/b.ts", "modified")], ToolHookReceiver.FilesOf(new JsonObject { ["path"] = @"D:\x\b.ts" }, @"C:\work"));
+    }
+}
