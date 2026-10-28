@@ -103,12 +103,27 @@ jobs:
               }
               Start-Sleep -Seconds 1
             }
-            if (-not $ok) { Get-Content "$base\logs\amcd.log" -ErrorAction SilentlyContinue; throw "daemon did not answer /api/health" }
+            if (-not $ok) { Get-Content "$base\logs\amcd.log", "$base\logs\amcd.err.log" -ErrorAction SilentlyContinue; throw "daemon did not answer /api/health" }
             "dashboard: HTTP $((Invoke-WebRequest http://127.0.0.1:47821/ -UseBasicParsing).StatusCode)"
             # Informational: the runner has no Claude Code, so its checks fail there; git and curl must be found.
             $doctor = & "$base\cli\overhive.exe" doctor
             $doctor; "doctor exit=$LASTEXITCODE"
             if ($doctor -match '^\S+\s+(git|curl)\s+not found') { throw "doctor did not find git or curl on PATH" }
+            # The documented stop and start (docs/TROUBLESHOOTING.md, Windows (native)).
+            Stop-ScheduledTask -TaskName Overhive
+            $exe = "$base\amcd\amcd.exe"
+            foreach ($i in 1..20) { if (-not (Get-Process amcd -ErrorAction SilentlyContinue | Where-Object Path -eq $exe)) { break }; Start-Sleep -Milliseconds 500 }
+            Start-Sleep -Seconds 6
+            if (Get-Process amcd -ErrorAction SilentlyContinue | Where-Object Path -eq $exe) { throw "amcd still running after Stop-ScheduledTask" }
+            "stopped: amcd gone after Stop-ScheduledTask"
+            Start-ScheduledTask -TaskName Overhive
+            $ok = $false
+            foreach ($i in 1..60) {
+              try { $h = Invoke-RestMethod http://127.0.0.1:47821/api/health -Headers @{ 'X-Amc-Token' = (Get-Content $token -Raw).Trim() }; $ok = $true; break } catch { }
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ok) { throw "daemon did not answer /api/health after Start-ScheduledTask" }
+            "health after Start-ScheduledTask: $($h.overall)"
           } finally {
             powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Uninstall
           }

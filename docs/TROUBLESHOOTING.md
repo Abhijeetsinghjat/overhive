@@ -44,12 +44,15 @@ detail (for example tool-call counts older than the detail window) restart from 
 Native Windows is an early preview; please report what you find.
 
 - **Start at logon.** `install.ps1` / `install-release.ps1` register a per-user scheduled task named `Overhive`
-  (no admin rights). At logon it runs `%LOCALAPPDATA%\Overhive\amcd-task.cmd` through a headless console host,
-  so no window opens, and restarts `amcd` a few seconds after a crash. Check it with `Get-ScheduledTask Overhive`
+  (no admin rights). At logon it runs a small supervisor, `%LOCALAPPDATA%\Overhive\amcd-task.ps1`, through a
+  headless console host, so no window opens. The supervisor restarts `amcd` a few seconds after a crash and ends
+  it when the task is stopped. Check it with `Get-ScheduledTask Overhive`
   and `Get-ScheduledTaskInfo Overhive`, or in Task Scheduler (Task Scheduler Library, `Overhive`).
-- **Logs.** `%LOCALAPPDATA%\Overhive\logs\amcd.log`; the previous run is kept as `amcd.prev.log`.
+- **Logs.** `%LOCALAPPDATA%\Overhive\logs\amcd.log`, and `amcd.err.log` for errors and exit codes; the previous
+  run is kept as `amcd.prev.log` and `amcd.err.prev.log`.
   Follow it with `Get-Content "$env:LOCALAPPDATA\Overhive\logs\amcd.log" -Wait -Tail 50`.
-- **Stop, start, restart.** `Stop-ScheduledTask Overhive`, then `Start-ScheduledTask Overhive`. To stop it
+- **Stop, start, restart.** `Stop-ScheduledTask Overhive` stops the daemon (it is not restarted until you start
+  it again); `Start-ScheduledTask Overhive` starts it. Restart: run both, one after the other. To stop it
   starting at logon but keep it installed: `Disable-ScheduledTask Overhive` (`Enable-ScheduledTask` undoes it).
   Re-running the installer also restarts the daemon (and updates it).
 - **`amcd is already running`.** The task's daemon owns the socket; a second `amcd` refuses to start instead of

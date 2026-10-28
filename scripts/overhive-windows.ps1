@@ -3,7 +3,8 @@
 #   <InstallDir>\amcd\amcd.exe, <InstallDir>\cli\agentctl.exe (+ overhive.exe, the same program)
 #   both folders on the user PATH (HKCU\Environment)
 #   a per-user scheduled task "Overhive" that starts amcd at logon, hidden, and restarts it after a crash.
-# Logs: <InstallDir>\logs\amcd.log (the previous run is kept as amcd.prev.log).
+# Logs: <InstallDir>\logs\amcd.log and amcd.err.log (the previous run is kept as *.prev.log).
+# Stop / start: Stop-ScheduledTask Overhive / Start-ScheduledTask Overhive (stopping really ends amcd).
 # Never touches Claude Code or other AI-tool settings (use `overhive hooks install` for that, separately).
 # Works in Windows PowerShell 5.1 and PowerShell 7.
 
@@ -70,8 +71,8 @@ function Stop-Overhive([string]$Base) {
     $task = Get-ScheduledTask -TaskName $script:OverhiveTaskName -ErrorAction SilentlyContinue
     if ($task) { Stop-ScheduledTask -TaskName $script:OverhiveTaskName -ErrorAction SilentlyContinue }
     # The task's restart loop first (so it does not start amcd again), then amcd itself, also one started by hand.
-    $runner = Join-Path $Base 'amcd-task.cmd'
-    Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe' OR Name = 'conhost.exe'" -ErrorAction SilentlyContinue |
+    $runner = Join-Path $Base 'amcd-task.ps1'
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'conhost.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($runner, [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     $exe = Join-Path $Base 'amcd\amcd.exe'
@@ -86,28 +87,50 @@ function Stop-Overhive([string]$Base) {
 function Register-OverhiveTask([string]$Base) {
     $logs = Join-Path $Base 'logs'
     New-Item -ItemType Directory -Force $logs | Out-Null
-    # The task runs this script through a headless console host: no window at logon, and the daemon's
-    # output goes to the log. It restarts amcd after a crash (exit code other than 0, or 1 = already running).
-    $runner = Join-Path $Base 'amcd-task.cmd'
-    $cmd = @(
-        '@echo off'
-        'rem Started at logon by the "Overhive" scheduled task (scripts/overhive-windows.ps1). Do not edit.'
-        'if exist "%~dp0logs\amcd.log" move /y "%~dp0logs\amcd.log" "%~dp0logs\amcd.prev.log" >nul'
-        ':start'
-        'echo [%date% %time%] starting amcd>>"%~dp0logs\amcd.log"'
-        '"%~dp0amcd\amcd.exe" >>"%~dp0logs\amcd.log" 2>&1'
-        'set rc=%errorlevel%'
-        'echo [%date% %time%] amcd exited with code %rc%>>"%~dp0logs\amcd.log"'
-        'if "%rc%"=="0" exit /b 0'
-        'if "%rc%"=="1" exit /b 1'
-        'ping -n 4 127.0.0.1 >nul'
-        'goto start'
-    )
-    [IO.File]::WriteAllLines($runner, [string[]]$cmd, (New-Object Text.UTF8Encoding $false))
+    # The task runs this supervisor in Windows PowerShell through a headless console host: no window at logon,
+    # the daemon's output goes to the logs, and amcd is restarted after a crash (any exit code other than
+    # 0, or 1 = already running). Stop-ScheduledTask ends only the console host, so the supervisor watches it
+    # and ends amcd (and itself) when it is gone: stopping the task really stops the daemon.
+    $runner = Join-Path $Base 'amcd-task.ps1'
+    $supervisor = @'
+# Started at logon by the "Overhive" scheduled task (scripts/overhive-windows.ps1). Do not edit.
+# Runs amcd and restarts it after a crash; ends it when the task is stopped (Stop-ScheduledTask Overhive).
+$ErrorActionPreference = 'Continue'
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$logs = Join-Path $here 'logs'
+New-Item -ItemType Directory -Force $logs | Out-Null
+$out = Join-Path $logs 'amcd.log'; $err = Join-Path $logs 'amcd.err.log'
+# The console host the task started: when Task Scheduler stops the task, it ends this process.
+$console = $null
+try {
+    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
+    $console = Get-Process -Id $parentId -ErrorAction Stop
+    $null = $console.Handle   # keep a handle, so HasExited stays right
+} catch { $console = $null }
+while ($true) {
+    foreach ($f in $out, $err) { if (Test-Path $f) { Move-Item -Force $f ($f -replace '\.log$', '.prev.log') } }
+    $amcd = Start-Process -FilePath (Join-Path $here 'amcd\amcd.exe') -WorkingDirectory $here -NoNewWindow -PassThru `
+        -RedirectStandardOutput $out -RedirectStandardError $err
+    $null = $amcd.Handle      # without it, Windows PowerShell 5.1 loses the exit code
+    while (-not $amcd.WaitForExit(500)) {
+        if ($console -and $console.HasExited) { Stop-Process -Id $amcd.Id -Force -ErrorAction SilentlyContinue; exit 0 }
+    }
+    $rc = $amcd.ExitCode
+    Add-Content $err "[$(Get-Date -Format s)] amcd exited with code $rc"
+    if ($rc -eq 0 -or $rc -eq 1) { exit $rc }
+    Start-Sleep -Seconds 3
+    if ($console -and $console.HasExited) { exit 0 }
+}
+'@
+    [IO.File]::WriteAllText($runner, $supervisor, (New-Object Text.UTF8Encoding $true))
+    $old = Join-Path $Base 'amcd-task.cmd'   # written by earlier development builds
+    if (Test-Path $old) { Remove-Item -Force $old }
 
     $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
-    $action = New-ScheduledTaskAction -Execute $conhost -Argument "--headless `"$runner`"" -WorkingDirectory $Base
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $action = New-ScheduledTaskAction -Execute $conhost -WorkingDirectory $Base `
+        -Argument "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$runner`""
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `

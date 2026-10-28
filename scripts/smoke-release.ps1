@@ -29,7 +29,7 @@ function Wait-Health {
     }
     $info = Get-ScheduledTaskInfo -TaskName $script:OverhiveTaskName -ErrorAction SilentlyContinue
     if ($info) { "task: last result $($info.LastTaskResult), last run $($info.LastRunTime)" }
-    Get-Content (Join-Path $base 'logs\amcd.log') -ErrorAction SilentlyContinue | Select-Object -Last 40
+    Get-Content (Join-Path $base 'logs\amcd.log'), (Join-Path $base 'logs\amcd.err.log') -ErrorAction SilentlyContinue | Select-Object -Last 40
     throw "daemon did not answer /api/health"
 }
 
@@ -81,12 +81,26 @@ try {
     if ($after.Count -ne 1 -or $after[0].Id -eq $before) { throw "update did not restart the daemon exactly once" }
 
     "== stop and start the task"
+    # The documented stop: Stop-ScheduledTask alone must end amcd, and the supervisor must not start it again.
     Stop-ScheduledTask -TaskName $script:OverhiveTaskName
-    Start-Sleep -Seconds 5
-    "amcd processes after Stop-ScheduledTask: $((Get-AmcdProcess).Count) (informational)"
+    foreach ($i in 1..20) { if ((Get-AmcdProcess).Count -eq 0) { break }; Start-Sleep -Milliseconds 500 }
+    if ((Get-AmcdProcess).Count -ne 0) { throw "amcd still running 10 s after Stop-ScheduledTask" }
+    Start-Sleep -Seconds 6   # longer than the supervisor's 3 s restart delay
+    if ((Get-AmcdProcess).Count -ne 0) { throw "amcd came back after Stop-ScheduledTask" }
+    if (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -like '*amcd-task.ps1*' }) { throw "supervisor still running after Stop-ScheduledTask" }
+    "stopped: no amcd and no supervisor after Stop-ScheduledTask"
     Start-ScheduledTask -TaskName $script:OverhiveTaskName
     $h = Wait-Health
-    "health after restart: $($h.overall)"
+    "health after Start-ScheduledTask: $($h.overall); amcd processes: $((Get-AmcdProcess).Count)"
+    if ((Get-AmcdProcess).Count -ne 1) { throw "expected one amcd after Start-ScheduledTask" }
+
+    "== restart after a crash"
+    $before = (Get-AmcdProcess)[0].Id
+    Stop-Process -Id $before -Force   # exit code -1: the supervisor restarts it after 3 s
+    $h = Wait-Health
+    $after = Get-AmcdProcess
+    "health after crash: $($h.overall); amcd pid $before -> $($after.Id -join ',')"
+    if ($after.Count -ne 1 -or $after[0].Id -eq $before) { throw "the supervisor did not restart amcd after a crash" }
 
     "== uninstall"
     Invoke-Installer @('-Uninstall')
