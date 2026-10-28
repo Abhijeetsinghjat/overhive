@@ -24,23 +24,40 @@ public sealed class ShellCommand
     public string Text { get; set; } = "";
 }
 
+/// <summary>Which shell's quoting rules a command line follows.</summary>
+public enum ShellDialect
+{
+    /// <summary>sh / bash / zsh (also Git Bash on Windows): backslash escapes, '…' and "…" quotes, # comments.</summary>
+    Posix,
+    /// <summary>Windows PowerShell / pwsh: backslash is a path separator, backtick escapes, '…' literal ('' inside), "…" with backtick escapes, # comments.</summary>
+    PowerShell,
+    /// <summary>cmd.exe: only "…" quotes, ^ escapes, &amp; / &amp;&amp; / || / | separators, no comments, no $ or backtick syntax.</summary>
+    Cmd,
+}
+
 /// <summary>
 /// A small, forgiving POSIX-shell / PowerShell / cmd tokenizer. It never executes or expands anything:
 /// it splits a command line into simple commands (on ; &amp;&amp; || | &amp; newlines and parentheses), removes quotes,
 /// records redirections, command substitutions and heredoc bodies. Unbalanced quotes are tolerated.
-/// With <c>windows: true</c> a backslash is a path separator, not an escape (PowerShell escapes with a backtick).
+/// With <c>windows: true</c> a backslash is a path separator, not an escape (PowerShell escapes with a backtick);
+/// <see cref="ShellDialect.Cmd"/> follows cmd.exe's rules instead.
 /// </summary>
 public static class ShellLexer
 {
-    public static List<ShellCommand> Parse(string text, bool windows = false)
+    public static List<ShellCommand> Parse(string text, bool windows = false) =>
+        Parse(text, windows ? ShellDialect.PowerShell : ShellDialect.Posix);
+
+    public static List<ShellCommand> Parse(string text, ShellDialect dialect)
     {
-        var p = new Parser(text ?? "", windows);
+        var p = new Parser(text ?? "", dialect);
         p.Run();
         return p.Commands;
     }
 
-    private sealed class Parser(string s, bool windows)
+    private sealed class Parser(string s, ShellDialect dialect)
     {
+        private readonly bool windows = dialect != ShellDialect.Posix;
+        private readonly bool cmd = dialect == ShellDialect.Cmd;
         public readonly List<ShellCommand> Commands = [];
         private ShellCommand _cur = new();
         private readonly StringBuilder _word = new();
@@ -55,6 +72,7 @@ public static class ShellLexer
             while (_i < s.Length)
             {
                 var c = s[_i];
+                if (cmd && CmdChar(c)) continue;
                 if (c == '#' && !_inWord) { SkipComment(); continue; }
                 switch (c)
                 {
@@ -103,6 +121,30 @@ public static class ShellLexer
         }
 
         private char At(int i) => i < s.Length ? s[i] : '\0';
+
+        /// <summary>cmd.exe: ^ escapes, ' # ` $ are ordinary characters, a leading @ (echo suppression) is dropped. True when handled.</summary>
+        private bool CmdChar(char c)
+        {
+            switch (c)
+            {
+                case '^':
+                    if (At(_i + 1) == '\n') { _i += 2; return true; } // line continuation
+                    if (_i + 1 < s.Length) Append(s[_i + 1]);
+                    _i += 2; return true;
+                case '@' when !_inWord && _cur.Words.Count == 0:
+                    _i++; return true;
+                case '\'' or '#' or '`' or '$':
+                    Append(c); _i++; return true;
+                case '"':
+                    _inWord = true;
+                    _i++;
+                    while (_i < s.Length && s[_i] != '"') _word.Append(s[_i++]);
+                    _i++;
+                    return true;
+                default:
+                    return false;
+            }
+        }
 
         private void Append(char c) { _word.Append(c); _inWord = true; }
 

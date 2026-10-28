@@ -32,6 +32,15 @@ public static class RiskRules
     public const string CredentialAccess = "credential-access";
     public const string PublishDeploy = "publish-deploy";
     public const string DatabaseDrop = "database-drop";
+    public const string EncodedCommand = "encoded-command";
+    public const string DiskWipe = "disk-wipe";
+    public const string ExecutionPolicy = "execution-policy";
+    public const string RegistryEdit = "registry-edit";
+    public const string Elevation = "elevation";
+    public const string ScheduledTask = "scheduled-task";
+    public const string AccountChange = "account-change";
+    public const string SystemPower = "system-power";
+    public const string SecurityDisable = "security-disable";
 }
 
 /// <summary>

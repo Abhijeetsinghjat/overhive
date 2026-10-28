@@ -24,6 +24,15 @@ The classifier (`src/Amc.Core/Risk/RiskClassifier.cs`) is pure: it tokenizes the
 inside a chain, and resolves `~`, `$HOME`, `%USERPROFILE%`, `$env:USERPROFILE`, `..` and globs
 lexically. It never runs anything, never touches the filesystem and never opens a file.
 
+**Shells.** The command's shell is inferred from its shape. A nested payload is lexed with the right
+dialect and classified on its own: `powershell -Command "…"` / `pwsh -c …` and PowerShell positional
+scripts (PowerShell quoting: `'…'` literal with `''` escapes, `"…"` with backtick escapes, `;` `|`
+`&&` `||` separators), `cmd /c "…"` (cmd quoting, `&` `&&` `||` separators, `^` escapes), and Git
+Bash (`bash -c "…"`, the shell Claude Code's Bash tool uses on Windows — its `/c/Users/…` paths map
+through `PathText`). `powershell -EncodedCommand <base64>` is decoded from UTF-16LE and classified;
+an inline `[Convert]::FromBase64String('…')` fed to `iex` is decoded too. Windows directory
+variables (`%SystemRoot%`, `%ProgramFiles%`, `%APPDATA%`, `$env:LOCALAPPDATA` …) expand lexically.
+
 **Worktree.** "Inside" means inside one of the agent's worktrees (or its session's). When the agent is
 not in a Git worktree, its working directory stands in, unless that is `/`, the home directory or a
 system directory. Without either, only the catastrophic cases (`/`, home, system directories) are
@@ -44,11 +53,20 @@ never "outside".
 | `git-discard-changes` | warn if the worktree has uncommitted changes, info if unknown | `git checkout -- .`, `git checkout .`, `git checkout -f`, `git restore .` / `:/` | a clean worktree, single files, `git restore --staged .` |
 | `git-branch-force-delete` | warn; critical for `main`/`master` | `git branch -D`, `--delete --force` | `git branch -d` (merged only) |
 | `chmod-recursive` | world-writable `chmod -R 777` / `a+w` / `o+w`: warn inside the worktree, **critical** outside; other recursive chmod of system/home dirs: warn | `chmod -R` | `chmod -R 755`, non-recursive chmod |
-| `chown-recursive` | warn outside the worktree, **critical** on system/home dirs | `chown -R`, `chgrp -R` | inside the worktree |
+| `chown-recursive` | warn outside the worktree, **critical** on system/home dirs | `chown -R`, `chgrp -R`, and **critical** for `icacls`/`takeown`/`cacls` on a system directory | inside the worktree |
 | `pipe-to-shell` | warn; **critical** with `sudo` | `curl … \| sh`, `wget -qO- … \| bash`, `… \| python3`, `bash <(curl …)`, `sh -c "$(curl …)"`, `iex (irm …)`, `irm … \| iex`, `DownloadString` | `curl … \| jq`, `… \| python3 -m json.tool`, `bash -c '…'` |
-| `credential-access` | **critical** for `~/.ssh` keys, `~/.aws/credentials` and SSO caches, `~/.config/gcloud`, `~/.azure`, `~/.netrc`, `~/.docker/config.json`, `~/.kube/config`, `~/.gnupg`, `~/.git-credentials`, `~/.config/gh/hosts.yml`, keychains/keyrings, `id_rsa`-style keys anywhere, macOS `security find-*-password`; **warn** for `.env` files, `*.pem`/`*.key`/`*.p12`/`*.pfx` outside the worktree, `~/.npmrc`, `~/.pypirc`, and for critical paths used by `ssh -i`, `ls`, `chmod` …; **info** for the project's own `.env` / test certificates | any command argument, redirect or file event with such a **path** | `known_hosts`, `*.pub`, `.env.example`/`.sample`/`.template`, `echo`/`printf` text, URLs |
+| `credential-access` | **critical** for `~/.ssh` keys, `~/.aws/credentials` and SSO caches, `~/.config/gcloud`, `~/.azure`, `~/.netrc`, `~/.docker/config.json`, `~/.kube/config`, `~/.gnupg`, `~/.git-credentials`, `~/.config/gh/hosts.yml`, keychains/keyrings, `id_rsa`-style keys anywhere, macOS `security find-*-password`, Windows credential store (`AppData/…/Credentials`); **warn** for `cmdkey /add`/`/generic`/`/delete` (saves or removes stored credentials), `.env` files, `*.pem`/`*.key`/`*.p12`/`*.pfx` outside the worktree, `~/.npmrc`, `~/.pypirc`, and for critical paths used by `ssh -i`, `ls`, `chmod` …; **info** for the project's own `.env` / test certificates | any command argument, redirect or file event with such a **path** | `known_hosts`, `*.pub`, `.env.example`/`.sample`/`.template`, `echo`/`printf` text, URLs |
 | `publish-deploy` | warn | `npm/pnpm/yarn/bun publish`, `cargo publish`, `twine upload`, `gem push`, `dotnet nuget push`, `docker/podman push`, `terraform/tofu apply/destroy`, `pulumi up/destroy`, `cdk deploy/destroy`, `kubectl delete`, `helm uninstall`, `firebase/fly/wrangler deploy`, `vercel --prod` … | `--dry-run`, `terraform plan`, builds |
 | `database-drop` | warn | `DROP DATABASE/SCHEMA/TABLE` given to a database client (argument, heredoc or pipe), `dropdb`, `mysqladmin drop`, `rails db:drop/db:reset`, `prisma migrate reset`, `dotnet ef database drop`, MongoDB `dropDatabase()` | `grep 'DROP TABLE'`, SQL written to a file |
+| `encoded-command` | warn when it cannot be decoded; **info** when it decodes (the decoded script is then classified by every rule) | `powershell -EncodedCommand <base64>` (decoded from UTF-16LE), `iex ([Convert]::FromBase64String('…'))` and other Base64 payloads run through `iex`/`Invoke-Expression`/`[scriptblock]::Create` | plain `-Command`, Base64 that is not run as code |
+| `disk-wipe` | **critical** for `format`, `Format-Volume`, `Clear-Disk`, `cipher /w`; warn for `diskpart`, `sdelete` | formatting or wiping a volume, overwriting free space | `format` mentioned in quoted text, `format /?` |
+| `execution-policy` | warn | `Set-ExecutionPolicy Unrestricted` / `Bypass` | `Restricted`/`AllSigned`/`RemoteSigned` |
+| `registry-edit` | warn | `reg add/delete/import/copy/load/restore` and `Set-/New-/Remove-ItemProperty`, `New-/Remove-/Set-Item` under `HKLM`/`HKEY_LOCAL_MACHINE`/`HKU` | `HKCU` (current user) edits, `reg query` |
+| `elevation` | warn | `Start-Process -Verb RunAs` (relaunch elevated) | running without `-Verb RunAs` |
+| `scheduled-task` | warn | `schtasks /create`, `Register-ScheduledTask`, `Set-ScheduledTask` (persistence) | `schtasks /query`, `/run` |
+| `account-change` | warn | `net user/localgroup /add` & `/delete`, `New-/Remove-LocalUser`, `New-LocalGroup`, `Add-LocalGroupMember` | `net user` (listing), `Get-LocalUser` |
+| `system-power` | warn | `shutdown /s` / `/r` …, `Stop-Computer`, `Restart-Computer` | `shutdown /a` (abort), `shutdown` with no action |
+| `security-disable` | warn | `Add-MpPreference -Exclusion…`, `Set-MpPreference -DisableRealtimeMonitoring $true`, `netsh … firewall` off/disable | re-enabling (`$false`), `Get-MpPreference` |
 
 ## Privacy
 
@@ -69,6 +87,8 @@ and 2000 overall; the per-agent counters (`agent.risks.info/warn/critical`) coun
 - Lexical only: symlinks, variables other than home/temp/`PWD`, aliases, shell functions and
   scripts (`./cleanup.sh`) are not followed; `find … | xargs rm -rf` targets come from stdin and
   are unknown.
-- Encoded PowerShell (`-EncodedCommand`) is not decoded.
+- Base64 PowerShell is decoded only for `-EncodedCommand` (UTF-16LE) and for a literal passed to
+  `[Convert]::FromBase64String('…')` run through `iex`; payloads assembled or decoded at run time
+  (from a variable, a file, or string concatenation) are flagged as `encoded-command` but not read.
 - Commands that live less than one process scan and are not reported by a hook are not seen.
 - Severity is a judgement: `rm -rf` of a sibling project or a `.env` read may be intended.

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Amc.Core.Risk;
@@ -18,7 +19,8 @@ public static partial class RiskClassifier
         var findings = new List<RiskFinding>();
         if (string.IsNullOrWhiteSpace(command)) return findings;
         var a = new Analyzer(ctx, findings);
-        a.Script(command, ctx.Cwd is { } c && RiskPaths.IsAbsolute(c, ctx.Windows) ? RiskPaths.Normalize(c, ctx.Windows) : null, 0);
+        a.Script(command, ctx.Cwd is { } c && RiskPaths.IsAbsolute(c, ctx.Windows) ? RiskPaths.Normalize(c, ctx.Windows) : null, 0,
+            ctx.Windows ? ShellDialect.PowerShell : ShellDialect.Posix);
         return Dedupe(findings);
     }
 
@@ -51,6 +53,12 @@ public static partial class RiskClassifier
         ["ssh", "ssh-add", "ssh-keygen", "ssh-copy-id", "ls", "dir", "stat", "test", "[", "chmod", "chown", "file", "git", "get-childitem", "gci", "mkdir", "touch"];
     private static readonly HashSet<string> NoPathArgs = ["echo", "printf", "write-host", "write-output", "say"];
     private static readonly HashSet<string> Protected = ["main", "master"];
+    /// <summary>PowerShell host options that take a separate value (so the value is not mistaken for the command).</summary>
+    private static readonly HashSet<string> PwshValued =
+    [
+        "-executionpolicy", "-ep", "-ex", "-exec", "-windowstyle", "-w", "-win", "-outputformat", "-o", "-of", "-inputformat", "-if", "-in",
+        "-configurationname", "-config", "-version", "-v", "-psconsolefile", "-workingdirectory", "-wd", "-settingsfile", "-custompipename",
+    ];
 
     [GeneratedRegex(@"\bdrop\s+(?:database|schema|table)\b(?:\s+if\s+exists)?(?:\s+[^\s;'""]+)?", RegexOptions.IgnoreCase)]
     private static partial Regex SqlDrop();
@@ -63,7 +71,10 @@ public static partial class RiskClassifier
 
     private enum Loc { Unknown, Inside, WorktreeRoot, Temp, OtherWorktree, ToolHome, Outside, Catastrophic }
 
-    private sealed record Unwrapped(string Name, List<string> Args, bool Elevated, string? Cwd, string? Nested);
+    /// <param name="NestedDialect">How <paramref name="Nested"/> is lexed (null: like the enclosing command line).</param>
+    /// <param name="Encoded">The nested script came from <c>-EncodedCommand</c>; <paramref name="Nested"/> is null when it could not be decoded.</param>
+    private sealed record Unwrapped(string Name, List<string> Args, bool Elevated, string? Cwd, string? Nested,
+        ShellDialect? NestedDialect = null, bool Encoded = false);
 
     private sealed record Cmd(string Name, List<string> Args, bool Elevated, string? Cwd, string Span, ShellCommand Shell, int Index, List<ShellCommand> All);
 
@@ -95,24 +106,34 @@ public static partial class RiskClassifier
         private void Add(string rule, string severity, string explanation, string span, string? target = null) =>
             _out.Add(new RiskFinding(rule, severity, explanation, span, target));
 
-        public void Script(string text, string? cwd, int depth)
+        public void Script(string text, string? cwd, int depth, ShellDialect dialect)
         {
             if (depth > MaxDepth || string.IsNullOrWhiteSpace(text)) return;
-            if (PowerShellIex().Match(text) is { Success: true } iex)
+            if (dialect != ShellDialect.Cmd && PowerShellIex().Match(text) is { Success: true } iex)
                 Add(RiskRules.PipeToShell, RiskSeverity.Warn, "Downloads a script and runs it with Invoke-Expression: remote code runs unreviewed",
                     Cap(iex.Value));
+            if (dialect != ShellDialect.Cmd) Base64Scripts(text, cwd, depth);
 
-            var cmds = ShellLexer.Parse(text, _win);
+            var cmds = ShellLexer.Parse(text, dialect);
             var cur = cwd;
             for (var k = 0; k < cmds.Count; k++)
             {
                 var c = cmds[k];
-                foreach (var sub in c.Substitutions) Script(sub, cur, depth + 1);
+                foreach (var sub in c.Substitutions) Script(sub, cur, depth + 1, dialect);
                 var u = Unwrap(c.Words);
                 if (u is null) continue;
-                if (u.Nested is not null) Script(u.Nested, u.Cwd is { } nc ? Dir(nc, cur) : cur, depth + 1);
+                if (u.Encoded)
+                {
+                    if (u.Nested is null)
+                        Add(RiskRules.EncodedCommand, RiskSeverity.Warn,
+                            $"Runs an encoded PowerShell command ({u.Name} -EncodedCommand) that could not be decoded: its intent is hidden", Span(c));
+                    else
+                        Add(RiskRules.EncodedCommand, RiskSeverity.Info,
+                            $"Runs a Base64-encoded PowerShell command; decoded: {Cap(u.Nested)}", Span(c));
+                }
+                if (u.Nested is not null) Script(u.Nested, u.Cwd is { } nc ? Dir(nc, cur) : cur, depth + 1, u.NestedDialect ?? dialect);
                 if (Shells.Contains(u.Name) && u.Nested is null)
-                    foreach (var body in c.Heredocs) Script(body, cur, depth + 1);
+                    foreach (var body in c.Heredocs) Script(body, cur, depth + 1, ShellDialect.Posix);
                 if (CdCommands.Contains(u.Name))
                 {
                     var target = u.Args.FirstOrDefault(a => !a.StartsWith('-') || a == "-");
@@ -128,7 +149,31 @@ public static partial class RiskClassifier
                 Credentials(x);
                 Publish(x);
                 Database(x);
+                WindowsSystem(x);
             }
+        }
+
+        /// <summary>
+        /// <c>iex ([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('…')))</c> and similar: the literal is decoded and
+        /// classified like an encoded command; a Base64 payload that cannot be decoded is reported because its intent is hidden.
+        /// </summary>
+        private void Base64Scripts(string text, string? cwd, int depth)
+        {
+            if (!InvokesExpression().IsMatch(text)) return;
+            foreach (Match m in FromBase64Literal().Matches(text))
+            {
+                var decoded = DecodeBase64Script(m.Groups[1].Value, unicodeOnly: false);
+                if (decoded is null)
+                    Add(RiskRules.EncodedCommand, RiskSeverity.Warn, "Runs a Base64-encoded script that could not be decoded: its intent is hidden", Cap(m.Value));
+                else
+                {
+                    Add(RiskRules.EncodedCommand, RiskSeverity.Info, $"Runs a Base64-encoded script; decoded: {Cap(decoded)}", Cap(m.Value));
+                    Script(decoded, cwd, depth + 1, ShellDialect.PowerShell);
+                }
+            }
+            if (!FromBase64Literal().IsMatch(text) && text.Contains("FromBase64String", StringComparison.OrdinalIgnoreCase))
+                Add(RiskRules.EncodedCommand, RiskSeverity.Warn, "Runs a script decoded from Base64 at run time: its intent is hidden",
+                    Cap(text));
         }
 
         public void FileEvent(string kind, string path)
@@ -164,7 +209,7 @@ public static partial class RiskClassifier
                 while (i < words.Count && IsAssignment(words[i])) i++;
                 if (i >= words.Count) return null;
                 var n = Name(words[i]);
-                if (n is "sudo" or "doas" or "run0")
+                if (n is "sudo" or "doas" or "run0" or "gsudo")
                 {
                     elevated = true; i++;
                     while (i < words.Count && words[i].StartsWith('-'))
@@ -245,17 +290,38 @@ public static partial class RiskClassifier
                 for (var j = 0; j < args.Count; j++)
                 {
                     var a = args[j].ToLowerInvariant();
-                    if (a.StartsWith("-e") && "-encodedcommand".StartsWith(a)) break; // opaque base64: not decoded
-                    if (a is "-c" or "-command" or "-com" or "-comm" or "-comma" or "-comman") { nested = string.Join(' ', args.Skip(j + 1)); break; }
+                    if (a == "-ec" || a.StartsWith("-e") && "-encodedcommand".StartsWith(a))
+                    {
+                        var script = j + 1 < args.Count ? DecodeBase64Script(args[j + 1], unicodeOnly: true) : null;
+                        return new Unwrapped(name, args, elevated, cwd, script, ShellDialect.PowerShell, Encoded: true);
+                    }
+                    if (a is "-c" or "-co" or "-command" or "-com" or "-comm" or "-comma" or "-comman")
+                    {
+                        nested = string.Join(' ', args.Skip(j + 1));
+                        break;
+                    }
+                    if (a is "-f" or "-file" or "-") break;
+                    if (a.StartsWith('-')) { if (PwshValued.Contains(a)) j++; continue; }
+                    // Windows PowerShell runs positional text as -Command; pwsh treats it as a script file.
+                    if (name == "powershell") nested = string.Join(' ', args.Skip(j));
+                    break;
                 }
+                if (nested is not null) return new Unwrapped(name, args, elevated, cwd, nested, ShellDialect.PowerShell);
             }
             else if (name == "cmd")
             {
                 var j = args.FindIndex(a => a.Equals("/c", StringComparison.OrdinalIgnoreCase) || a.Equals("/k", StringComparison.OrdinalIgnoreCase));
-                if (j >= 0) nested = string.Join(' ', args.Skip(j + 1));
+                if (j >= 0) return new Unwrapped(name, args, elevated, cwd, string.Join(' ', args.Skip(j + 1)), ShellDialect.Cmd);
+            }
+            else if (name is "iex" or "invoke-expression")
+            {
+                var text = string.Join(' ', args.Where(a => !a.Equals("-Command", StringComparison.OrdinalIgnoreCase)));
+                if (text.Length > 0) return new Unwrapped(name, args, elevated, cwd, text, ShellDialect.PowerShell);
             }
             else if (name == "eval")
                 nested = string.Join(' ', args);
+            if (Shells.Contains(name) && nested is not null)
+                return new Unwrapped(name, args, elevated, cwd, nested, ShellDialect.Posix); // bash -c on Windows is Git Bash
             return new Unwrapped(name, args, elevated, cwd, nested);
         }
 
@@ -902,10 +968,157 @@ public static partial class RiskClassifier
                 { Add(RiskRules.DatabaseDrop, RiskSeverity.Warn, $"Drops a MongoDB database or collection: {Cap(mm.Value.Trim())}", x.Span); return; }
             }
         }
+
+        // ---- rules: Windows system actions ------------------------------------------------------
+
+        private void WindowsSystem(Cmd x)
+        {
+            if (!_win) return; // these commands and their severities are Windows-only
+            var a = x.Args;
+            var args = a.Select(w => w.ToLowerInvariant()).ToList();
+            bool Has(params string[] opts) => args.Any(opts.Contains);
+            switch (x.Name)
+            {
+                // Disk / volume wipes --------------------------------------------------------------
+                case "format" when args.Count > 0 && !Has("/?"):
+                    Add(RiskRules.DiskWipe, RiskSeverity.Critical, "Formats a volume (format): all data on it is erased", x.Span);
+                    break;
+                case "format-volume":
+                    Add(RiskRules.DiskWipe, RiskSeverity.Critical, "Formats a volume (Format-Volume): all data on it is erased", x.Span);
+                    break;
+                case "clear-disk":
+                    Add(RiskRules.DiskWipe, RiskSeverity.Critical, "Clears a disk (Clear-Disk): the partition table and all data are removed", x.Span);
+                    break;
+                case "diskpart":
+                    Add(RiskRules.DiskWipe, RiskSeverity.Warn, "Runs diskpart: partitions and volumes can be deleted or reformatted", x.Span);
+                    break;
+                case "cipher" when Has("/w") || args.Any(w => w.StartsWith("/w:")):
+                    Add(RiskRules.DiskWipe, RiskSeverity.Critical, "cipher /w overwrites the free space on a drive: deleted files become unrecoverable", x.Span);
+                    break;
+                case "sdelete":
+                    Add(RiskRules.DiskWipe, RiskSeverity.Warn, "Runs sdelete: securely overwrites files or free space (unrecoverable)", x.Span);
+                    break;
+
+                // Execution policy -----------------------------------------------------------------
+                case "set-executionpolicy":
+                    if (args.Any(w => w is "unrestricted" or "bypass"))
+                        Add(RiskRules.ExecutionPolicy, RiskSeverity.Warn,
+                            "Set-ExecutionPolicy Unrestricted/Bypass lets any unsigned script run: the PowerShell script guardrail is removed", x.Span);
+                    break;
+
+                // Registry edits -------------------------------------------------------------------
+                case "reg" when args.FirstOrDefault() is "add" or "delete" or "import" or "copy" or "load" or "restore":
+                    if (TouchesSensitiveHive(a.Skip(1)))
+                        Add(RiskRules.RegistryEdit, RiskSeverity.Warn, $"Edits a machine registry hive (reg {args[0]} under HKLM/HKEY_LOCAL_MACHINE)", x.Span);
+                    break;
+                case "set-itemproperty" or "new-itemproperty" or "remove-itemproperty" or "new-item" or "remove-item" or "set-item"
+                    when TouchesSensitiveHive(a):
+                    Add(RiskRules.RegistryEdit, RiskSeverity.Warn, $"Edits a machine registry hive ({x.Name} under HKLM:)", x.Span);
+                    break;
+                case "reg" when args.FirstOrDefault() is "unload":
+                    break;
+
+                // Elevation ------------------------------------------------------------------------
+                case "start-process" when OptionValue(a, "-Verb") is { } v && v.Equals("runas", StringComparison.OrdinalIgnoreCase):
+                    Add(RiskRules.Elevation, RiskSeverity.Warn, "Start-Process -Verb RunAs relaunches a program elevated (administrator)", x.Span);
+                    break;
+
+                // Scheduled tasks / services for persistence --------------------------------------
+                case "schtasks" when Has("/create"):
+                    Add(RiskRules.ScheduledTask, RiskSeverity.Warn, "Creates a scheduled task (schtasks /create): a common persistence mechanism", x.Span);
+                    break;
+                case "register-scheduledtask" or "set-scheduledtask":
+                    Add(RiskRules.ScheduledTask, RiskSeverity.Warn, $"Creates or changes a scheduled task ({x.Name}): a common persistence mechanism", x.Span);
+                    break;
+
+                // Local accounts -------------------------------------------------------------------
+                case "net" when args.FirstOrDefault() is "user" or "localgroup" && Has("/add", "/delete"):
+                    Add(RiskRules.AccountChange, RiskSeverity.Warn, $"Changes local accounts (net {args[0]} {(Has("/add") ? "/add" : "/delete")})", x.Span);
+                    break;
+                case "new-localuser" or "remove-localuser" or "add-localgroupmember" or "new-localgroup":
+                    Add(RiskRules.AccountChange, RiskSeverity.Warn, $"Changes local accounts or groups ({x.Name})", x.Span);
+                    break;
+                case "cmdkey" when Has("/add", "/generic", "/delete") || args.Any(w => w.StartsWith("/add:") || w.StartsWith("/generic:") || w.StartsWith("/delete:")):
+                    Add(RiskRules.CredentialAccess, RiskSeverity.Warn, "Stores or removes saved credentials (cmdkey)", x.Span);
+                    break;
+
+                // Power ----------------------------------------------------------------------------
+                case "shutdown" when !Has("/a", "-a") && (Has("/s", "/r", "/p", "/g", "/h", "-s", "-r", "-h") || x.Elevated):
+                    Add(RiskRules.SystemPower, RiskSeverity.Warn, "Shuts down or restarts the computer (shutdown)", x.Span);
+                    break;
+                case "stop-computer":
+                    Add(RiskRules.SystemPower, RiskSeverity.Warn, "Shuts down the computer (Stop-Computer)", x.Span);
+                    break;
+                case "restart-computer":
+                    Add(RiskRules.SystemPower, RiskSeverity.Warn, "Restarts the computer (Restart-Computer)", x.Span);
+                    break;
+
+                // Defender / security --------------------------------------------------------------
+                case "add-mppreference" when OptionValue(a, "-ExclusionPath", "-ExclusionExtension", "-ExclusionProcess") is not null:
+                    Add(RiskRules.SecurityDisable, RiskSeverity.Warn, "Add-MpPreference -Exclusion… tells Microsoft Defender to stop scanning a path or process", x.Span);
+                    break;
+                case "set-mppreference" when args.Any(w => w is "-disablerealtimemonitoring") && !Has("$false", "0"):
+                    Add(RiskRules.SecurityDisable, RiskSeverity.Warn, "Set-MpPreference -DisableRealtimeMonitoring turns off Microsoft Defender real-time protection", x.Span);
+                    break;
+                case "netsh" when args.Take(3).Contains("firewall") || args.Take(3).Contains("advfirewall"):
+                    if (args.Any(w => w is "off" or "disable") || args.Contains("state"))
+                        Add(RiskRules.SecurityDisable, RiskSeverity.Warn, "Changes the Windows firewall (netsh … firewall)", x.Span);
+                    break;
+
+                // Permissions on system dirs (icacls / takeown) -----------------------------------
+                case "icacls" or "takeown" or "cacls":
+                    foreach (var w in a.Where(w => !w.StartsWith('-') && !w.StartsWith('/')))
+                    {
+                        var r = RiskPaths.Resolve(w, x.Cwd, _ctx);
+                        if (r.Path is { } p && Locate(p) is (Loc.Catastrophic, var reason) && RiskPaths.IsSystem(p, _win))
+                        { Add(RiskRules.ChownRecursive, RiskSeverity.Critical, $"Changes ownership or ACLs of {reason} ({Show(r)}) with {x.Name}", x.Span, p); break; }
+                    }
+                    break;
+            }
+        }
+
+        private bool TouchesSensitiveHive(IEnumerable<string> words)
+        {
+            foreach (var w in words)
+            {
+                var u = w.Replace('\\', '/').TrimStart('"').ToUpperInvariant();
+                if (u.StartsWith("HKLM:") || u.StartsWith("HKLM/") || u == "HKLM"
+                    || u.StartsWith("HKEY_LOCAL_MACHINE") || u.StartsWith("HKU:") || u.StartsWith("HKEY_USERS")
+                    || u.StartsWith("REGISTRY::HKEY_LOCAL_MACHINE"))
+                    return true;
+            }
+            return false;
+        }
     }
 
     [GeneratedRegex(@"^([ugoa]*)([+=])([rwxXst]*)$")]
     private static partial Regex SymbolicMode();
+    [GeneratedRegex(@"\b(?:iex|invoke-expression)\b|\[scriptblock\]::create", RegexOptions.IgnoreCase)]
+    private static partial Regex InvokesExpression();
+    [GeneratedRegex(@"FromBase64String\s*\(\s*['""]([A-Za-z0-9+/=\s]+)['""]\s*\)", RegexOptions.IgnoreCase)]
+    private static partial Regex FromBase64Literal();
+
+    /// <summary>
+    /// Decodes a Base64 script: UTF-16LE (what <c>-EncodedCommand</c> requires), else UTF-8 when <paramref name="unicodeOnly"/> is false.
+    /// Null when the text is not valid Base64 or does not decode to readable text.
+    /// </summary>
+    internal static string? DecodeBase64Script(string base64, bool unicodeOnly)
+    {
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(string.Concat(base64.Where(c => !char.IsWhiteSpace(c)))); }
+        catch (FormatException) { return null; }
+        if (bytes.Length == 0) return null;
+        // Without a known encoding, UTF-16LE is only assumed when it looks like it (mostly zero high bytes, as for ASCII scripts).
+        var utf16 = bytes.Length % 2 == 0 && (unicodeOnly || bytes.Where((_, i) => i % 2 == 1).Count(x => x == 0) * 2 >= bytes.Length / 2);
+        if (utf16 && Readable(Encoding.Unicode.GetString(bytes)) is { } u) return u;
+        return unicodeOnly ? null : Readable(new UTF8Encoding(false, false).GetString(bytes));
+
+        static string? Readable(string t)
+        {
+            t = t.TrimStart('\uFEFF');
+            return t.Trim().Length > 0 && t.All(c => c is '\r' or '\n' or '\t' || !char.IsControl(c) && c != '\uFFFD' && !char.IsSurrogate(c)) ? t : null;
+        }
+    }
 
     private static string Cap(string s)
     {

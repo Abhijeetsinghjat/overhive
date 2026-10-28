@@ -1,3 +1,5 @@
+using Amc.Core.Domain;
+
 namespace Amc.Core.Risk;
 
 /// <summary>How a path word ended: no glob, a whole-directory glob (<c>*</c>, <c>.*</c>), or a partial pattern (<c>*.log</c>).</summary>
@@ -18,6 +20,27 @@ public static class RiskPaths
     private static readonly string[] HomeVars = ["$HOME", "${HOME}", "$env:HOME", "$env:USERPROFILE", "%USERPROFILE%", "%HOME%"];
     private static readonly string[] TempVars = ["$TMPDIR", "${TMPDIR}", "$TMP", "$TEMP", "${TMP}", "${TEMP}", "$env:TEMP", "$env:TMP", "%TEMP%", "%TMP%"];
     private static readonly string[] CwdVars = ["$PWD", "${PWD}", "$(pwd)", "$(pwd -P)", "$pwd"];
+
+    /// <summary>Windows environment variables for well-known directories, expanded lexically (cmd, PowerShell and ${env:…} spellings).</summary>
+    private static readonly (string Name, string? HomeRel, string Fixed)[] WindowsDirVars =
+    [
+        ("SystemRoot", null, "C:/Windows"), ("windir", null, "C:/Windows"), ("SystemDrive", null, "C:/"),
+        ("ProgramFiles", null, "C:/Program Files"), ("ProgramFiles(x86)", null, "C:/Program Files (x86)"),
+        ("ProgramW6432", null, "C:/Program Files"), ("CommonProgramFiles", null, "C:/Program Files/Common Files"),
+        ("ProgramData", null, "C:/ProgramData"), ("ALLUSERSPROFILE", null, "C:/ProgramData"), ("PUBLIC", null, "C:/Users/Public"),
+        ("APPDATA", "AppData/Roaming", ""), ("LOCALAPPDATA", "AppData/Local", ""),
+    ];
+
+    private static string? ExpandWindowsDirVar(string w, RiskContext ctx)
+    {
+        foreach (var (name, homeRel, fixedPath) in WindowsDirVars)
+        {
+            if (MatchPrefix(w, ["%" + name + "%", "$env:" + name, "${env:" + name + "}"]) is not { } v) continue;
+            string? dir = homeRel is null ? fixedPath : ctx.HomeDir is { } h ? Normalize(h, true) + "/" + homeRel : null;
+            return dir is null ? null : dir.TrimEnd('/') + "/" + w[v.Length..];
+        }
+        return null;
+    }
 
     public static ResolvedPath Resolve(string word, string? cwd, RiskContext ctx)
     {
@@ -44,6 +67,10 @@ public static class RiskPaths
             if (cwd is null) return default;
             w = cwd + "/" + w[cv.Length..];
         }
+        else if (win && ExpandWindowsDirVar(w, ctx) is { } wv)
+        {
+            w = wv;
+        }
         else if (w[0] == '$' || (w[0] == '%' && w.IndexOf('%', 1) > 1))
         {
             var end = w[0] == '%' ? w.IndexOf('%', 1) + 1 : VarEnd(w);
@@ -68,7 +95,10 @@ public static class RiskPaths
         return new ResolvedPath(norm, GlobKind.None);
     }
 
-    /// <summary>Lexically normalizes an absolute path: '/' separators, no '.', '..' or duplicate separators, upper-case drive letter.</summary>
+    /// <summary>
+    /// Lexically normalizes an absolute path: '/' separators, no '.', '..' or duplicate separators, upper-case drive letter.
+    /// On Windows the root follows <see cref="PathText"/> (Git Bash "/c/x" → "C:/x", UNC, "\\?\" prefixes).
+    /// </summary>
     public static string Normalize(string path, bool windows)
     {
         var segs = Segments(path, windows, out var prefix);
@@ -77,8 +107,12 @@ public static class RiskPaths
 
     public static bool IsAbsolute(string p, bool windows) =>
         windows
-            ? p.Length >= 3 && char.IsAsciiLetter(p[0]) && p[1] == ':' && p[2] is '/' or '\\' || p.StartsWith(@"\\") || p.StartsWith("//")
+            ? p.Length >= 3 && char.IsAsciiLetter(p[0]) && p[1] == ':' && p[2] is '/' or '\\' || p.StartsWith(@"\\") || p.StartsWith("//") || IsGitBashDrive(p)
             : p.StartsWith('/');
+
+    /// <summary>Git Bash / MSYS drive path: "/c" or "/c/Users/me" (PathText maps it to "C:/Users/me").</summary>
+    private static bool IsGitBashDrive(string p) =>
+        p.Length >= 2 && p[0] == '/' && char.IsAsciiLetter(p[1]) && (p.Length == 2 || p[2] == '/');
 
     /// <summary>True when <paramref name="path"/> equals <paramref name="root"/> or lies inside it (both normalized).</summary>
     public static bool IsUnderOrEqual(string path, string root, bool windows)
@@ -226,7 +260,7 @@ public static class RiskPaths
     {
         foreach (var v in vars)
         {
-            var cmp = v.StartsWith('%') || v.StartsWith("$env:") ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var cmp = v.StartsWith('%') || v.StartsWith("$env:") || v.StartsWith("${env:") ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             if (w.StartsWith(v, cmp) && (w.Length == v.Length || w[v.Length] is '/' or '\\'))
                 return w[..v.Length];
         }
@@ -247,27 +281,30 @@ public static class RiskPaths
 
     private static List<string> Segments(string path, bool windows, out string prefix)
     {
-        var p = windows ? path.Replace('\\', '/') : path;
+        var p = path;
         prefix = "/";
-        if (windows && p.Length >= 2 && char.IsAsciiLetter(p[0]) && p[1] == ':')
+        if (windows)
         {
-            prefix = char.ToUpperInvariant(p[0]) + ":/";
-            p = p[2..];
-        }
-        else if (windows && p.StartsWith("//"))
-        {
-            prefix = "//";
-            p = p[2..];
+            // PathText decides the root (drive, UNC share, Git Bash /c/…, \\?\ prefixes); the tail is cleaned below.
+            p = PathText.Normalize(path, true);
+            prefix = PathText.Root(p, true);
+            p = p[prefix.Length..];
+            if (!prefix.EndsWith('/')) prefix += "/"; // "//server/share" → "//server/share/"
         }
         var parts = new List<string>();
         foreach (var seg in p.Split('/'))
         {
             if (seg is "" or ".") continue;
-            if (seg == "..") { if (parts.Count > 0 && !(prefix == "//" && parts.Count <= 2)) parts.RemoveAt(parts.Count - 1); continue; }
+            if (seg == "..") { if (parts.Count > 0) parts.RemoveAt(parts.Count - 1); continue; }
             parts.Add(seg);
         }
         return parts;
     }
 
-    private static string Join(string prefix, IEnumerable<string> segs) => prefix + string.Join('/', segs);
+    private static string Join(string prefix, IEnumerable<string> segs)
+    {
+        var tail = string.Join('/', segs);
+        // A UNC share root is "//server/share" (no trailing slash), like PathText.
+        return tail.Length == 0 && prefix.Length > 3 && prefix.StartsWith("//") ? prefix.TrimEnd('/') : prefix + tail;
+    }
 }
