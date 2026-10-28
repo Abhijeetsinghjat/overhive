@@ -6,7 +6,7 @@
 
 <p align="center"><b>Keep watch over every AI coding agent on your machine — any tool, free and open source.</b></p>
 
-<p align="center"><b>🧪 Beta</b> · works on Linux and macOS (new); Windows is on the way · <a href="https://github.com/Abhijeetsinghjat/overhive/issues/new/choose">report a problem</a></p>
+<p align="center"><b>🧪 Beta</b> · works on Linux and macOS (new); Windows in early preview · <a href="https://github.com/Abhijeetsinghjat/overhive/issues/new/choose">report a problem</a></p>
 
 <p align="center"><img src="docs/media/overhive-demo.webp" width="100%" alt="Overhive demo: Codex, Gemini CLI and Copilot agents working in one repository, shown as glowing 3D cells in the Hive view; a cross-worktree conflict, hovering and opening an agent, the Needs you queue, a risky force-push, file changes, activity with evidence labels, token usage, and a message sent from the dashboard that the agent answers"></p>
 <p align="center"><sub>57-second tour with sample agents in a demo repository · ▶ <a href="https://github.com/user-attachments/assets/dc34ef94-923d-440e-8eac-943e7e16831d">Watch in full quality (1080p video)</a></sub></p>
@@ -30,12 +30,17 @@ You can message agents, pause or stop them, and start new sessions of any instal
   `~/.local/state/agent-mission-control`.
 
 > **Beta.** Overhive works and is used daily on Linux; macOS support is new and passes the full test suite
-> on Apple Silicon, but has had few real users yet. Expect rough edges and please report them. Native Windows
-> comes next; on Windows today you can run it inside WSL2 (see [Troubleshooting](docs/TROUBLESHOOTING.md#windows-via-wsl2)).
+> on Apple Silicon, but has had few real users yet. Native Windows is an early preview (build from source); the
+> easiest way on Windows today is WSL2. Expect rough edges and please report them.
 
 ## Install
 
-On macOS with [Homebrew](https://brew.sh) (from v0.2.0, the first release with macOS builds):
+Every install gives you `amcd` (the daemon) and the CLI as `overhive` (also available as `agentctl`).
+Open the dashboard at **http://127.0.0.1:47821**.
+
+### macOS
+
+With [Homebrew](https://brew.sh):
 
 ```bash
 brew tap abhijeetsinghjat/overhive https://github.com/Abhijeetsinghjat/overhive
@@ -43,26 +48,66 @@ brew install overhive
 brew services start overhive      # start now and at every login
 ```
 
-From a release archive (no .NET needed). Download the archive for your machine (`linux-x64`, `linux-arm64`,
-`osx-arm64` for Apple Silicon, `osx-x64` for Intel Macs) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
+Or from a release archive (no .NET needed): download `overhive-<version>-osx-arm64.tar.gz` (Apple Silicon) or
+`osx-x64` (Intel) and `SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
 
 ```bash
-sha256sum --ignore-missing -c SHA256SUMS            # on macOS: shasum -a 256 --ignore-missing -c SHA256SUMS
+shasum -a 256 --ignore-missing -c SHA256SUMS
+tar -xzf overhive-<version>-osx-arm64.tar.gz
+./overhive-<version>-osx-arm64/install-release.sh
+```
+
+The daemon starts at login through a launchd agent.
+
+### Linux
+
+From a release archive (no .NET needed): download `overhive-<version>-linux-x64.tar.gz` (or `linux-arm64`) and
+`SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then:
+
+```bash
+sha256sum --ignore-missing -c SHA256SUMS
 gh attestation verify overhive-<version>-linux-x64.tar.gz -R Abhijeetsinghjat/overhive   # optional: proves GitHub built it from this repo
 tar -xzf overhive-<version>-linux-x64.tar.gz
 ./overhive-<version>-linux-x64/install-release.sh
 ```
 
-From source (needs the .NET 10 SDK):
+The daemon starts at login through a systemd user service (`systemctl --user status amcd`).
+
+### From source (Linux and macOS)
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download):
 
 ```bash
 git clone https://github.com/Abhijeetsinghjat/overhive && cd overhive
 scripts/install.sh
 ```
 
-Both install `amcd` (the daemon, started at login by a systemd user service on Linux or a launchd agent on
-macOS) and the CLI as
-`overhive` (also available as `agentctl`). Open the dashboard at **http://127.0.0.1:47821**.
+### Windows
+
+**Recommended today: WSL2.** Run your AI tools inside WSL and install Overhive there with the Linux steps above;
+open the dashboard in your Windows browser. Setup and limits: [Windows via WSL2](docs/TROUBLESHOOTING.md#windows-via-wsl2).
+
+**Native Windows (early preview).** Windows 10 1809 or later, 64-bit. Not yet tried on a real PC; please
+[report](https://github.com/Abhijeetsinghjat/overhive/issues/new/choose) how it goes. Build from source in
+PowerShell (needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Git):
+
+```powershell
+git clone https://github.com/Abhijeetsinghjat/overhive; cd overhive
+dotnet publish src/Amc.Daemon -c Release -o "$env:LOCALAPPDATA\Overhive\amcd"
+dotnet publish src/Amc.Cli -c Release -o "$env:LOCALAPPDATA\Overhive\cli"
+& "$env:LOCALAPPDATA\Overhive\amcd\amcd.exe"        # keep this window open
+```
+
+Then, in a second PowerShell window, start an agent through Overhive:
+
+```powershell
+& "$env:LOCALAPPDATA\Overhive\cli\agentctl.exe" run -- claude
+```
+
+Works natively: the dashboard, agent and process tracking with pause/resume/stop (stop is always a hard stop
+on Windows), terminals for `agentctl run`, Git and conflict tracking, and owner-only protection of the token
+and database. Not yet: a downloadable build, starting at login, and tested hook setup for Claude Code and the
+other tools (`agentctl hooks install`).
 
 ## Connect your AI tools
 

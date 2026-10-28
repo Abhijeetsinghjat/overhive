@@ -130,15 +130,24 @@ public static class DoctorCommand
         return checks;
     }
 
-    public static string? FindOnPath(CliContext ctx, string exe)
+    /// <summary>First executable <paramref name="exe"/> on PATH; on Windows also "git.exe", "x.cmd" … per PATHEXT.</summary>
+    public static string? FindOnPath(CliContext ctx, string exe) => FindOnPath(ctx, exe, OperatingSystem.IsWindows());
+
+    /// <summary>Same lookup with the Windows rules (PATHEXT, ';' separator) chosen explicitly; for tests on any OS.</summary>
+    public static string? FindOnPath(CliContext ctx, string exe, bool windows)
     {
-        foreach (var dir in (ctx.Env("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(dir, exe);
-            if (!File.Exists(candidate)) continue;
-            if (OperatingSystem.IsWindows() || (File.GetUnixFileMode(candidate) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0)
-                return candidate;
-        }
+        string[] names = windows && !Path.HasExtension(exe)
+            ? [.. (ctx.Env("PATHEXT") is { Length: > 0 } e ? e : ".COM;.EXE;.BAT;.CMD")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries).Select(ext => exe + ext.ToLowerInvariant())]
+            : [exe];
+        foreach (var dir in (ctx.Env("PATH") ?? "").Split(windows ? ';' : Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var name in names)
+            {
+                var candidate = Path.Combine(dir, name);
+                if (!File.Exists(candidate)) continue;
+                if (windows || (File.GetUnixFileMode(candidate) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0)
+                    return candidate;
+            }
         return null;
     }
 
