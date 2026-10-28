@@ -27,7 +27,7 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
         public string? Cwd; public string? WorktreeId; public long LastCpu; public DateTimeOffset LastBusy; public bool? Busy;
     }
 
-    private readonly ProcFs _proc = new();
+    private readonly IProcSource _proc = ProcSources.Default;
     /// <summary>Latest scan: running tool processes (pid → tool, cwd, procStart) and which ones a hook session claimed.</summary>
     private volatile IReadOnlyList<(int Pid, string Tool, string? Cwd, string ProcStart)> _seen = [];
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, string> _claims = new();
@@ -161,14 +161,26 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
         if (raw is null || raw.Length == 0) return null;
         var argv = Encoding.UTF8.GetString(raw).Split('\0', StringSplitOptions.RemoveEmptyEntries);
         if (argv.Length == 0) return null;
-        var exe = Path.GetFileName(argv[0]);
+        var exe = ExeName(argv[0]);
         // Script tools run as `node …/bin/codex`: use the first non-flag argument after the interpreter.
-        var script = Interpreters.Contains(exe) ? argv.Skip(1).Where(a => !a.StartsWith('-')).Select(Path.GetFileName).FirstOrDefault() : null;
+        var script = Interpreters.Any(i => Same(i, exe)) ? argv.Skip(1).Where(a => !a.StartsWith('-')).Select(Path.GetFileName).FirstOrDefault() : null;
         if (script is not null && ScriptExt.FirstOrDefault(x => script.EndsWith(x, StringComparison.Ordinal)) is { } ext) script = script[..^ext.Length];
         foreach (var t in generic)
-            if (t.ProcessNames.Any(n => n == exe || n == st.Comm || n == script)) return t;
+            if (t.ProcessNames.Any(n => Same(n, exe) || Same(n, st.Comm) || Same(n, script))) return t;
         return null;
     }
+
+    /// <summary>File name of argv[0]; on Windows without ".exe" (argv[0] is "C:\\…\\node.exe" there).</summary>
+    internal static string ExeName(string argv0, bool windows = false)
+    {
+        var name = windows ? argv0[(argv0.LastIndexOfAny(['/', '\\']) + 1)..] : Path.GetFileName(argv0);
+        return windows && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+    }
+
+    private static string ExeName(string argv0) => ExeName(argv0, OperatingSystem.IsWindows());
+
+    private static bool Same(string name, string? candidate) =>
+        candidate is not null && name.Equals(candidate, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private static long TreeCpu(int root, Dictionary<int, ProcStat> stats)
     {
@@ -185,9 +197,13 @@ public sealed class GenericToolCollector(ToolRegistry tools, IEventSink sink, IW
         return sum;
     }
 
-    /// <summary>Only our own processes are agents. Ownership comes from the /proc status Uid line, so without one it is false.</summary>
+    /// <summary>
+    /// Only our own processes are agents. The source answers directly where it can (Windows: token SID); otherwise
+    /// ownership comes from the /proc status Uid line, so without one it is false.
+    /// </summary>
     private bool OwnedByMe(int pid)
     {
+        if (_proc.OwnedByCurrentUser(pid) is { } owned) return owned;
         if (Uid is null) return false;
         var status = _proc.ReadStatus(pid);
         var line = status?.Split('\n').FirstOrDefault(l => l.StartsWith("Uid:", StringComparison.Ordinal));
