@@ -74,12 +74,11 @@ jobs:
           merge-multiple: true
       - name: Checksums
         run: cd dist && shopt -s nullglob && sha256sum *.tar.gz *.zip > SHA256SUMS && cat SHA256SUMS
+      # Attest exactly what SHA256SUMS lists, so a release without the Windows zip still attests the rest.
       - name: Build provenance
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: |
-            dist/*.tar.gz
-            dist/*.zip
+          subject-checksums: dist/SHA256SUMS
       - name: Homebrew formula
         run: scripts/homebrew-formula.sh "${GITHUB_REF_NAME#v}" dist/SHA256SUMS > dist/overhive.rb
       # Scoop and winget manifests for the Windows zip (when it was built). The Scoop manifest is attached to
