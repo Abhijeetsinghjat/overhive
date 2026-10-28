@@ -36,7 +36,7 @@ jobs:
         run: AMC_RELEASE="${GITHUB_REF_NAME#v}" AMC_RIDS="${{ matrix.rids }}" scripts/package.sh
       - name: Smoke test the native archive
         run: scripts/smoke-release.sh dist/overhive-*-$(uname -s | sed 's/Darwin/osx/;s/Linux/linux/')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.os }}
           path: dist/*.tar.gz
