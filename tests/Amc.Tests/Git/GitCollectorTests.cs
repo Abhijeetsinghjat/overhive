@@ -15,7 +15,7 @@ public sealed class GitCollectorTests
     {
         await using var env = await GitTestEnv.CreateAsync();
         var main = env.InitRepo("ws/proj");
-        var linked = Path.Combine(env.Dir, "elsewhere", "wt-feature");
+        var linked = PathText.Normalize(Path.Combine(env.Dir, "elsewhere", "wt-feature"));
         Assert.Equal(0, GitTestEnv.RunGit(main, "worktree", "add", "-q", "-b", "feature", linked).Code);
         env.InitRepo("ws/deep/a/b/c/too-deep"); // beyond scan depth 3
 
@@ -44,7 +44,7 @@ public sealed class GitCollectorTests
     {
         await using var env = await GitTestEnv.CreateAsync();
         var main = env.InitRepo("repo");
-        var linked = Path.Combine(env.Dir, "scratch", "wt");
+        var linked = PathText.Normalize(Path.Combine(env.Dir, "scratch", "wt"));
         GitTestEnv.RunGit(main, "worktree", "add", "-q", "-b", "side", linked);
         var outside = Directory.CreateDirectory(Path.Combine(env.Dir, "plain")).FullName;
 
@@ -194,7 +194,7 @@ public sealed class GitCollectorTests
     {
         await using var env = await GitTestEnv.CreateAsync();
         var main = env.InitRepo("repo");
-        var linked = Path.Combine(env.Dir, "tmp-wt");
+        var linked = PathText.Normalize(Path.Combine(env.Dir, "tmp-wt"));
         GitTestEnv.RunGit(main, "worktree", "add", "-q", "-b", "tmp", linked);
         await env.DiscoverAsync(main);
         var id = Ids.Worktree(linked);

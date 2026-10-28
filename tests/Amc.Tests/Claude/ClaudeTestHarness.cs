@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
+using Amc.Core.Domain;
 using Amc.Core.Events;
 using Amc.Core.State;
 using Amc.Daemon;
@@ -55,7 +56,7 @@ public sealed class FakeWorktreeIndex : IWorktreeIndex
         var root = Roots.Keys.Where(r => absolutePath == r || absolutePath.StartsWith(r + "/", StringComparison.Ordinal))
             .OrderByDescending(r => r.Length).FirstOrDefault();
         return ValueTask.FromResult(root is null ? null :
-            new WorktreeHit(WtId(root), "repo:" + Roots[root], root, absolutePath == root ? "" : Path.GetRelativePath(root, absolutePath)));
+            new WorktreeHit(WtId(root), "repo:" + Roots[root], root, PathText.Relative(root, absolutePath)!));
     }
 
     public static string WtId(string root) => "wt:" + root.Replace('/', '_');

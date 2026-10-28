@@ -1,3 +1,4 @@
+using Amc.Core.Domain;
 using System.Globalization;
 
 namespace Amc.Daemon.Collectors.Git;

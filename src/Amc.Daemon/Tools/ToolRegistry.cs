@@ -15,10 +15,21 @@ public sealed class ToolRegistry(IOptions<AmcOptions> options)
     /// <summary>Absolute path of the tool's executable, or null when it is not installed.</summary>
     public static string? FindExecutable(string command)
     {
-        if (command.StartsWith('/')) return File.Exists(command) ? command : null;
-        return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':', StringSplitOptions.RemoveEmptyEntries)
+        if (PathText.IsAbsolute(command)) return Executables(command).FirstOrDefault(File.Exists);
+        return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Append(Path.Combine(AmcOptions.Home, ".local", "bin"))
             .Append(Path.Combine(AmcOptions.Home, ".npm-global", "bin"))
-            .Select(d => Path.Combine(d, command)).FirstOrDefault(File.Exists);
+            .SelectMany(d => Executables(Path.Combine(d, command))).FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>
+    /// The files that would run for <paramref name="path"/>: itself, or on Windows (when it has no extension) the
+    /// PATHEXT variants "x.exe", "x.cmd" … — npm's extension-less shim there is a shell script Windows cannot start.
+    /// </summary>
+    public static IEnumerable<string> Executables(string path)
+    {
+        if (!OperatingSystem.IsWindows() || Path.HasExtension(path)) return [path];
+        return (Environment.GetEnvironmentVariable("PATHEXT") is { Length: > 0 } e ? e : ".COM;.EXE;.BAT;.CMD")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries).Select(ext => path + ext.ToLowerInvariant());
     }
 }

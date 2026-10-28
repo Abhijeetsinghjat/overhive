@@ -330,13 +330,15 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
         return p is null ? null : Absolute(p, cwd);
     }
 
+    /// <summary>Lexically absolute, in <see cref="PathText"/> form (so "/work/repo" stays as written on every OS).</summary>
     private static string? Absolute(string p, string? cwd)
     {
         p = p.Trim();
-        if (p.Length == 0) return null;
-        if (p == "~" || p.StartsWith("~/", StringComparison.Ordinal)) p = Path.Combine(Infrastructure.AmcOptions.Home, p.TrimStart('~').TrimStart('/'));
-        if (!Path.IsPathRooted(p)) { if (cwd is null) return null; p = Path.Combine(cwd, p); }
-        try { return Path.GetFullPath(p); } catch (Exception) { return null; }
+        if (p.Length == 0 || p.Contains('\0')) return null;
+        if (p == "~" || p.StartsWith("~/", StringComparison.Ordinal) || PathText.Windows && p.StartsWith("~\\", StringComparison.Ordinal))
+            return PathText.Combine(Infrastructure.AmcOptions.Home, p[1..].TrimStart('/', '\\'));
+        if (PathText.IsAbsolute(p)) return PathText.Normalize(p);
+        return cwd is null ? null : PathText.Combine(cwd, p);
     }
 
     public static IEnumerable<string> BashPathCandidates(string command, string? cwd)
@@ -348,7 +350,11 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
             var raw = m.Groups["q1"].Success ? m.Groups["q1"].Value : m.Groups["q2"].Success ? m.Groups["q2"].Value : m.Groups["w"].Value;
             if (Absolute(raw, dir) is { } a && seen.Add(a)) { yield return a; if (m.Groups["op"].Value == "cd") dir = a; }
         }
-        foreach (Match m in AbsolutePathToken().Matches(command))
+        var tokens = AbsolutePathToken().Matches(command).AsEnumerable();
+        if (PathText.Windows) // "C:/x" must not also yield its tail "/x"
+            tokens = tokens.Where(m => m.Groups["p"].Index < 2 || command[m.Groups["p"].Index - 1] != ':' || !char.IsAsciiLetter(command[m.Groups["p"].Index - 2]))
+                .Concat(WindowsPathToken().Matches(command)).OrderBy(m => m.Index);
+        foreach (var m in tokens)
         {
             var p = m.Groups["p"].Value.TrimEnd('.', ',', ':');
             if (IgnoredPrefix(p)) continue;
@@ -367,6 +373,9 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
     private static partial Regex CdOrGitC();
     [GeneratedRegex(@"(?:^|[\s=:'""(])(?<p>(?:/|~/)[A-Za-z0-9._@%+\-/~]+)")]
     private static partial Regex AbsolutePathToken();
+    /// <summary>"C:\x\y" / "C:/x/y" (Windows only; Git Bash's "/c/x" is already an absolute token).</summary>
+    [GeneratedRegex(@"(?:^|[\s='""(])(?<p>[A-Za-z]:[\\/][A-Za-z0-9._@%+\-/\\~]+)")]
+    private static partial Regex WindowsPathToken();
     [GeneratedRegex(@"Exit code (\d+)")]
     private static partial Regex ExitCode();
 

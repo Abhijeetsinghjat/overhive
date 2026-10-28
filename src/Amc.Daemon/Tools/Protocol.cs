@@ -95,7 +95,7 @@ public sealed partial class ProtocolReceiver(ToolRegistry tools, IEventSink sink
                 parent is null ? $"created:{id}" : $"spawn:{id}"),
         };
         WorktreeHit? where = null;
-        if (Str(ag, "cwd") is { } cwd && cwd.StartsWith('/')) where = await worktrees.ResolveAsync(cwd, ct);
+        if (Str(ag, "cwd") is { } cwd && PathText.IsAbsolute(cwd)) where = await worktrees.ResolveAsync(cwd, ct);
 
         switch (kind)
         {
@@ -169,8 +169,8 @@ public sealed partial class ProtocolReceiver(ToolRegistry tools, IEventSink sink
 
     private async Task<(string? Wt, string? Repo, string? Rel)> Locate(string? path, CancellationToken ct)
     {
-        if (path is null || !path.StartsWith('/')) return (null, null, null);
-        var hit = await worktrees.ResolveAsync(path, ct);
+        if (!PathText.IsAbsolute(path)) return (null, null, null);
+        var hit = await worktrees.ResolveAsync(path!, ct);
         return hit is null ? (null, null, null) : (hit.WorktreeId, hit.RepositoryId, hit.RelativePath);
     }
 

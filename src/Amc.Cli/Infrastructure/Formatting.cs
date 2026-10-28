@@ -86,7 +86,8 @@ public static class Fmt
     public static string HomeRelative(string? path, string home)
     {
         if (string.IsNullOrEmpty(path)) return "";
-        return home.Length > 1 && (path == home || path.StartsWith(home + "/", StringComparison.Ordinal)) ? "~" + path[home.Length..] : path;
+        if (home.Length <= 1 || !PathText.IsAbsolute(path) || PathText.Relative(home, path) is not { } rel) return path;
+        return rel.Length == 0 ? "~" : "~/" + rel;
     }
 
     /// <summary>Parses "10m", "2h", "30s", "1d", "1w" or an absolute timestamp into an instant.</summary>

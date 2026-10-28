@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Amc.Core.Domain;
 using Amc.Core.Events;
 using Amc.Core.Providers;
 
@@ -192,11 +193,12 @@ public sealed class ToolHookReceiver(ProtocolReceiver protocol, ProtocolInbox in
             foreach (var (prefix, change) in new[] { ("*** Update File: ", "modified"), ("*** Add File: ", "created"), ("*** Delete File: ", "deleted") })
                 if (line.StartsWith(prefix, StringComparison.Ordinal)) list.Add((Abs(line[prefix.Length..].Trim(), cwd), change));
         }
-        return list.Where(x => x.Item1.StartsWith('/')).Distinct().ToList();
+        return list.Where(x => PathText.IsAbsolute(x.Item1)).Distinct().ToList();
     }
 
+    /// <summary>Lexically absolute against cwd (<see cref="PathText"/> form); left as-is when already absolute or without a cwd.</summary>
     private static string Abs(string path, string? cwd) =>
-        path.StartsWith('/') || cwd is null ? path : Path.GetFullPath(Path.Combine(cwd, path));
+        PathText.IsAbsolute(path) ? (PathText.Windows ? PathText.Normalize(path) : path) : cwd is null ? path : PathText.Combine(cwd, path);
 
     private static string? Text(JsonNode? n) => n switch
     {

@@ -3,6 +3,7 @@ namespace Amc.Core.Domain;
 /// <summary>
 /// Maps absolute paths to the worktree that contains them (longest root prefix wins,
 /// so nested worktrees resolve correctly). Immutable; rebuild when worktrees change.
+/// Paths are compared in <see cref="PathText"/> canonical form (case-insensitively on Windows).
 /// </summary>
 public sealed class WorktreeResolver
 {
@@ -16,26 +17,18 @@ public sealed class WorktreeResolver
 
     public (Worktree Worktree, string RelativePath)? Resolve(string? absolutePath)
     {
-        if (string.IsNullOrEmpty(absolutePath) || !absolutePath.StartsWith('/')) return null;
-        var p = Normalize(absolutePath);
+        if (!PathText.IsAbsolute(absolutePath)) return null;
+        var p = Normalize(absolutePath!);
+        var cmp = PathText.Comparison;
         foreach (var (root, wt) in _roots)
         {
-            if (p == root) return (wt, "");
-            if (p.StartsWith(root + "/", StringComparison.Ordinal)) return (wt, p[(root.Length + 1)..]);
+            if (p.Equals(root, cmp)) return (wt, "");
+            var prefix = root.EndsWith('/') ? root : root + "/";
+            if (p.StartsWith(prefix, cmp)) return (wt, p[prefix.Length..]);
         }
         return null;
     }
 
-    /// <summary>Lexically normalizes a path (no filesystem access): collapses //, ., .. and trailing slashes.</summary>
-    public static string Normalize(string path)
-    {
-        var parts = new List<string>();
-        foreach (var seg in path.Split('/'))
-        {
-            if (seg is "" or ".") continue;
-            if (seg == "..") { if (parts.Count > 0) parts.RemoveAt(parts.Count - 1); continue; }
-            parts.Add(seg);
-        }
-        return "/" + string.Join('/', parts);
-    }
+    /// <summary>Lexically normalizes a path (no filesystem access): see <see cref="PathText.Normalize(string)"/>.</summary>
+    public static string Normalize(string path) => PathText.Normalize(path);
 }

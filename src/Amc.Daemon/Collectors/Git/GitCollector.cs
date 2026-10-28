@@ -38,8 +38,8 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
     {
         public string CommonDir { get; } = commonDir;
         public string Id { get; } = Ids.Repository(commonDir);
-        public string RefsHeads => Path.Combine(CommonDir, "refs", "heads");
-        public string WorktreesDir => Path.Combine(CommonDir, "worktrees");
+        public string RefsHeads => CommonDir + "/refs/heads";
+        public string WorktreesDir => CommonDir + "/worktrees";
         public DateTimeOffset LastListAt;
     }
 
@@ -101,8 +101,8 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
 
     public async ValueTask<WorktreeHit?> ResolveAsync(string absolutePath, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(absolutePath) || !absolutePath.StartsWith('/') || absolutePath.Contains('\0')) return null;
-        var path = WorktreeResolver.Normalize(absolutePath);
+        if (!PathText.IsAbsolute(absolutePath) || absolutePath.Contains('\0')) return null;
+        var path = PathText.Normalize(absolutePath);
         if (Lookup(path) is { } hit) return hit;
 
         var dir = NearestExistingDirectory(path);
@@ -138,7 +138,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
 
     private static string? NearestExistingDirectory(string path)
     {
-        for (var p = path; !string.IsNullOrEmpty(p); p = Path.GetDirectoryName(p))
+        for (string? p = path; p is not null; p = PathText.Parent(p))
             if (Directory.Exists(p)) return p;
         return null;
     }
@@ -149,7 +149,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
         var r = await _git.RunAsync(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], ct);
         if (!r.Ok) return null;
         var lines = r.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        return lines.Length >= 2 ? WorktreeResolver.Normalize(lines[0]) : null;
+        return lines.Length >= 2 ? PathText.Normalize(lines[0]) : null;
     }
 
     // ---- lifecycle --------------------------------------------------------------------
@@ -202,11 +202,11 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
     public static IEnumerable<string> FindWorkingTrees(IEnumerable<string> roots, int depth)
     {
         var queue = new Queue<(string Dir, int Depth)>();
-        foreach (var r in roots) if (Directory.Exists(r)) queue.Enqueue((Path.GetFullPath(r), 0));
+        foreach (var r in roots) if (Directory.Exists(r)) queue.Enqueue((PathText.Normalize(Path.GetFullPath(r)), 0));
         while (queue.Count > 0)
         {
             var (dir, d) = queue.Dequeue();
-            if (Path.Exists(Path.Combine(dir, ".git"))) { yield return dir; continue; }
+            if (Path.Exists(dir + "/.git")) { yield return dir; continue; }
             if (d >= depth) continue;
             IEnumerable<DirectoryInfo> children;
             try
@@ -216,7 +216,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
             foreach (var c in children)
-                if (!c.Name.StartsWith('.') && !SkipDirs.Contains(c.Name)) queue.Enqueue((c.FullName, d + 1));
+                if (!c.Name.StartsWith('.') && !SkipDirs.Contains(c.Name)) queue.Enqueue((PathText.Normalize(c.FullName), d + 1));
         }
     }
 
@@ -311,7 +311,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
 
     private static IEnumerable<string> SafeSubdirs(string dir)
     {
-        try { return Directory.EnumerateDirectories(dir, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }).ToList(); }
+        try { return Directory.EnumerateDirectories(dir, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }).Select(PathText.Normalize).ToList(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
     }
 
@@ -341,14 +341,14 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
             else if (dir == r.RefsHeads || dir.StartsWith(r.RefsHeads + "/", StringComparison.Ordinal))
             {
                 if (name is null) continue;
-                var full = Path.Combine(dir, name);
+                var full = dir + "/" + name;
                 if ((mask & Inotify.IsDir) != 0)
                 {
                     if ((mask & (Inotify.Create | Inotify.MovedTo)) != 0) { _inotify?.Add(full); foreach (var d in SafeSubdirs(full)) _inotify?.Add(d); }
                     continue;
                 }
                 if (name.EndsWith(".lock", StringComparison.Ordinal)) continue;
-                var branch = Path.GetRelativePath(r.RefsHeads, full);
+                var branch = PathText.Relative(r.RefsHeads, full) ?? name;
                 foreach (var t in _trackers.Values.Where(t => t.Repo == r && !t.Deleted && t.Summary?.Branch == branch)) Schedule(t.Id, _settings.Debounce);
             }
         }
@@ -439,13 +439,13 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
 
     private static string? ResolveGitDir(string root)
     {
-        var dotGit = Path.Combine(root, ".git");
+        var dotGit = PathText.Combine(root, ".git");
         if (Directory.Exists(dotGit)) return dotGit;
         try
         {
             if (!File.Exists(dotGit)) return null;
             var line = File.ReadLines(dotGit).FirstOrDefault(l => l.StartsWith("gitdir:", StringComparison.Ordinal));
-            return line is null ? null : WorktreeResolver.Normalize(Path.GetFullPath(line[7..].Trim(), root));
+            return line is null ? null : PathText.Normalize(Path.GetFullPath(line[7..].Trim(), root));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
