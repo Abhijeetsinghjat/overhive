@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Abhijeetsinghjat.Overhive
+PackageVersion: __VERSION__
+PackageLocale: en-US
+Publisher: Abhijeetsinghjat
+PublisherUrl: https://github.com/Abhijeetsinghjat
+PublisherSupportUrl: https://github.com/Abhijeetsinghjat/overhive/issues
+PackageName: Overhive
+PackageUrl: https://github.com/Abhijeetsinghjat/overhive
+License: Apache-2.0
+LicenseUrl: https://github.com/Abhijeetsinghjat/overhive/blob/main/LICENSE
+ShortDescription: Local mission control for AI coding agents (beta).
+Description: |-
+  Overhive watches the AI coding agents running on your computer (Claude Code and others): what each one is
+  doing, which files and worktrees they touch, conflicts between them and risky commands, in a local web
+  dashboard at http://127.0.0.1:47821. Everything stays on your machine.
+  Installed with winget, the daemon does not start at logon by itself: run `amcd`, or use the zip's
+  install-release.ps1 for start at logon.
+Moniker: overhive
+Tags:
+- ai
+- agents
+- claude-code
+- developer-tools
+- dashboard
+ReleaseNotesUrl: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v__VERSION__
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

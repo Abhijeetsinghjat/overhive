@@ -79,17 +79,20 @@ jobs:
           "exit=$LASTEXITCODE"
           exit 0
         timeout-minutes: 3
-      # The README's native Windows steps, as written: publish, start the daemon, reach the API and dashboard.
+      # The README's native Windows steps, as written: install.ps1 in Windows PowerShell 5.1 builds, installs and starts
+      # the daemon through the per-user scheduled task; then reach the API and dashboard, run doctor, uninstall.
       - name: Native install smoke test (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
-          dotnet publish src/Amc.Daemon -c Release -o "$env:LOCALAPPDATA\Overhive\amcd" --nologo -v q
-          dotnet publish src/Amc.Cli -c Release -o "$env:LOCALAPPDATA\Overhive\cli" --nologo -v q
-          $amcd = Start-Process "$env:LOCALAPPDATA\Overhive\amcd\amcd.exe" -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput "$env:RUNNER_TEMP\amcd.out" -RedirectStandardError "$env:RUNNER_TEMP\amcd.err"
+          $ErrorActionPreference = 'Stop'
+          powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed (exit $LASTEXITCODE)" }
+          $base = "$env:LOCALAPPDATA\Overhive"
           $token = "$env:USERPROFILE\.local\state\agent-mission-control\token"
           try {
+            $task = Get-ScheduledTask -TaskName Overhive
+            "task: $($task.State) $($task.Actions[0].Execute) $($task.Actions[0].Arguments)"
             $ok = $false
             foreach ($i in 1..60) {
               if (Test-Path $token) {
@@ -100,15 +103,24 @@ jobs:
               }
               Start-Sleep -Seconds 1
             }
-            if (-not $ok) { Get-Content "$env:RUNNER_TEMP\amcd.out", "$env:RUNNER_TEMP\amcd.err" -ErrorAction SilentlyContinue; throw "daemon did not answer /api/health" }
+            if (-not $ok) { Get-Content "$base\logs\amcd.log" -ErrorAction SilentlyContinue; throw "daemon did not answer /api/health" }
             "dashboard: HTTP $((Invoke-WebRequest http://127.0.0.1:47821/ -UseBasicParsing).StatusCode)"
             # Informational: the runner has no Claude Code, so its checks fail there; git and curl must be found.
-            $doctor = & "$env:LOCALAPPDATA\Overhive\cli\agentctl.exe" doctor
+            $doctor = & "$base\cli\overhive.exe" doctor
             $doctor; "doctor exit=$LASTEXITCODE"
             if ($doctor -match '^\S+\s+(git|curl)\s+not found') { throw "doctor did not find git or curl on PATH" }
-          } finally { Stop-Process -Id $amcd.Id -Force -ErrorAction SilentlyContinue }
+          } finally {
+            powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Uninstall
+          }
+          if (Get-ScheduledTask -TaskName Overhive -ErrorAction SilentlyContinue) { throw "uninstall left the task" }
+          if ([Environment]::GetEnvironmentVariable('Path', 'User') -like "*$base*") { throw "uninstall left PATH entries" }
           exit 0
-        timeout-minutes: 8
+        timeout-minutes: 15
+      - name: Package and smoke test the Windows zip
+        if: runner.os == 'Windows'
+        shell: bash
+        run: AMC_RELEASE=0.0.0 AMC_RIDS=win-x64 scripts/package.sh && pwsh -NoProfile -File scripts/smoke-release.ps1 dist/overhive-0.0.0-win-x64.zip
+        timeout-minutes: 20
       # One step per test area, each with its own limit, so a hang in one area still reports the others.
       - name: Tests by area
         shell: bash

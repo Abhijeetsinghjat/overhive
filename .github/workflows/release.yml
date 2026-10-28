@@ -1,8 +1,9 @@
 name: Release
 
-# Push a tag like v0.2.0 to build self-contained Linux and macOS archives and publish a GitHub release.
+# Push a tag like v0.2.0 to build self-contained Linux, macOS and Windows archives and publish a GitHub release.
 # macOS archives are built on macOS: the SDK signs the binaries only there, and Apple Silicon refuses
-# to run unsigned ones.
+# to run unsigned ones. The Windows zip is built and smoke-tested on Windows; while native Windows is a
+# preview, a failure there does not hold back the release (it then ships without the zip).
 on:
   push:
     tags: ['v*']
@@ -14,13 +15,20 @@ jobs:
   build:
     name: build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    defaults:
+      run:
+        shell: bash
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             rids: linux-x64 linux-arm64
           - os: macos-latest
             rids: osx-arm64 osx-x64
+          - os: windows-latest
+            rids: win-x64
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -31,15 +39,24 @@ jobs:
           git config --global user.name ci
           git config --global user.email ci@localhost
           git config --global init.defaultBranch main
-      - run: dotnet test -c Release
+          git config --global core.autocrlf false
+      # The Windows test suite still runs in CI as a non-blocking job; the release gates on the zip smoke test.
+      - if: runner.os != 'Windows'
+        run: dotnet test -c Release
       - name: Package
         run: AMC_RELEASE="${GITHUB_REF_NAME#v}" AMC_RIDS="${{ matrix.rids }}" scripts/package.sh
       - name: Smoke test the native archive
+        if: runner.os != 'Windows'
         run: scripts/smoke-release.sh dist/overhive-*-$(uname -s | sed 's/Darwin/osx/;s/Linux/linux/')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz
+      - name: Smoke test the Windows zip
+        if: runner.os == 'Windows'
+        run: pwsh -NoProfile -File scripts/smoke-release.ps1 dist/overhive-*-win-x64.zip
       - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.os }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
           if-no-files-found: error
 
   publish:
@@ -56,13 +73,34 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && shopt -s nullglob && sha256sum *.tar.gz *.zip > SHA256SUMS && cat SHA256SUMS
       - name: Build provenance
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/*.tar.gz
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
       - name: Homebrew formula
         run: scripts/homebrew-formula.sh "${GITHUB_REF_NAME#v}" dist/SHA256SUMS > dist/overhive.rb
+      # Scoop and winget manifests for the Windows zip (when it was built). The Scoop manifest is attached to
+      # the release for committing to bucket/; the winget manifests are a workflow artifact for a manual
+      # pull request to microsoft/winget-pkgs (see packaging/winget/winget-manifest.sh).
+      - name: Scoop and winget manifests
+        id: windows
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          if grep -q "overhive-$v-win-x64.zip" dist/SHA256SUMS; then
+            scripts/scoop-manifest.sh "$v" dist/SHA256SUMS > dist/overhive.json
+            packaging/winget/winget-manifest.sh "$v" dist/SHA256SUMS winget
+            echo "zip=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no Windows zip in this release"
+          fi
+      - if: steps.windows.outputs.zip == '1'
+        uses: actions/upload-artifact@v7
+        with:
+          name: winget-manifests
+          path: winget/
       - name: Release notes from CHANGELOG.md
         run: |
           awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
@@ -74,4 +112,6 @@ jobs:
         # While src/Amc.Core/Product.cs says Stage = "beta", releases are published as pre-releases.
         run: |
           pre=(); grep -q 'Stage = "beta"' src/Amc.Core/Product.cs && pre=(--prerelease)
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/overhive.rb --title "Overhive $GITHUB_REF_NAME" --notes-file notes.md "${pre[@]}"
+          shopt -s nullglob
+          files=(dist/*.tar.gz dist/*.zip dist/SHA256SUMS dist/overhive.rb); [[ -f dist/overhive.json ]] && files+=(dist/overhive.json)
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "Overhive $GITHUB_REF_NAME" --notes-file notes.md "${pre[@]}"

@@ -84,30 +84,54 @@ scripts/install.sh
 
 ### Windows
 
-**Recommended today: WSL2.** Run your AI tools inside WSL and install Overhive there with the Linux steps above;
-open the dashboard in your Windows browser. Setup and limits: [Windows via WSL2](docs/TROUBLESHOOTING.md#windows-via-wsl2).
-
 **Native Windows (early preview).** Windows 10 1809 or later, 64-bit. Not yet tried on a real PC; please
-[report](https://github.com/Abhijeetsinghjat/overhive/issues/new/choose) how it goes. Build from source in
-PowerShell (needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Git):
+[report](https://github.com/Abhijeetsinghjat/overhive/issues/new/choose) how it goes. The installer needs no
+admin rights: it installs into `%LOCALAPPDATA%\Overhive`, puts `overhive` (also `agentctl`) and `amcd` on your
+user PATH and starts the daemon at logon, hidden, through a per-user scheduled task named `Overhive`. It does
+not change Claude Code or other AI-tool settings (`overhive hooks install` does that, separately).
+
+From the next release, a Windows build needs no .NET: download `overhive-<version>-win-x64.zip` and
+`SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases) (v0.2.0 has no Windows zip
+yet), then in PowerShell:
+
+```powershell
+Get-FileHash overhive-<version>-win-x64.zip -Algorithm SHA256   # compare with SHA256SUMS
+Expand-Archive overhive-<version>-win-x64.zip -DestinationPath .
+powershell -ExecutionPolicy Bypass -File .\overhive-<version>-win-x64\install-release.ps1
+```
+
+Or, also from the next release, with [Scoop](https://scoop.sh):
+
+```powershell
+scoop bucket add overhive https://github.com/Abhijeetsinghjat/overhive
+scoop install overhive
+```
+
+From source today (needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Git):
 
 ```powershell
 git clone https://github.com/Abhijeetsinghjat/overhive; cd overhive
-dotnet publish src/Amc.Daemon -c Release -o "$env:LOCALAPPDATA\Overhive\amcd"
-dotnet publish src/Amc.Cli -c Release -o "$env:LOCALAPPDATA\Overhive\cli"
-& "$env:LOCALAPPDATA\Overhive\amcd\amcd.exe"        # keep this window open
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-Then, in a second PowerShell window, start an agent through Overhive:
+Re-run the same command to update. Then open a new terminal and start an agent through Overhive:
 
 ```powershell
-& "$env:LOCALAPPDATA\Overhive\cli\agentctl.exe" run -- claude
+overhive run -- claude
 ```
 
+To uninstall (your data in `%USERPROFILE%\.local\state\agent-mission-control` is kept unless you add
+`-RemoveData`): `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Overhive\install-release.ps1" -Uninstall`
+(or `scripts\install.ps1 -Uninstall` from the clone, or `scoop uninstall overhive`). Logs, restart and more:
+[Windows (native)](docs/TROUBLESHOOTING.md#windows-native).
+
 Works natively: the dashboard, agent and process tracking with pause/resume/stop (stop is always a hard stop
-on Windows), terminals for `agentctl run`, Git and conflict tracking, and owner-only protection of the token
-and database. Not yet: a downloadable build, starting at login, and tested hook setup for Claude Code and the
-other tools (`agentctl hooks install`).
+on Windows), terminals for `agentctl run`, Git and conflict tracking, owner-only protection of the token
+and database, and starting at logon. Not yet: tested hook setup for Claude Code and the other tools
+(`agentctl hooks install`), and signed binaries (Windows SmartScreen may warn about the downloaded files).
+
+**Or use WSL2.** Run your AI tools inside WSL and install Overhive there with the Linux steps above; open the
+dashboard in your Windows browser. Setup and limits: [Windows via WSL2](docs/TROUBLESHOOTING.md#windows-via-wsl2).
 
 ## Connect your AI tools
 
