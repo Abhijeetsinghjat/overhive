@@ -30,8 +30,8 @@ You can message agents, pause or stop them, and start new sessions of any instal
   `~/.local/state/agent-mission-control`.
 
 > **Beta.** Overhive works and is used daily on Linux; macOS support is new and passes the full test suite
-> on Apple Silicon, but has had few real users yet. Native Windows is an early preview (build from source); the
-> easiest way on Windows today is WSL2. Expect rough edges and please report them.
+> on Apple Silicon, but has had few real users yet. Native Windows is an early preview that has not yet been tried
+> on a real PC; WSL2 is the proven route on Windows today. Expect rough edges and please report them.
 
 ## Install
 
@@ -127,8 +127,8 @@ To uninstall (your data in `%USERPROFILE%\.local\state\agent-mission-control` is
 
 Works natively: the dashboard, agent and process tracking with pause/resume/stop (stop is always a hard stop
 on Windows), terminals for `agentctl run`, Git and conflict tracking, owner-only protection of the token
-and database, and starting at logon. Not yet: tested hook setup for Claude Code and the other tools
-(`agentctl hooks install`), and signed binaries (Windows SmartScreen may warn about the downloaded files).
+and database, starting at logon, and hooks for every tool in [Connect your AI tools](#connect-your-ai-tools).
+Not yet: signed binaries (Windows SmartScreen may warn about the downloaded files).
 
 **Or use WSL2.** Run your AI tools inside WSL and install Overhive there with the Linux steps above; open the
 dashboard in your Windows browser. Setup and limits: [Windows via WSL2](docs/TROUBLESHOOTING.md#windows-via-wsl2).
@@ -154,6 +154,11 @@ Overhive's own entries. `overhive hooks uninstall --tool <tool>` removes them ag
 | Any other tool | Add it to `~/.config/agent-mission-control/config.json` (see below), or report through the [open protocol](docs/PROTOCOL.md) with `overhive emit` | — |
 
 Check a tool's status with `overhive hooks status --tool <tool>`.
+
+On Windows the same commands work, but the hooks run `overhive hook-forward` (built into the CLI) instead of
+curl, so neither curl nor Git Bash is needed. Claude Code needs a version with exec-form hooks (`args`). If you
+move the CLI, run `overhive hooks install` again; `overhive doctor` checks the hook forwarder. Details:
+[Hooks on Windows](docs/AGENT_INTEGRATION.md#hooks-on-windows).
 
 Add a tool Overhive does not know yet:
 
