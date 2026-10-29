@@ -39,9 +39,42 @@ exact. Freed space is returned to disk (incremental vacuum). Caveat: after an up
 is derived (`Reducer.Version`), state is rebuilt from the *retained* events, so counters derived from pruned
 detail (for example tool-call counts older than the detail window) restart from what is still in the log.
 
+## Windows (native)
+
+Native Windows is an early preview; please report what you find.
+
+- **Start at logon.** `install.ps1` / `install-release.ps1` register a per-user scheduled task named `Overhive`
+  (no admin rights). At logon it runs a small supervisor, `%LOCALAPPDATA%\Overhive\amcd-task.ps1`, through a
+  headless console host, so no window opens. The supervisor restarts `amcd` a few seconds after a crash and ends
+  it when the task is stopped. Check it with `Get-ScheduledTask Overhive`
+  and `Get-ScheduledTaskInfo Overhive`, or in Task Scheduler (Task Scheduler Library, `Overhive`).
+- **Logs.** `%LOCALAPPDATA%\Overhive\logs\amcd.log`, and `amcd.err.log` for errors and exit codes; the previous
+  run is kept as `amcd.prev.log` and `amcd.err.prev.log`.
+  Follow it with `Get-Content "$env:LOCALAPPDATA\Overhive\logs\amcd.log" -Wait -Tail 50`.
+- **Stop, start, restart.** `Stop-ScheduledTask Overhive` stops the daemon (it is not restarted until you start
+  it again); `Start-ScheduledTask Overhive` starts it. Restart: run both, one after the other. To stop it
+  starting at logon but keep it installed: `Disable-ScheduledTask Overhive` (`Enable-ScheduledTask` undoes it).
+  Re-running the installer also restarts the daemon (and updates it).
+- **`amcd is already running`.** The task's daemon owns the socket; a second `amcd` refuses to start instead of
+  taking over. Stop the task first if you want to run `amcd` by hand.
+- **`overhive` not found.** The installer adds `%LOCALAPPDATA%\Overhive\cli` and `...\amcd` to your user PATH;
+  terminals opened before the install do not see it, so open a new one.
+- **"running scripts is disabled on this system".** Run the installer as shown in the README, with
+  `powershell -ExecutionPolicy Bypass -File ...`; that changes nothing permanently.
+- **SmartScreen or antivirus warnings.** The release binaries are not code-signed yet. Check the download against
+  `SHA256SUMS` (`Get-FileHash`) and, with the GitHub CLI, `gh attestation verify <zip> -R Abhijeetsinghjat/overhive`.
+- **Uninstall.** `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Overhive\install-release.ps1" -Uninstall`
+  (or `scripts\install.ps1 -Uninstall` from a clone) stops and removes the task, the PATH entries and the program
+  files. Your data (`%USERPROFILE%\.local\state\agent-mission-control`) and config
+  (`%USERPROFILE%\.config\agent-mission-control`) are kept; add `-RemoveData` to delete the data too. Hooks in
+  AI-tool settings are not touched: run `overhive hooks uninstall` before uninstalling if you installed them.
+- **Scoop.** Scoop installs into its own folder and adds its own shims; the scheduled task is still added. Stop
+  the daemon (`Stop-ScheduledTask Overhive`) before `scoop update overhive`, because Scoop does not update an
+  app whose program is running.
+
 ## Windows via WSL2
 
-Until native Windows support is complete (see the README for the early native preview), Overhive can run inside WSL2 (the Linux on Windows that many AI coding
+As an alternative to the native preview (below), Overhive can run inside WSL2 (the Linux on Windows that many AI coding
 CLIs already use). This setup is **not yet verified**; if you try it, please report how it went.
 
 1. Run your AI tools inside WSL (Ubuntu or another distribution), and install Overhive there with the Linux

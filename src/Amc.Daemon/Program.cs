@@ -49,8 +49,9 @@ if (File.Exists(options.SocketPath))
     {
         probe.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(options.SocketPath));
         Console.Error.WriteLine($"amcd is already running (socket {options.SocketPath} is live). " +
-                                (OperatingSystem.IsMacOS() ? "If it runs as a service: launchctl print gui/$(id -u)/dev.overhive.amcd"
-                                                           : "If it runs as a service: systemctl --user status amcd"));
+                                (OperatingSystem.IsWindows() ? "If it runs as the scheduled task: Get-ScheduledTask Overhive (stop it with Stop-ScheduledTask Overhive)"
+                                 : OperatingSystem.IsMacOS() ? "If it runs as a service: launchctl print gui/$(id -u)/dev.overhive.amcd"
+                                                             : "If it runs as a service: systemctl --user status amcd"));
         return 1;
     }
     catch (System.Net.Sockets.SocketException) { File.Delete(options.SocketPath); } // stale socket from a crashed run

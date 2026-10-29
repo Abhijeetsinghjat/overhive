@@ -6,6 +6,12 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Native Windows install (early preview), no admin rights needed: `scripts\install.ps1` builds from source,
+  and releases gain a self-contained `overhive-<version>-win-x64.zip` with `install-release.ps1`. Both put
+  `overhive`, `agentctl` and `amcd` on the user PATH and start the daemon at logon, hidden, through the
+  per-user scheduled task `Overhive`; re-running updates, `-Uninstall` removes it (data kept unless
+  `-RemoveData`). Prepared, not yet published: a Scoop manifest generator (`bucket/` in this repository) and
+  winget manifests (`packaging/winget/`).
 - **Hive**, a 3D view of all agents and the new default tab when the browser supports WebGL: every
   session is a hexagonal cell with its sub-agents tiled around it, grouped by repository worktree. Glow
   shows status (running pulses, waiting/blocked amber, failed red, finished dimmed), height shows token
