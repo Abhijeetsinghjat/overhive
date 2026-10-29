@@ -15,15 +15,31 @@ public static class HooksCommand
         if (tool != "claude") return await OtherToolAsync(ctx, args, sub, tool, ct);
         var settingsPath = args.Opt("settings") ?? HooksFile.DefaultSettingsPath(ctx);
         var socket = Path.Combine(ctx.Settings.DataDir, ClaudeHooksConfig.SocketFileName);
-        var command = ClaudeHooksConfig.BuildCommand(socket);
-        var rewakeCommand = ClaudeHooksConfig.BuildRewakeCommand(socket);
+        var (command, rewakeCommand) = Commands(ctx, socket);
         return sub switch
         {
-            "status" => await StatusAsync(ctx, args, settingsPath, command, ct),
+            "status" => await StatusAsync(ctx, args, settingsPath, command, rewakeCommand, ct),
             "install" => Change(ctx, args, HooksFile.PlanInstall(settingsPath, command, rewakeCommand), "install"),
             "uninstall" => Change(ctx, args, HooksFile.PlanUninstall(settingsPath), "uninstall"),
             _ => throw new UsageException($"unknown hooks subcommand '{sub}' (status | install | uninstall)"),
         };
+    }
+
+    /// <summary>
+    /// The Claude Code hook and rewake waiter: curl one-liners on Linux/macOS, agentctl hook-forward in exec form
+    /// (no shell) on Windows.
+    /// </summary>
+    public static (ClaudeHooksConfig.HookCommand Command, ClaudeHooksConfig.HookCommand Rewake) Commands(CliContext ctx, string socket) =>
+        ctx.IsWindows
+            ? (ClaudeHooksConfig.BuildWindowsCommand(ctx.Forwarder, socket), ClaudeHooksConfig.BuildWindowsRewakeCommand(ctx.Forwarder, socket))
+            : (ClaudeHooksConfig.BuildCommand(socket), ClaudeHooksConfig.BuildRewakeCommand(socket));
+
+    /// <summary>What the hooks need to reach amcd: curl, or on Windows the agentctl they run (null when missing).</summary>
+    public static (string Name, string? Path) Transport(CliContext ctx)
+    {
+        if (!ctx.IsWindows) return ("curl", DoctorCommand.FindOnPath(ctx, "curl"));
+        var exe = ctx.Forwarder.Executable;
+        return ("forwarder", File.Exists(exe) ? exe : null);
     }
 
     /// <summary>`agentctl hooks status|install|uninstall --tool codex|gemini|grok|cursor|copilot`.</summary>
@@ -47,7 +63,11 @@ public static class HooksCommand
             }
             case "install":
             {
-                var rc = Change(ctx, args, HooksFile.PlanTool(path, s => ToolHooksConfig.Install(profile, s, socket)), "install", tool);
+                var forwarder = ctx.IsWindows ? ctx.Forwarder : null;
+                HooksPlan plan;
+                try { plan = HooksFile.PlanTool(path, s => ToolHooksConfig.Install(profile, s, socket, forwarder)); }
+                catch (ArgumentException ex) { throw new CliException($"cannot build a {profile.WindowsShell} hook command: {ex.Message}"); }
+                var rc = Change(ctx, args, plan, "install", tool);
                 if (rc == ExitCodes.Ok && profile.Note is { } note) ctx.Out.WriteLine(ctx.Style.Yellow("Next: ") + note);
                 return Task.FromResult(rc);
             }
@@ -97,20 +117,22 @@ public static class HooksCommand
     private static string FirstOurCommand(JsonObject settings) =>
         settings["hooks"] is JsonObject hooks
             ? hooks.Select(kv => kv.Value).OfType<JsonArray>().SelectMany(g => g.OfType<JsonObject>())
-                .SelectMany(g => g["hooks"] as JsonArray ?? []).FirstOrDefault(ClaudeHooksConfig.IsOurs)?["command"]?.ToString() ?? ""
+                .SelectMany(g => g["hooks"] as JsonArray ?? []).FirstOrDefault(ClaudeHooksConfig.IsOurs) is { } h
+                ? string.Join(' ', new[] { h["command"]?.ToString() ?? "" }.Concat((h["args"] as JsonArray ?? []).Select(a => a?.ToString() ?? "")))
+                : ""
             : "";
 
-    private static async Task<int> StatusAsync(CliContext ctx, ParsedArgs args, string settingsPath, string expectedCommand, CancellationToken ct)
+    private static async Task<int> StatusAsync(CliContext ctx, ParsedArgs args, string settingsPath,
+        ClaudeHooksConfig.HookCommand expectedCommand, ClaudeHooksConfig.HookCommand expectedRewake, CancellationToken ct)
     {
         var s = ctx.Style;
         var (exists, settings) = HooksFile.Load(settingsPath);
         var hooks = settings["hooks"] as JsonObject;
         var perEvent = ClaudeHooksConfig.Events.ToDictionary(ev => ev, ev =>
             (hooks?[ev] as JsonArray)?.OfType<JsonObject>().SelectMany(g => g["hooks"] as JsonArray ?? [])
-            .Where(ClaudeHooksConfig.IsOurs).Select(h => h?["command"]?.ToString()).ToList() ?? []);
+            .Where(ClaudeHooksConfig.IsOurs).ToList() ?? []);
         var installed = ClaudeHooksConfig.IsInstalled(settings);
-        var expectedRewake = ClaudeHooksConfig.BuildRewakeCommand(Path.Combine(ctx.Settings.DataDir, ClaudeHooksConfig.SocketFileName));
-        var stale = perEvent.Values.SelectMany(x => x).Any(c => c != expectedCommand && c != expectedRewake)
+        var stale = perEvent.Values.SelectMany(x => x).Any(h => !expectedCommand.Matches(h) && !expectedRewake.Matches(h))
                     || !ClaudeHooksConfig.IsRewakeInstalled(settings);
 
         bool reachable;
@@ -126,7 +148,7 @@ public static class HooksCommand
             reachable = false;
             reachDetail = ex.Message;
         }
-        var curl = DoctorCommand.FindOnPath(ctx, "curl");
+        var (transport, transportPath) = Transport(ctx);
 
         if (args.Json)
         {
@@ -135,7 +157,7 @@ public static class HooksCommand
             Api.PrintJson(ctx, new JsonObject
             {
                 ["settingsPath"] = settingsPath, ["exists"] = exists, ["installed"] = installed, ["upToDate"] = installed && !stale,
-                ["events"] = events, ["daemonReachable"] = reachable, ["curl"] = curl,
+                ["events"] = events, ["daemonReachable"] = reachable, [transport] = transportPath,
             });
             return ExitCodes.Ok;
         }
@@ -144,7 +166,9 @@ public static class HooksCommand
         ctx.Out.WriteLine($"installed  {(installed ? s.Green("yes") + (stale ? s.Yellow(" (outdated command — run `agentctl hooks install`)") : "") : perEvent.Values.Any(v => v.Count > 0) ? s.Yellow("partially") : s.Red("no"))}");
         ctx.Out.WriteLine("events     " + string.Join(" ", perEvent.Select(kv => kv.Value.Count > 0 ? s.Green(kv.Key) : s.Dim(kv.Key + "✗"))));
         ctx.Out.WriteLine($"daemon     {s.Ok(reachable)} {reachDetail}");
-        ctx.Out.WriteLine($"curl       {s.Ok(curl is not null)} {curl ?? "not found on PATH — hooks cannot reach the daemon"}");
+        ctx.Out.WriteLine($"{transport,-10} {s.Ok(transportPath is not null)} {transportPath ?? (transport == "curl"
+            ? "not found on PATH — hooks cannot reach the daemon"
+            : $"{ctx.Forwarder.Executable} not found — hooks cannot reach the daemon")}");
         return ExitCodes.Ok;
     }
 }

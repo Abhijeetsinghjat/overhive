@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Amc.Cli.Hooks;
 using Amc.Cli.Infrastructure;
+using Amc.Core.Providers;
 using Amc.Core.Providers.Claude;
 using Amc.Core.Security;
 
@@ -125,8 +126,13 @@ public static class DoctorCommand
         // Tools
         var git = FindOnPath(ctx, "git");
         checks.Add(new("git", git is not null, git ?? "not found on PATH", "install git (worktree/diff tracking needs it)"));
-        var curl = FindOnPath(ctx, "curl");
-        checks.Add(new("curl", curl is not null, curl ?? "not found on PATH", "install curl (the Claude Code hooks use it to reach amcd)"));
+        // What the hooks run to reach amcd: curl, or on Windows agentctl itself (hook-forward).
+        var (transport, transportPath) = HooksCommand.Transport(ctx);
+        checks.Add(transport == "curl"
+            ? new("curl", transportPath is not null, transportPath ?? "not found on PATH", "install curl (the Claude Code hooks use it to reach amcd)")
+            : new("hook forwarder", transportPath is not null,
+                transportPath is not null ? $"{transportPath} {HookForwarder.Subcommand}" : $"{ctx.Forwarder.Executable} not found",
+                "reinstall agentctl, then run `agentctl hooks install` again so the hooks point at it"));
         return checks;
     }
 

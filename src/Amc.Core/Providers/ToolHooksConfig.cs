@@ -24,25 +24,30 @@ public static class ToolHooksConfig
         string TimeoutKey,
         /// <summary>Whether the file belongs to us alone (then uninstall may delete it).</summary>
         bool OwnFile,
-        string? Note);
+        string? Note,
+        /// <summary>The shell the tool runs hook commands in on Windows: "cmd" or "powershell" (docs/AGENT_INTEGRATION.md, "Hooks on Windows").</summary>
+        string WindowsShell = "cmd",
+        /// <summary>An extra key the tool reads instead of "command" on Windows (Codex: commandWindows), or null.</summary>
+        string? WindowsCommandKey = null);
 
     public static readonly IReadOnlyDictionary<string, Profile> Profiles = new Dictionary<string, Profile>
     {
         ["codex"] = new("codex", ".codex/hooks.json", "claude-like",
             ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "SubagentStart", "SubagentStop"],
-            1, "timeout", false, "Codex asks you to review new hooks once: run `/hooks` in Codex and trust them."),
+            1, "timeout", false, "Codex asks you to review new hooks once: run `/hooks` in Codex and trust them.",
+            WindowsShell: "cmd", WindowsCommandKey: "commandWindows"),
         ["gemini"] = new("gemini", ".gemini/settings.json", "claude-like",
             ["SessionStart", "SessionEnd", "BeforeAgent", "AfterAgent", "BeforeTool", "AfterTool", "AfterModel", "Notification"],
-            1000, "timeout", false, "Gemini CLI may ask you to trust new hooks; see `/hooks panel`."),
+            1000, "timeout", false, "Gemini CLI may ask you to trust new hooks; see `/hooks panel`.", WindowsShell: "powershell"),
         ["grok"] = new("grok", ".grok/hooks/agent-mission-control.json", "claude-like",
             ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "Notification", "SubagentStart", "SubagentStop"],
             1, "timeout", true, null),
         ["cursor"] = new("cursor", ".cursor/hooks.json", "cursor",
             ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "afterFileEdit", "stop", "subagentStart", "subagentStop"],
-            1, "timeout", false, null),
+            1, "timeout", false, null, WindowsShell: "powershell"),
         ["copilot"] = new("copilot", ".copilot/hooks/agent-mission-control.json", "copilot",
             ["sessionStart", "sessionEnd", "userPromptSubmitted", "preToolUse", "postToolUse", "postToolUseFailure", "agentStop", "subagentStart", "subagentStop", "notification", "permissionRequest"],
-            1, "timeoutSec", true, null),
+            1, "timeoutSec", true, null, WindowsShell: "powershell"),
     };
 
     public const int TimeoutSeconds = 5;
@@ -51,8 +56,19 @@ public static class ToolHooksConfig
         $"curl -sf -m 3 --unix-socket {ClaudeHooksConfig.ShellQuote(socketPath)} -H 'Content-Type: application/json' " +
         $"--data-binary @- 'http://localhost/hooks/{tool}?e={evt}' 2>/dev/null || true # {ClaudeHooksConfig.Marker}";
 
-    private static string? CommandOf(JsonNode? h) => (string?)h?["command"] ?? (string?)h?["bash"];
-    public static bool IsOurs(JsonNode? h) => CommandOf(h)?.Contains(ClaudeHooksConfig.Marker, StringComparison.Ordinal) == true;
+    /// <summary>
+    /// The hook command on Windows: agentctl hook-forward, quoted for the shell the tool uses there
+    /// (<see cref="Profile.WindowsShell"/>). Same request and fail-open behaviour as <see cref="BuildCommand"/>.
+    /// </summary>
+    public static string BuildWindowsCommand(Profile p, HookForwarder forwarder, string socketPath, string evt)
+    {
+        var args = forwarder.Args(p.Tool, evt, socketPath);
+        return p.WindowsShell == "powershell" ? forwarder.PowerShellLine(args) : forwarder.CmdLine(args);
+    }
+
+    private static readonly string[] CommandKeys = ["command", "bash", "powershell", "commandWindows"];
+    public static bool IsOurs(JsonNode? h) =>
+        CommandKeys.Any(k => h?[k] is JsonValue v && v.TryGetValue<string>(out var c) && c.Contains(ClaudeHooksConfig.Marker, StringComparison.Ordinal));
 
     private static IEnumerable<JsonNode?> Entries(Profile p, JsonArray list) =>
         p.Shape == "claude-like" ? list.SelectMany(g => g?["hooks"] as JsonArray ?? []) : list;
@@ -60,7 +76,11 @@ public static class ToolHooksConfig
     public static bool IsInstalled(Profile p, JsonObject settings) =>
         settings["hooks"] is JsonObject hooks && p.Events.All(ev => hooks[ev] is JsonArray l && Entries(p, l).Any(IsOurs));
 
-    public static JsonObject Install(Profile p, JsonObject settings, string socketPath)
+    /// <summary>
+    /// Installs our hooks. With <paramref name="windows"/> the commands use that forwarder (see <see cref="BuildWindowsCommand"/>);
+    /// Copilot then gets its "powershell" field instead of "bash", Codex also gets its commandWindows override.
+    /// </summary>
+    public static JsonObject Install(Profile p, JsonObject settings, string socketPath, HookForwarder? windows = null)
     {
         var result = Uninstall(p, settings);
         if (p.Shape is "cursor" or "copilot") result["version"] ??= 1;
@@ -70,16 +90,13 @@ public static class ToolHooksConfig
         {
             var list = hooks[ev] as JsonArray ?? new JsonArray();
             hooks[ev] = list;
-            var cmd = BuildCommand(socketPath, p.Tool, ev);
-            list.Add(p.Shape switch
-            {
-                "claude-like" => new JsonObject
-                {
-                    ["hooks"] = new JsonArray(new JsonObject { ["type"] = "command", ["command"] = cmd, [p.TimeoutKey] = TimeoutSeconds * p.TimeoutScale }),
-                },
-                "cursor" => new JsonObject { ["type"] = "command", ["command"] = cmd, [p.TimeoutKey] = TimeoutSeconds },
-                _ => new JsonObject { ["type"] = "command", ["bash"] = cmd, [p.TimeoutKey] = TimeoutSeconds },
-            });
+            var cmd = windows is null ? BuildCommand(socketPath, p.Tool, ev) : BuildWindowsCommand(p, windows, socketPath, ev);
+            var entry = p.Shape == "copilot"
+                ? new JsonObject { ["type"] = "command", [windows is null ? "bash" : "powershell"] = cmd }
+                : new JsonObject { ["type"] = "command", ["command"] = cmd };
+            if (windows is not null && p.WindowsCommandKey is { } key) entry[key] = cmd;
+            entry[p.TimeoutKey] = TimeoutSeconds * (p.Shape == "claude-like" ? p.TimeoutScale : 1);
+            list.Add(p.Shape == "claude-like" ? new JsonObject { ["hooks"] = new JsonArray(entry) } : entry);
         }
         return result;
     }

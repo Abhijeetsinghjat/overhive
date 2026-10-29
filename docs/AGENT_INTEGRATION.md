@@ -36,6 +36,34 @@ detection still works, but it is driven by transcript writes.
 The registry and transcript formats are **undocumented Claude Code internals**. The parsers
 are tolerant; `agentctl doctor` and the Health tab report when they stop producing data.
 
+## Hooks on Windows
+
+On Linux and macOS each hook is a `curl --unix-socket … || true` one-liner run by `sh`. On
+Windows neither curl's syntax nor a POSIX shell can be assumed, so `agentctl hooks install`
+writes hooks that run **`agentctl hook-forward`** instead. It reads the hook payload on stdin,
+POSTs it to the same daemon route over the same private socket (`amcd.sock`; AF_UNIX works on
+Windows 10 1803 and later), and prints the daemon's reply. It behaves like the curl command:
+3 s timeout, no output and exit 0 when the daemon is down, slow or answers with an error, and
+no token anywhere. With `--wait` it is the Claude Code rewake waiter (long poll; a message
+goes to stderr with exit 2; each run is logged to `rewake.log` as `start …` / `result=<code>`,
+where the codes are curl's: 0 ok, 7 cannot connect, 22 HTTP error, 28 timeout).
+
+How each tool runs the hook on Windows, and what is written for it:
+
+| Tool | How it runs hook commands on Windows | Hook written |
+|------|--------------------------------------|--------------|
+| Claude Code | `args` present: spawns `command` directly, no shell. Otherwise Git Bash, or PowerShell without Git Bash | exec form: `"command": "C:\…\agentctl.exe"`, `"args": ["hook-forward", "claude", "--socket", "…", "--tag", "agent-mission-control"]` |
+| Codex | `cmd.exe /C "<command>"`; `commandWindows` replaces `command` on Windows | `"C:\…\agentctl.exe" hook-forward codex --event … --socket "…"` in both `command` and `commandWindows` |
+| Gemini CLI | `pwsh`/`powershell.exe -NoProfile -Command <command>` | `& 'C:\…\agentctl.exe' hook-forward gemini --event …` |
+| Cursor | PowerShell (desktop app) | `& 'C:\…\agentctl.exe' hook-forward cursor --event …` |
+| Copilot CLI | the `powershell` field | `powershell`: `& 'C:\…\agentctl.exe' hook-forward copilot --event …` |
+| Grok | not documented; assumed cmd.exe (Node `shell: true`) | the cmd form, as for Codex |
+
+The hooks name the agentctl that ran `hooks install` by absolute path. After moving or
+reinstalling agentctl, run `agentctl hooks install` again (`hooks status` reports the old
+entries as outdated, and `agentctl doctor` checks that the hook forwarder exists). A state
+directory path containing `%` cannot be quoted for cmd.exe; install refuses it for Codex and Grok.
+
 ## Identity
 
 | Entity | Id |

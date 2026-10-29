@@ -64,7 +64,7 @@ Key discovery findings that shape the design:
 ## 2. System architecture
 
 ```
- Claude Code sessions ──hooks (curl POST)──┐
+ Claude Code sessions ──hooks (POST)───────┐
  ~/.claude/sessions/*.json ── registry ────┤
  ~/.claude/projects/**/*.jsonl ── tailer ──┤       ┌──────────────────────── amcd ─────────────────────────┐
  /proc ── process collector ───────────────┼─────► │ Collectors ─► Ingest channel ─► Normalizer/dedupe ──┐ │

@@ -43,6 +43,9 @@ public static class Router
         new("hooks", "hooks status|install|uninstall [--tool claude|codex|gemini|grok|cursor|copilot] [--settings PATH] [--yes]",
             "Manage an AI tool's hooks so it reports to Overhive (default tool: claude)",
             HooksCommand.RunAsync, 0, 1, Flags: ["yes"], Values: ["settings", "port", "tool"]),
+        new(Amc.Core.Providers.HookForwarder.Subcommand, "hook-forward <tool> [--event E] [--wait] [--socket PATH]  (stdin: hook JSON)",
+            "Forward a hook payload to amcd's private socket; what installed hooks run on Windows. Always exits 0 (fails open)",
+            HookForwardAsync, 0, 1, Flags: ["wait"], Values: ["event", "socket", "tag"]),
         new("doctor", "doctor [--settings PATH] [--json]", "Diagnose the installation", DoctorCommand.RunAsync, Values: ["settings"]),
         new("run", "run [--id ID] [--cols N] [--rows N] -- <cmd> [args...]", "Run an agent under a PTY owned by Overhive", RunAsync,
             AcceptsRest: true, Values: ["id", "cols", "rows"]),
@@ -91,6 +94,16 @@ public static class Router
         if (args.Positionals.Count > 0) spec = Find(args.Positionals[0]) ?? throw new UsageException($"unknown command '{args.Positionals[0]}'");
         WriteHelp(ctx, spec);
         return Task.FromResult(ExitCodes.Ok);
+    }
+
+    /// <summary>Only reached through Router (e.g. `agentctl --no-color hook-forward …`); EntryPoint normally short-circuits it.</summary>
+    private static Task<int> HookForwardAsync(CliContext ctx, ParsedArgs args, CancellationToken ct)
+    {
+        var argv = new List<string>(args.Positionals);
+        foreach (var (name, values) in args.Options)
+            foreach (var v in values) argv.AddRange(["--" + name, v]);
+        if (args.Flag("wait")) argv.Add("--wait");
+        return Hooks.HookForward.MainAsync([.. argv]);
     }
 
     private static Task<int> VersionAsync(CliContext ctx, ParsedArgs args, CancellationToken ct)
