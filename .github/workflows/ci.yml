@@ -24,11 +24,11 @@ jobs:
       - run: dotnet build -c Release
       - run: dotnet test -c Release --no-build --logger "console;verbosity=normal"
 
-  # macOS and Windows support is in progress: these runs report problems but do not block merges yet.
+  # Windows failures fail the run; macOS still only reports problems.
   platforms:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -141,6 +141,7 @@ jobs:
         shell: bash
         run: |
           set +e
+          failed=""
           for area in Platform Core Claude Cli E2E Git Pipeline Process Terminals Tools Ui; do
             echo "::group::$area"
             if command -v timeout >/dev/null; then t="timeout 360"; elif command -v gtimeout >/dev/null; then t="gtimeout 360"; else t=""; fi
@@ -150,8 +151,9 @@ jobs:
             rc=$?
             echo "::endgroup::"
             echo "AREA $area exit=$rc"
+            [ $rc -eq 0 ] || failed="$failed $area"
           done
-          exit 0
+          [ -z "$failed" ] || { echo "::error::Failed test areas:$failed"; exit 1; }
         timeout-minutes: 45
       - name: Failed tests
         if: always()
