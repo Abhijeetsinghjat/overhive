@@ -21,6 +21,10 @@ public sealed class ClaudeHookReceiver : BackgroundService
     public const string HealthName = "claude-hooks";
     public const long HookLogMaxBytes = 5 * 1024 * 1024;
     private const int LogStringCap = 2000;
+    /// <summary>Most hook calls waiting for mapping.</summary>
+    public const int MaxQueuedHooks = 10_000;
+    /// <summary>Most (estimated) bytes of hook payloads waiting for mapping; beyond it new hook work is dropped like a full queue.</summary>
+    public const long MaxQueuedBytes = 32L * 1024 * 1024;
 
     private readonly ClaudeEventMapper _mapper;
     private readonly ClaudeContext _ctx;
@@ -32,13 +36,18 @@ public sealed class ClaudeHookReceiver : BackgroundService
     private readonly ILogger<ClaudeHookReceiver> _log;
     private readonly ClaudeHooksState? _hooks;
     private readonly ClaudeRewake? _rewake;
-    private readonly Channel<HookWork> _work = Channel.CreateBounded<HookWork>(new BoundedChannelOptions(10_000)
+    private long _queuedBytes;
+    private readonly Channel<HookWork> _work = Channel.CreateBounded<HookWork>(new BoundedChannelOptions(MaxQueuedHooks)
     {
         SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite,
     });
     private readonly object _logGate = new();
 
-    public sealed record HookWork(JsonObject Payload, DateTimeOffset At, bool Delivered);
+    /// <param name="Bytes">Estimated retained size of the (compacted) payload while queued.</param>
+    public sealed record HookWork(JsonObject Payload, DateTimeOffset At, bool Delivered, long Bytes = 0);
+
+    /// <summary>Estimated bytes of hook payloads waiting for mapping.</summary>
+    public long QueuedBytes => Interlocked.Read(ref _queuedBytes);
 
     public ClaudeHookReceiver(ClaudeEventMapper mapper, Mailbox mailbox, IEventSink sink, HealthRegistry health,
         IOptions<AmcOptions> options, TimeProvider time, ILogger<ClaudeHookReceiver> log, ClaudeHooksState? hooks = null, ClaudeRewake? rewake = null)
@@ -54,12 +63,23 @@ public sealed class ClaudeHookReceiver : BackgroundService
     public async Task<JsonObject?> HandleAsync(JsonObject payload, CancellationToken ct = default)
     {
         var (response, work) = await AcceptAsync(payload, ct);
-        if (work is not null && !_work.Writer.TryWrite(work))
+        if (work is not null && !TryQueue(work))
         {
             _health.Increment(HealthName, "dropped");
             _health.Degraded(HealthName, "hook work queue full");
         }
         return response;
+    }
+
+    private bool TryQueue(HookWork work)
+    {
+        if (Interlocked.Add(ref _queuedBytes, work.Bytes) > MaxQueuedBytes || !_work.Writer.TryWrite(work))
+        {
+            Interlocked.Add(ref _queuedBytes, -work.Bytes);
+            return false;
+        }
+        _health.SetCounter(HealthName, "queued_bytes", Interlocked.Read(ref _queuedBytes));
+        return true;
     }
 
     /// <summary>Same as <see cref="HandleAsync"/> but maps the payload inline (tests, deterministic ordering).</summary>
@@ -92,7 +112,9 @@ public sealed class ClaudeHookReceiver : BackgroundService
             _health.Increment(HealthName, "errors");
         }
         _health.Ok(HealthName, $"last hook {evt} at {now:HH:mm:ss}");
-        return (response, new HookWork(payload, now, response is not null));
+        // Mapping happens later: keep only what it reads (no Write content, Edit strings, originalFile; strings capped).
+        var bytes = ClaudePayloadTrim.CompactHookPayload(payload);
+        return (response, new HookWork(payload, now, response is not null, bytes));
     }
 
     /// <summary>The agent a hook fired for: the sub-agent when agent_id is present, otherwise the main agent.</summary>
@@ -136,6 +158,7 @@ public sealed class ClaudeHookReceiver : BackgroundService
         else if (_hooks is not null) _health.Disabled(HealthName, $"hooks not installed in {_hooks.SettingsPath} — run `agentctl hooks install` for real-time events and messaging");
         await foreach (var w in _work.Reader.ReadAllAsync(ct))
         {
+            Interlocked.Add(ref _queuedBytes, -w.Bytes);
             try { await ProcessAsync(w, ct); }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex)

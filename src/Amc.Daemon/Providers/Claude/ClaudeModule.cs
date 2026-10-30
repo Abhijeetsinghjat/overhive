@@ -33,6 +33,7 @@ public static class ClaudeModule
         s.AddHostedService(sp => sp.GetRequiredService<ClaudeRegistryCollector>());
         s.AddHostedService<TranscriptTailer>();
         s.AddHostedService(sp => sp.GetRequiredService<ClaudeHookReceiver>());
+        s.AddHostedService<ClaudeContextSweeper>();
         return s;
     }
 

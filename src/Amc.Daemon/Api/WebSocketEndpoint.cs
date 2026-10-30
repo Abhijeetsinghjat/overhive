@@ -47,18 +47,17 @@ public static class WebSocketEndpoint
             }
 
             var receive = ReceiveLoop(ws, ct);
-            var reader = client.Outbox.Reader;
-            while (!ct.IsCancellationRequested && ws.State == WebSocketState.Open)
+            var resynced = false;
+            while (!resynced && !ct.IsCancellationRequested && ws.State == WebSocketState.Open)
             {
-                if (client.NeedsResync)
-                {
-                    await Send(ws, """{"t":"resync","reason":"client too slow"}""", ct);
-                    break;
-                }
-                var readTask = reader.WaitToReadAsync(ct).AsTask();
+                var readTask = client.WaitToReadAsync(ct).AsTask();
                 if (await Task.WhenAny(readTask, receive) == receive) break;
                 if (!await readTask) break;
-                while (reader.TryRead(out var msg)) await Send(ws, msg, ct);
+                while (client.TryRead(out var msg))
+                {
+                    await Send(ws, msg, ct);
+                    if (ReferenceEquals(msg, ClientConnection.ResyncMessage)) { resynced = true; break; }
+                }
             }
             if (ws.State == WebSocketState.Open)
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
@@ -81,6 +80,13 @@ public static class WebSocketEndpoint
         }
     }
 
-    private static Task Send(WebSocket ws, string json, CancellationToken ct) =>
-        ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
+    /// <summary>A send that makes no progress for this long (peer asleep, network gone) aborts the socket.</summary>
+    public static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(30);
+
+    private static async Task Send(WebSocket ws, string json, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(SendTimeout);
+        await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, timeout.Token);
+    }
 }

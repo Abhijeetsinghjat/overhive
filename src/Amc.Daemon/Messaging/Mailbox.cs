@@ -12,14 +12,29 @@ public sealed record PendingMessage(string MessageId, string AgentId, string Tex
 public sealed class Mailbox
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<PendingMessage>> _queues = new();
+    /// <summary>Serializes Enqueue against <see cref="PruneEmpty"/>, so a message never lands in a queue that was just removed.</summary>
+    private readonly Lock _gate = new();
 
     /// <summary>Raised after a message is queued (agent id). Lets transports that can wake an idle agent react at once.</summary>
     public event Action<string>? Enqueued;
 
     public void Enqueue(PendingMessage m)
     {
-        _queues.GetOrAdd(m.AgentId, _ => new()).Enqueue(m);
+        lock (_gate) _queues.GetOrAdd(m.AgentId, _ => new()).Enqueue(m);
         Enqueued?.Invoke(m.AgentId);
+    }
+
+    /// <summary>Number of agents with a queue (empty or not).</summary>
+    public int QueueCount => _queues.Count;
+
+    /// <summary>Removes the empty per-agent queues (every agent ever messaged otherwise keeps one). Returns how many.</summary>
+    public int PruneEmpty()
+    {
+        var n = 0;
+        lock (_gate)
+            foreach (var (id, q) in _queues)
+                if (q.IsEmpty && _queues.TryRemove(new KeyValuePair<string, ConcurrentQueue<PendingMessage>>(id, q))) n++;
+        return n;
     }
 
     public bool HasPending(string agentId) => _queues.TryGetValue(agentId, out var q) && !q.IsEmpty;

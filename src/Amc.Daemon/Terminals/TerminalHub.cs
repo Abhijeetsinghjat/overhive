@@ -39,6 +39,8 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
     public const int MaxFrameBytes = 1024 * 1024;
     public const int MaxInputBytes = 64 * 1024;
     public const int ViewerQueue = 1024;
+    /// <summary>Most bytes queued for one viewer; a viewer further behind is dropped and reconnects (it gets the ring buffer again).</summary>
+    public const long MaxViewerQueuedBytes = 4L * 1024 * 1024;
     public static readonly TimeSpan DetachGrace = TimeSpan.FromSeconds(15);
 
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
@@ -71,12 +73,31 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
         public SemaphoreSlim SendLock { get; } = new(1, 1);
     }
 
-    private sealed class Viewer
+    internal sealed class Viewer
     {
         public string Id { get; } = Ulid.NewId();
         public Channel<(byte[] Data, bool Text)> Out { get; } =
             Channel.CreateBounded<(byte[], bool)>(new BoundedChannelOptions(ViewerQueue) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
         public volatile bool Lagging;
+        public long QueuedBytes;
+
+        /// <summary>Queues a frame unless the viewer is over its frame or byte budget.</summary>
+        public bool TryEnqueue(byte[] data, bool text)
+        {
+            if (Interlocked.Add(ref QueuedBytes, data.Length) > MaxViewerQueuedBytes || !Out.Writer.TryWrite((data, text)))
+            {
+                Interlocked.Add(ref QueuedBytes, -data.Length);
+                return false;
+            }
+            return true;
+        }
+
+        public bool TryDequeue(out (byte[] Data, bool Text) frame)
+        {
+            if (!Out.Reader.TryRead(out frame)) return false;
+            Interlocked.Add(ref QueuedBytes, -frame.Data.Length);
+            return true;
+        }
     }
 
     private sealed class Session(string id, RingBuffer ring, TerminalLog log)
@@ -225,7 +246,7 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
         {
             foreach (var v in s.Viewers.Values)
             {
-                if (v.Out.Writer.TryWrite((data, text))) continue;
+                if (v.TryEnqueue(data, text)) continue;
                 // Too slow: drop the viewer; it reconnects and receives the ring buffer again.
                 v.Lagging = true;
                 v.Out.Writer.TryComplete();
@@ -303,7 +324,7 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
             initial = s.Ring.ToArray();   // snapshot + subscribe atomically: no gap, no duplicates
             s.Viewers[viewer.Id] = viewer;
             if (s.Exited)
-                viewer.Out.Writer.TryWrite((Encoding.UTF8.GetBytes(new JsonObject { ["t"] = "exit", ["code"] = s.ExitCode }.ToJsonString()), true));
+                viewer.TryEnqueue(Encoding.UTF8.GetBytes(new JsonObject { ["t"] = "exit", ["code"] = s.ExitCode }.ToJsonString()), true);
         }
         Interlocked.Increment(ref _viewerCount);
         UpdateHealth();
@@ -316,7 +337,7 @@ public sealed partial class TerminalHub : ITerminalHub, ITerminalDirectory, IDis
             var receive = ViewerReceiveLoop(ws, s, viewer, cts.Token);
             var reader = viewer.Out.Reader;
             while (await reader.WaitToReadAsync(cts.Token))
-                while (reader.TryRead(out var f))
+                while (viewer.TryDequeue(out var f))
                     await ws.SendAsync(f.Data, f.Text ? WebSocketMessageType.Text : WebSocketMessageType.Binary, true, cts.Token);
             // channel completed: viewer fell behind
             await CloseQuietly(ws, viewer.Lagging ? (WebSocketCloseStatus)1013 : WebSocketCloseStatus.NormalClosure, viewer.Lagging ? "lagging; reconnect" : "closed");
