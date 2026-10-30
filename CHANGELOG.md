@@ -48,6 +48,17 @@ version is 0.x, minor versions may change behaviour.
   dropping button words first, and wraps below that; search results, the "Needs you"
   panel and the agent-tree slide-over stay on screen and below the header and banners; Escape closes only
   the topmost panel; the current tab scrolls into view; the help lists every tab shortcut and `n`.
+- Lower and steadier daemon memory. State snapshots are written at most every 5 minutes (and at
+  least every 2,000 events) instead of every 2,000 events, are gzip-compressed (33 MB of JSON becomes 4.4
+  MB), serialized into pooled 64 KB chunks and streamed into SQLite, and only the newest two are kept. The
+  daemon uses the Workstation GC with `ConserveMemory=5` instead of the Server GC, the systemd unit and
+  launcher set `MALLOC_ARENA_MAX=2` (re-run the installer to update an installed unit), the WAL is truncated
+  to 8 MB after checkpoints, and `/api/state` no longer builds a full-size string per request. Transcript
+  tailing reads with a pooled 64 KB buffer and caps a single line at 8 MB (longer lines still start and end
+  their tool calls). `/api/health` no longer counts every event on each poll. Older JSON snapshots are still
+  read; an older daemon started on the upgraded database replays the event log instead.
+- Retention runs on wall-clock time, checked every minute, so a laptop that slept no longer postpones it
+  or makes the Health tab report it as stale.
 
 ## [0.2.0] - 2026-10-17
 

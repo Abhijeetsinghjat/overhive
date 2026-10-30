@@ -20,7 +20,10 @@ public sealed class AmcOptions
     public int WorkspaceScanDepth { get; set; } = 3;
     /// <summary>How far back transcripts are backfilled on first start.</summary>
     public double BackfillHours { get; set; } = 24;
+    /// <summary>A state snapshot is written once at least this many events arrived since the last one ...</summary>
     public int SnapshotEveryEvents { get; set; } = 2000;
+    /// <summary>... and at least this many minutes passed (bursts would otherwise write one every few hundred ms). Also on shutdown.</summary>
+    public double SnapshotMinIntervalMinutes { get; set; } = 5;
     /// <summary>Detail events (tool/command calls, process start/exit, outputs, superseded git status) are kept this long.</summary>
     public int DetailRetentionDays { get; set; } = 7;
     /// <summary>History events (agent lifecycle, prompts, usage, commits, messages, audit) are kept this long.</summary>

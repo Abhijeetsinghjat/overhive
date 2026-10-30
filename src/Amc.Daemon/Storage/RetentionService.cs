@@ -17,29 +17,44 @@ public sealed class RetentionService(EventStore store, StateStore state, HealthR
     public const string HealthName = "retention";
     private readonly AmcOptions _o = options.Value;
 
+    /// <summary>How often the schedule is checked. Short, so a run is not postponed by a machine that slept.</summary>
+    public static readonly TimeSpan CheckEvery = TimeSpan.FromMinutes(1);
+
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         var interval = TimeSpan.FromHours(Math.Max(0.1, _o.RetentionIntervalHours));
-        health.Register(HealthName, interval * 2 + TimeSpan.FromMinutes(10));
+        // Wall-clock schedule: a timer does not advance while the machine sleeps, so one long Task.Delay(interval)
+        // would run late by the time spent asleep, and the (wall-clock) health staleness check would raise a false alarm.
+        // Checking every minute keeps a run at most a minute late, so the health margin below holds.
+        health.Register(HealthName, interval + CheckEvery + TimeSpan.FromMinutes(10));
         await Task.Delay(TimeSpan.FromSeconds(30), time, ct); // let startup ingestion settle
+        DateTimeOffset? lastRun = null;
         while (!ct.IsCancellationRequested)
         {
-            try { await Task.Run(() => RunOnce(ct), ct); }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (Exception ex)
+            if (Due(time.GetUtcNow(), lastRun, interval))
             {
-                log.LogWarning(ex, "Retention run failed");
-                health.Degraded(HealthName, "last run failed: " + ex.Message);
+                lastRun = time.GetUtcNow();
+                try { await Task.Run(() => RunOnce(ct), ct); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+                catch (Exception ex)
+                {
+                    log.LogWarning(ex, "Retention run failed");
+                    health.Degraded(HealthName, "last run failed: " + ex.Message);
+                }
             }
-            await Task.Delay(interval, time, ct);
+            await Task.Delay(CheckEvery < interval ? CheckEvery : interval, time, ct);
         }
     }
+
+    /// <summary>True when the service has not run yet or the wall-clock time since the last run reached the interval.</summary>
+    public static bool Due(DateTimeOffset now, DateTimeOffset? lastRun, TimeSpan interval) =>
+        lastRun is not { } last || now - last >= interval || now < last; // clock set back: run rather than wait it out
 
     public EventStore.PruneResult RunOnce(CancellationToken ct = default)
     {
         var before = store.FileBytes(_o.DbPath);
-        var (seq, json) = state.Read(s => (s.Seq, Json.Serialize(s)));
-        store.SaveSnapshot(seq, json);
+        var (seq, encoded) = state.EncodeSnapshot();
+        using (encoded) store.SaveSnapshot(seq, encoded);
         var r = store.Prune(time.GetUtcNow(), seq, _o.DetailRetentionDays, _o.HistoryRetentionDays, ct);
         var after = store.FileBytes(_o.DbPath);
         health.Increment(HealthName, "compacted", r.Compacted);

@@ -35,6 +35,7 @@ class Overhive < Formula
 
   service do
     run [opt_bin/"amcd"]
+    environment_variables MALLOC_ARENA_MAX: "2" # glibc (Linuxbrew) only; see scripts/amcd.service
     keep_alive crashed: true
     log_path var/"log/overhive.log"
     error_log_path var/"log/overhive.log"
