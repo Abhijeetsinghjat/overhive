@@ -48,6 +48,13 @@ version is 0.x, minor versions may change behaviour.
   dropping button words first, and wraps below that; search results, the "Needs you"
   panel and the agent-tree slide-over stay on screen and below the header and banners; Escape closes only
   the topmost panel; the current tab scrolls into view; the help lists every tab shortcut and `n`.
+- Daemon memory no longer grows with uptime from live buffers: remembered Claude tool calls keep only the
+  fields the end needs (not Write content or Edit strings) and are dropped 5 minutes after they end (cap
+  5,000, was 50,000 full copies); queued hook calls are compacted and bounded to 32 MB; each dashboard
+  WebSocket queue is bounded to 8 MB, process/attention updates replace each other instead of queuing,
+  patches are coalesced over 250 ms, and a socket that stops answering pings or sends for 30 s is closed;
+  terminal viewers are bounded to 4 MB queued; an hourly sweep forgets per-session state of ended sessions
+  and empty mailbox queues; the idle-session wake-up timer is cancelled when a message arrives.
 
 ## [0.2.0] - 2026-10-17
 

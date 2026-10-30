@@ -146,7 +146,7 @@ public sealed class ClaudeHarness : IDisposable
         Options = new AmcOptions { ClaudeHome = Path.Combine(Root, ".claude"), DataDir = Path.Combine(Root, "data"), BackfillHours = 24 };
         Directory.CreateDirectory(Options.ClaudeHome);
         Signals = new FakeSignals(Proc);
-        Context = new ClaudeContext(State);
+        Context = new ClaudeContext(State, Time);
         Mapper = new ClaudeEventMapper(Context, Worktrees, Time);
         Hooks = new ClaudeHooksState(Path.Combine(Options.ClaudeHome, "settings.json"));
     }

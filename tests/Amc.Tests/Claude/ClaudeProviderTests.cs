@@ -239,6 +239,6 @@ public sealed class ClaudeModuleTests
         using var sp = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(s,
             new Microsoft.Extensions.DependencyInjection.ServiceProviderOptions { ValidateOnBuild = true });
         Assert.Equal("claude", Assert.Single(Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<IAgentProvider>(sp)).Id);
-        Assert.Equal(4, Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Microsoft.Extensions.Hosting.IHostedService>(sp).Count());
+        Assert.Equal(5, Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<Microsoft.Extensions.Hosting.IHostedService>(sp).Count());
     }
 }
