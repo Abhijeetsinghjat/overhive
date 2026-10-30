@@ -37,6 +37,13 @@ version is 0.x, minor versions may change behaviour.
   social preview image (`docs/media/social-preview.png`).
 
 ### Fixed
+- The daemon's state no longer grows without bound: removed worktrees and their files, idle clean files,
+  finished agent sessions (14 days), old commits, test runs and risk findings (14 days), usage marks and
+  claim-check details (7 days) are dropped from memory in event time (`StateRetention`; the timeline keeps
+  the full log). A worktree with more than 500 dirty paths reports summary counts only for new paths, and
+  event-log compaction also drops git status of removed worktrees and old "clean" statuses. On one real
+  installation the state went from 33 MB / 43,333 files to 5 MB / 1,287 files, and the database from
+  575 MB to 253 MB after the first retention run. The first start after upgrading replays the event log.
 - The Hive tab was blank and the **3D** button did nothing on `main`: a merge had dropped the Hive and 3D
   effects start-up from the dashboard's entry module. Restored, with a test that every view's start-up
   function is called.

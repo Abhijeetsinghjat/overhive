@@ -35,6 +35,10 @@ public sealed class WorldState
     public long Seq { get; set; }
     /// <summary>Timestamp of the latest applied event. Used instead of wall-clock so folds are deterministic.</summary>
     public DateTimeOffset Clock { get; set; }
+    /// <summary>Event time of the last retention sweep (serialized, so snapshot + tail prunes exactly like a full replay).</summary>
+    public DateTimeOffset? LastRetentionSweep { get; set; }
+    /// <summary>Retention windows applied by the reducer (configuration, not state).</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public StateRetention Retention { get; set; } = StateRetention.Default;
 
     private StateIndex? _index;
     /// <summary>Derived indexes (not serialized; rebuilt lazily after restore).</summary>
