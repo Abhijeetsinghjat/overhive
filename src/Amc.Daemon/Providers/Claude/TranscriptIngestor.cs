@@ -21,7 +21,15 @@ namespace Amc.Daemon.Providers.Claude;
 public sealed partial class TranscriptIngestor
 {
     public const string HealthName = "claude-transcripts";
-    private const int ChunkSize = 1 << 20;
+    /// <summary>Read buffer, rented per file from the shared pool (below the large-object threshold).</summary>
+    private const int ChunkSize = 64 * 1024;
+    /// <summary>
+    /// Longest transcript line parsed in full. Longer lines (in practice a huge tool result or tool input: pasted
+    /// images, giant file reads/writes) keep only their first and last bytes, from which the tool ids are recovered.
+    /// </summary>
+    internal const int MaxLineBytes = 8 << 20;
+    private const int OversizedHeadBytes = 64 * 1024;
+    private const int OversizedTailBytes = 4 * 1024;
     private const int FingerprintBytes = 1024;
     private static readonly TimeSpan MetaGrace = TimeSpan.FromSeconds(30);
 
@@ -247,43 +255,55 @@ public sealed partial class TranscriptIngestor
 
         var state = new FileState(path, sessionId, agentId, isMain);
         long consumed = offset;
-        var pendingTail = new MemoryStream();
+        using var line = new LineAssembler();
         AgentEvent? held = null; // the newest event is published last, and waited for, before the checkpoint moves
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
         try
         {
-            await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
             fs.Seek(offset, SeekOrigin.Begin);
-            var buffer = new byte[ChunkSize];
             int read;
-            while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+            while ((read = await fs.ReadAsync(buffer.AsMemory(0, ChunkSize), ct)) > 0)
             {
                 var start = 0;
                 for (var i = 0; i < read; i++)
                 {
                     if (buffer[i] != (byte)'\n') continue;
-                    ReadOnlyMemory<byte> line;
-                    if (pendingTail.Length > 0)
+                    List<AgentEvent> events;
+                    if (line.Length > 0)
                     {
-                        pendingTail.Write(buffer, start, i - start);
-                        line = pendingTail.ToArray();
-                        pendingTail.SetLength(0);
+                        line.Append(buffer.AsSpan(start, i - start));
+                        consumed += line.Length + 1;
+                        if (line.Oversized)
+                        {
+                            _health.Increment(HealthName, "lines_oversized");
+                            events = OversizedRecord(line.Head.Span, line.Tail.Span, line.Length) is { } rec ? await HandleRecordAsync(rec, state, ct) : [];
+                        }
+                        else events = await HandleLineAsync(line.Content, state, ct);
+                        line.Reset();
                     }
-                    else line = buffer.AsMemory(start, i - start);
-                    consumed += line.Length + 1;
+                    else
+                    {
+                        consumed += i - start + 1;
+                        events = await HandleLineAsync(buffer.AsMemory(start, i - start), state, ct);
+                    }
                     start = i + 1;
-                    var events = await HandleLineAsync(line, state, ct);
                     if (events.Count == 0) continue;
                     if (held is not null) events.Insert(0, held);
                     held = events[^1];
                     events.RemoveAt(events.Count - 1);
                     await PublishAsync(events, ct);
                 }
-                if (start < read) pendingTail.Write(buffer, start, read - start); // partial trailing line: not consumed
+                if (start < read) line.Append(buffer.AsSpan(start, read - start)); // partial trailing line: not consumed
             }
         }
         catch (IOException ex)
         {
             _health.Degraded(HealthName, $"read failed for {System.IO.Path.GetFileName(path)}: {ex.Message}");
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
 
         if (held is not null)
@@ -313,10 +333,14 @@ public sealed partial class TranscriptIngestor
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var window = (int)Math.Min(length, 1 << 20);
             fs.Seek(length - window, SeekOrigin.Begin);
-            var buf = new byte[window];
-            fs.ReadExactly(buf);
-            var idx = Array.LastIndexOf(buf, (byte)'\n');
-            return idx < 0 ? length - window : length - window + idx + 1;
+            var buf = System.Buffers.ArrayPool<byte>.Shared.Rent(window);
+            try
+            {
+                fs.ReadExactly(buf, 0, window);
+                var idx = buf.AsSpan(0, window).LastIndexOf((byte)'\n');
+                return idx < 0 ? length - window : length - window + idx + 1;
+            }
+            finally { System.Buffers.ArrayPool<byte>.Shared.Return(buf); }
         }
         catch (IOException) { return length; }
     }
@@ -358,6 +382,11 @@ public sealed partial class TranscriptIngestor
         if (bytes.Length == 0 || bytes.Span.Trim((byte)' ').Length == 0) return [];
         var r = TryParse(bytes.Span);
         if (r is null) { _health.Increment(HealthName, "bad_lines"); return []; }
+        return await HandleRecordAsync(r, f, ct);
+    }
+
+    private async Task<List<AgentEvent>> HandleRecordAsync(JsonObject r, FileState f, CancellationToken ct)
+    {
         try { return await MapRecordAsync(r, f, ct); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -593,6 +622,150 @@ public sealed partial class TranscriptIngestor
     {
         try { return f().ToList(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
+    }
+
+    // ---- lines longer than MaxLineBytes ----------------------------------------------------
+
+    /// <summary>
+    /// A minimal record rebuilt from the head and tail of a line too long to parse: the tool_result ids of a user
+    /// record (so the tool calls end) or the tool_use ids and names of an assistant record (so they start), with the
+    /// timestamp, cwd and branch when the tail has them. Null if there is nothing such to recover.
+    /// </summary>
+    internal static JsonObject? OversizedRecord(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, long length)
+    {
+        var h = Encoding.UTF8.GetString(head);
+        var t = Encoding.UTF8.GetString(tail);
+        var role = OversizedRole().Match(h) is { Success: true } m ? m.Groups[1].Value : null;
+        var blocks = new JsonArray();
+        var note = $"[Overhive: transcript line of {length / (1 << 20)} MB was not parsed]";
+        if (role == "user")
+            foreach (Match id in OversizedToolResult().Matches(h))
+                blocks.Add(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = Unescape(id.Groups[1].Value), ["content"] = note });
+        else if (role == "assistant")
+            foreach (Match tu in OversizedToolUse().Matches(h))
+                blocks.Add(new JsonObject
+                {
+                    ["type"] = "tool_use", ["id"] = Unescape(tu.Groups[1].Value), ["name"] = Unescape(tu.Groups[2].Value), ["input"] = new JsonObject(),
+                });
+        if (blocks.Count == 0) return null;
+        var message = new JsonObject { ["role"] = role, ["content"] = blocks };
+        if (role == "assistant" && LastString(h, "model") is { } model) message["model"] = model;
+        var r = new JsonObject { ["type"] = role, ["message"] = message };
+        foreach (var key in new[] { "timestamp", "cwd", "gitBranch" })
+            if ((LastString(t, key) ?? LastString(h, key)) is { } v) r[key] = v;
+        return r;
+    }
+
+    private static string? LastString(string text, string key)
+    {
+        var matches = OversizedField().Matches(text);
+        for (var i = matches.Count - 1; i >= 0; i--)
+            if (matches[i].Groups["k"].Value == key) return Unescape(matches[i].Groups["v"].Value);
+        return null;
+    }
+
+    private static string Unescape(string jsonStringBody)
+    {
+        try { return JsonSerializer.Deserialize<string>("\"" + jsonStringBody + "\"") ?? jsonStringBody; }
+        catch (JsonException) { return jsonStringBody; }
+    }
+
+    [GeneratedRegex("\"role\":\"(user|assistant)\"")]
+    private static partial Regex OversizedRole();
+    [GeneratedRegex("\"tool_use_id\":\"((?:[^\"\\\\]|\\\\.)+)\"")]
+    private static partial Regex OversizedToolResult();
+    [GeneratedRegex("\"type\":\"tool_use\",\"id\":\"((?:[^\"\\\\]|\\\\.)+)\",\"name\":\"((?:[^\"\\\\]|\\\\.)+)\"")]
+    private static partial Regex OversizedToolUse();
+    [GeneratedRegex("\"(?<k>timestamp|cwd|gitBranch|model)\":\"(?<v>(?:[^\"\\\\]|\\\\.)*)\"")]
+    private static partial Regex OversizedField();
+
+    /// <summary>
+    /// Collects a line that spans read buffers. Up to <c>max</c> bytes are kept whole (in a pooled array); past that only
+    /// the first <c>headBytes</c> and the last <c>tailBytes</c> are kept, while <see cref="Length"/> still counts every byte.
+    /// </summary>
+    internal sealed class LineAssembler(int max = MaxLineBytes, int headBytes = OversizedHeadBytes, int tailBytes = OversizedTailBytes) : IDisposable
+    {
+        private byte[] _buf = [];
+        private int _count;
+        private readonly byte[] _tail = new byte[tailBytes];
+        private int _tailLen;
+
+        public long Length { get; private set; }
+        public bool Oversized { get; private set; }
+        /// <summary>The whole line (when not <see cref="Oversized"/>).</summary>
+        public ReadOnlyMemory<byte> Content => _buf.AsMemory(0, _count);
+        public ReadOnlyMemory<byte> Head => _buf.AsMemory(0, _count);
+        public ReadOnlyMemory<byte> Tail => _tail.AsMemory(0, _tailLen);
+
+        public void Append(ReadOnlySpan<byte> segment)
+        {
+            if (segment.IsEmpty) return;
+            if (!Oversized && Length + segment.Length <= max)
+            {
+                Ensure(_count + segment.Length);
+                segment.CopyTo(_buf.AsSpan(_count));
+                _count += segment.Length;
+                Length += segment.Length;
+                return;
+            }
+            if (!Oversized)
+            {
+                Oversized = true;
+                AppendTail(_buf.AsSpan(0, _count));
+                if (_count < headBytes)
+                {
+                    var n = Math.Min(headBytes - _count, segment.Length);
+                    Ensure(_count + n);
+                    segment[..n].CopyTo(_buf.AsSpan(_count));
+                    _count += n;
+                }
+                else _count = headBytes;
+                if (_buf.Length > headBytes * 2) // give the large array back now, keep only the head
+                {
+                    var small = System.Buffers.ArrayPool<byte>.Shared.Rent(headBytes);
+                    _buf.AsSpan(0, _count).CopyTo(small);
+                    System.Buffers.ArrayPool<byte>.Shared.Return(_buf);
+                    _buf = small;
+                }
+            }
+            AppendTail(segment);
+            Length += segment.Length;
+        }
+
+        public void Reset()
+        {
+            _count = 0; _tailLen = 0; Length = 0; Oversized = false;
+        }
+
+        private void AppendTail(ReadOnlySpan<byte> s)
+        {
+            if (s.Length >= _tail.Length)
+            {
+                s[^_tail.Length..].CopyTo(_tail);
+                _tailLen = _tail.Length;
+                return;
+            }
+            var keep = Math.Min(_tailLen, _tail.Length - s.Length);
+            _tail.AsSpan(_tailLen - keep, keep).CopyTo(_tail);
+            s.CopyTo(_tail.AsSpan(keep));
+            _tailLen = keep + s.Length;
+        }
+
+        private void Ensure(int needed)
+        {
+            if (_buf.Length >= needed) return;
+            var bigger = System.Buffers.ArrayPool<byte>.Shared.Rent(Math.Max(needed, Math.Max(_buf.Length * 2, 4096)));
+            _buf.AsSpan(0, _count).CopyTo(bigger);
+            if (_buf.Length > 0) System.Buffers.ArrayPool<byte>.Shared.Return(_buf);
+            _buf = bigger;
+        }
+
+        public void Dispose()
+        {
+            if (_buf.Length > 0) System.Buffers.ArrayPool<byte>.Shared.Return(_buf);
+            _buf = [];
+            Reset();
+        }
     }
 }
 

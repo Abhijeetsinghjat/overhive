@@ -38,7 +38,10 @@ public sealed class EventStore : IDisposable
     {
         var c = new SqliteConnection(_connectionString);
         c.Open();
-        Exec(c, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+        // journal_size_limit: after a checkpoint resets the WAL, truncate it to 8 MB instead of keeping its high-water mark
+        // (a large transaction can grow it well past the 1000-page autocheckpoint, which stays at the SQLite default).
+        Exec(c, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; " +
+                "PRAGMA journal_size_limit=8388608;");
         return c;
     }
 
@@ -71,7 +74,10 @@ public sealed class EventStore : IDisposable
             CREATE INDEX IF NOT EXISTS ix_events_type ON events(type, seq);
             CREATE INDEX IF NOT EXISTS ix_events_ts ON events(ts_ms);
             CREATE INDEX IF NOT EXISTS ix_events_session ON events(session_id, seq);
+            -- Legacy plain-JSON snapshots (read once after an upgrade, emptied by the first compressed snapshot).
             CREATE TABLE IF NOT EXISTS snapshots(seq INTEGER PRIMARY KEY, created_at TEXT NOT NULL, state TEXT NOT NULL);
+            -- Compressed snapshots (SnapshotCodec). A separate table, so an older daemon never reads this format.
+            CREATE TABLE IF NOT EXISTS state_snapshots(seq INTEGER PRIMARY KEY, created_at TEXT NOT NULL, state BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS cursors(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
             """);
         Exec(_writer, $"INSERT OR IGNORE INTO meta(key,value) VALUES('schema_version','{SchemaVersion}')");
@@ -112,6 +118,7 @@ public sealed class EventStore : IDisposable
             if (seq is long s) stored.Add(e with { Seq = s });
         }
         tx.Commit();
+        Interlocked.Add(ref _appendedSinceCount, stored.Count);
         return stored;
     }
 
@@ -125,6 +132,28 @@ public sealed class EventStore : IDisposable
     {
         using var c = Open();
         return Scalar<long>(c, "SELECT COUNT(*) FROM events");
+    }
+
+    private static readonly TimeSpan CountRefresh = TimeSpan.FromMinutes(10);
+    private readonly Lock _countLock = new();
+    private long _countBase = -1, _countAtTicks, _appendedSinceCount;
+
+    /// <summary>
+    /// Event count for /api/health, which is polled: an exact COUNT(*) (a full index scan) at most every 10 minutes,
+    /// plus the events appended since. Deletions by retention show up at the next refresh.
+    /// </summary>
+    public long CountApprox()
+    {
+        lock (_countLock)
+        {
+            if (_countBase < 0 || Environment.TickCount64 - _countAtTicks > (long)CountRefresh.TotalMilliseconds)
+            {
+                Interlocked.Exchange(ref _appendedSinceCount, 0);
+                _countBase = Count();
+                _countAtTicks = Environment.TickCount64;
+            }
+            return _countBase + Interlocked.Read(ref _appendedSinceCount);
+        }
     }
 
     public List<AgentEvent> Query(EventQuery q)
@@ -199,42 +228,92 @@ public sealed class EventStore : IDisposable
 
     // ---- snapshots ---------------------------------------------------------------
 
+    /// <summary>Snapshots kept: the newest, plus one to fall back on if the newest cannot be decoded.</summary>
+    public const int SnapshotsKept = 2;
+
     public void SaveSnapshot(WorldState state)
     {
         state.ReducerVersion = Reducer.Version;
-        SaveSnapshot(state.Seq, Json.Serialize(state));
+        using var encoded = SnapshotCodec.Encode(state);
+        SaveSnapshot(state.Seq, encoded);
     }
 
-    /// <summary>Stores an already-serialized state (serialized once, under the state read lock, by the caller).</summary>
-    public void SaveSnapshot(long seq, string stateJson)
+    /// <summary>
+    /// Stores an encoded snapshot (<see cref="SnapshotCodec"/>, encoded by the caller under the state read lock).
+    /// The bytes are streamed into a zeroblob through <see cref="SqliteBlob"/>, so no contiguous copy is made.
+    /// </summary>
+    public void SaveSnapshot(long seq, ChunkedBuffer encoded)
     {
         using var c = Open(); // own connection: callable from the pipeline and from the retention service
         using var tx = c.BeginTransaction();
         using (var cmd = c.CreateCommand())
         {
             cmd.Transaction = tx;
-            cmd.CommandText = "INSERT OR REPLACE INTO snapshots(seq,created_at,state) VALUES($seq,$at,$state)";
+            cmd.CommandText = "INSERT OR REPLACE INTO state_snapshots(seq,created_at,state) VALUES($seq,$at,zeroblob($len))";
             cmd.Parameters.AddWithValue("$seq", seq);
             cmd.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.Parameters.AddWithValue("$state", stateJson);
+            cmd.Parameters.AddWithValue("$len", encoded.Length);
             cmd.ExecuteNonQuery();
         }
+        using (var blob = new SqliteBlob(c, "state_snapshots", "state", seq))
+            encoded.WriteTo(blob);
         using (var prune = c.CreateCommand())
         {
             prune.Transaction = tx;
-            prune.CommandText = "DELETE FROM snapshots WHERE seq NOT IN (SELECT seq FROM snapshots ORDER BY seq DESC LIMIT 3)";
+            // Older snapshots, and the legacy JSON ones: an older daemon then finds none and replays the log.
+            prune.CommandText = $"""
+                DELETE FROM state_snapshots WHERE seq NOT IN (SELECT seq FROM state_snapshots ORDER BY seq DESC LIMIT {SnapshotsKept});
+                DELETE FROM snapshots;
+                """;
             prune.ExecuteNonQuery();
         }
         tx.Commit();
     }
 
+    /// <summary>
+    /// The newest snapshot that decodes, or null (replay from scratch). Falls back to the plain-JSON snapshots that
+    /// earlier versions wrote, until the first compressed snapshot replaces them.
+    /// </summary>
     public WorldState? LoadLatestSnapshot()
     {
         using var c = Open();
-        var json = Scalar<string?>(c, "SELECT state FROM snapshots ORDER BY seq DESC LIMIT 1");
-        if (json is null) return null;
-        try { return Json.Deserialize<WorldState>(json); }
+        var seqs = new List<long>();
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = "SELECT seq FROM state_snapshots ORDER BY seq DESC";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) seqs.Add(r.GetInt64(0));
+        }
+        foreach (var seq in seqs)
+        {
+            try
+            {
+                using var blob = new SqliteBlob(c, "state_snapshots", "state", seq, readOnly: true);
+                using var buffered = new BufferedStream(blob, ChunkedBuffer.ChunkSize);
+                if (SnapshotCodec.Decode(buffered) is { } state) return state;
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidDataException or EndOfStreamException) { }
+        }
+        try
+        {
+            var json = Scalar<string?>(c, "SELECT state FROM snapshots ORDER BY seq DESC LIMIT 1");
+            return json is null ? null : Json.Deserialize<WorldState>(json);
+        }
         catch (System.Text.Json.JsonException) { return null; } // incompatible snapshot: replay from scratch
+    }
+
+    /// <summary>(count, total bytes) of the stored snapshots, both formats; for diagnostics and tests.</summary>
+    public (long Count, long Bytes) SnapshotStats()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+            SELECT (SELECT COUNT(*) FROM state_snapshots) + (SELECT COUNT(*) FROM snapshots),
+                   COALESCE((SELECT SUM(length(state)) FROM state_snapshots), 0) + COALESCE((SELECT SUM(length(state)) FROM snapshots), 0)
+            """;
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        return (r.GetInt64(0), r.GetInt64(1));
     }
 
     // ---- cursors (collector checkpoints, e.g. transcript byte offsets) -----------

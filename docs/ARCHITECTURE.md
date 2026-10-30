@@ -84,8 +84,11 @@ Key discovery findings that shape the design:
 
 **Single source of truth:** the append-only event log. `WorldState` is a pure fold
 of events (`Reducer.Apply(state, event)` in `Amc.Core`), so state after a restart
-equals state before it. Snapshots of `WorldState` are stored every N events to keep
-startup fast; startup = load latest snapshot + replay the tail. Snapshots carry `Reducer.Version`;
+equals state before it. Snapshots of `WorldState` keep startup fast: one is written when at least
+2,000 events (`SnapshotEveryEvents`) *and* 5 minutes (`SnapshotMinIntervalMinutes`) have passed since the last,
+before each retention run and on shutdown. The state is serialized straight into a gzip stream (fastest level) (pooled
+64 KB chunks, no full-size string) and streamed into an SQLite blob; the two newest are kept. Startup = load
+latest snapshot + replay the tail. Snapshots carry `Reducer.Version`;
 a snapshot from another version is discarded and the full log is replayed, so changes
 to the fold semantics apply to all of history.
 
@@ -276,7 +279,8 @@ then such claims stay unverified rather than "contradicted" too early.
 events(seq INTEGER PK, id, ts, type, source, evidence, agent_id, session_id,
        repository_id, worktree_id, file_path, dedupe_key UNIQUE, data JSON)
   idx: (agent_id, seq), (worktree_id, seq), (file_path, seq), (type, seq), (ts)
-snapshots(seq PK, created_at, state JSON)      -- latest few kept
+state_snapshots(seq PK, created_at, state BLOB) -- "AMS"+codec header, gzip JSON; newest 2 kept
+snapshots(seq PK, created_at, state JSON)      -- legacy JSON: read once after upgrading, then emptied
 cursors(key PK, value)                         -- transcript byte offsets etc.
 ```
 Writes are batched (≤200 events or 50 ms per transaction) on one writer task.

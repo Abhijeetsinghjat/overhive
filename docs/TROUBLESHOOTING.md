@@ -40,6 +40,20 @@ exact. Freed space is returned to disk (incremental vacuum). Caveat: after an up
 is derived (`Reducer.Version`), state is rebuilt from the *retained* events, so counters derived from pruned
 detail (for example tool-call counts older than the detail window) restart from what is still in the log.
 
+## Memory use
+
+`amcd` runs the .NET Workstation garbage collector (one heap, `System.GC.ConserveMemory=5`), not the Server
+GC that ASP.NET apps default to, so the heap it commits stays close to what it uses. On Linux the systemd unit
+and the `amcd` launcher also set `MALLOC_ARENA_MAX=2`, which stops glibc from keeping a malloc arena per
+thread. If you installed the service before this change, re-run `scripts/install.sh` (or `install-release.sh`)
+so the unit picks it up; check with `systemctl --user show amcd -p Environment`. To compare, `/api/health`
+lists the pipeline's `snapshot_kb` (size of the last compressed state snapshot).
+
+Memory charged to the service by systemd (`systemctl --user status amcd`) also counts the kernel's file cache
+and dentry/inode caches created by the `git` commands the daemon runs. That part is reclaimable: the kernel drops
+it under memory pressure, so it is not a leak. `grep -E 'VmRSS|RssAnon' /proc/$(pgrep -x amcd)/status` shows
+the process's own memory.
+
 ## Windows (native)
 
 Native Windows is an early preview; please report what you find.
