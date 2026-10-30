@@ -315,6 +315,8 @@ public sealed class EventStore : IDisposable
                 LIMIT 5000
                 """, [("$type", type), ("$cut", detailCut), ("$max", maxSeq)], ct);
 
+        compacted += DeleteDeadFileStatus(c, detailCut, maxSeq, ct);
+
         var detailIn = string.Join(',', DetailTypes.Select((_, i) => "$d" + i));
         detail += DeleteBatched(c, $"SELECT seq FROM events WHERE type IN ({detailIn}) AND ts_ms < $cut AND seq <= $max LIMIT 5000",
             [.. DetailTypes.Select((t, i) => ("$d" + i, (object)t)), ("$cut", detailCut), ("$max", maxSeq)], ct);
@@ -327,6 +329,60 @@ public sealed class EventStore : IDisposable
         Exec(c, "PRAGMA incremental_vacuum");
         Exec(c, "PRAGMA wal_checkpoint(TRUNCATE)");
         return new PruneResult(compacted, detail, history, freeBefore, sw.Elapsed);
+    }
+
+    /// <summary>
+    /// The newest git status row per file survives compaction, but two kinds of newest rows describe files the state no
+    /// longer shows (the reducer drops them, see StateRetention), so a replay must not resurrect them: rows of worktrees
+    /// whose last lifecycle event is a removal older than the cut, and a "clean" newest row older than the cut with no
+    /// older row left for the file (so nothing dirty can reappear in its place). Clean rows get one extra day: the cut is
+    /// wall-clock while the reducer ages files by event time, and a replay must not lose a file the state still shows.
+    /// </summary>
+    private static long DeleteDeadFileStatus(SqliteConnection c, long cut, long maxSeq, CancellationToken ct)
+    {
+        var seqs = new HashSet<long>();
+        void Collect(string sql)
+        {
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("$type", EventTypes.GitFileStatus);
+            cmd.Parameters.AddWithValue("$created", EventTypes.WorktreeCreated);
+            cmd.Parameters.AddWithValue("$changed", EventTypes.WorktreeChanged);
+            cmd.Parameters.AddWithValue("$deleted", EventTypes.WorktreeDeleted);
+            cmd.Parameters.AddWithValue("$cut", cut);
+            cmd.Parameters.AddWithValue("$cleanCut", cut - (long)TimeSpan.FromDays(1).TotalMilliseconds);
+            cmd.Parameters.AddWithValue("$max", maxSeq);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) seqs.Add(r.GetInt64(0));
+        }
+        Collect("""
+            SELECT seq FROM events WHERE type = $type AND seq <= $max AND worktree_id IN (
+              SELECT worktree_id FROM events
+              WHERE type IN ($created, $changed, $deleted) AND worktree_id IS NOT NULL
+              GROUP BY worktree_id
+              HAVING MAX(seq) = MAX(CASE WHEN type = $deleted THEN seq END) AND MAX(seq) <= $max AND MAX(ts_ms) < $cut)
+            """);
+        // One pass (no correlated subquery): files with a single row left; ts_ms/data are that row's (SQLite bare columns).
+        Collect("""
+            SELECT seq FROM (
+              SELECT MAX(seq) AS seq, COUNT(*) AS n, ts_ms, data FROM events
+              WHERE type = $type AND seq <= $max GROUP BY worktree_id, file_path)
+            WHERE n = 1 AND ts_ms < $cleanCut AND json_extract(data, '$.status') = 'clean'
+            """);
+        long total = 0;
+        foreach (var chunk in seqs.Order().Chunk(5000))
+        {
+            if (ct.IsCancellationRequested) break;
+            using var tx = c.BeginTransaction();
+            using var cmd = c.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "DELETE FROM events WHERE seq IN (SELECT value FROM json_each($seqs))";
+            cmd.Parameters.AddWithValue("$seqs", "[" + string.Join(',', chunk) + "]");
+            total += cmd.ExecuteNonQuery();
+            tx.Commit();
+            Thread.Sleep(5); // let the pipeline's writer in between batches
+        }
+        return total;
     }
 
     private static long DeleteBatched(SqliteConnection c, string selectSeqs, (string Name, object Value)[] ps, CancellationToken ct)
