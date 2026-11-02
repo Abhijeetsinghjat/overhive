@@ -19,6 +19,7 @@ builder.Configuration
     .AddCommandLine(args);
 builder.Services.Configure<AmcOptions>(builder.Configuration);
 var options = builder.Configuration.Get<AmcOptions>() ?? new AmcOptions();
+Amc.Core.State.StateRetention.Default = options.StateRetention; // before the state is restored and replayed
 
 if (options.BindAddress is not ("127.0.0.1" or "localhost" or "::1"))
     throw new InvalidOperationException(

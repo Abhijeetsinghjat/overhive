@@ -80,7 +80,8 @@ never "outside".
 Each finding is a `risk.detected` event (history retention, 180 days by default). One finding is
 kept per agent + rule + evidence + resolved target path (or matched command when there is no
 path), so a repeated command is recorded once. The state keeps the newest 100 findings per agent
-and 2000 overall; the per-agent counters (`agent.risks.info/warn/critical`) count every finding.
+and 2000 overall, each for 14 days (`StateRetention.HistoryDays`); the per-agent counters
+(`agent.risks.info/warn/critical`) count every finding. Older findings stay in the event log.
 
 ## Limitations
 

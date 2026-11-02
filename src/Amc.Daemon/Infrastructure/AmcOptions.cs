@@ -26,6 +26,8 @@ public sealed class AmcOptions
     /// <summary>History events (agent lifecycle, prompts, usage, commits, messages, audit) are kept this long.</summary>
     public int HistoryRetentionDays { get; set; } = 180;
     public double RetentionIntervalHours { get; set; } = 6;
+    /// <summary>How long the in-memory state keeps finished agents, removed worktrees, idle files, commits, test runs and risks (section "StateRetention").</summary>
+    public Amc.Core.State.StateRetention StateRetention { get; set; } = new();
     /// <summary>Extra or overriding AI tool definitions (merged with the built-in catalog).</summary>
     public List<Amc.Core.Domain.AgentTool> Tools { get; set; } = [];
     public int IngestQueueCapacity { get; set; } = 20_000;

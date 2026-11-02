@@ -108,6 +108,36 @@ public sealed class GitCollectorTests
     }
 
     [Fact]
+    public async Task Too_many_dirty_paths_report_summary_only_for_new_paths()
+    {
+        await using var env = await GitTestEnv.CreateAsync(new GitSettings { ScanOnStart = false, Watch = false, MaxDirtyFilesPerWorktree = 3 });
+        var dir = env.InitRepo("repo", ("a.txt", "a\n"), ("b.txt", "b\n"), ("c.txt", "c\n"), ("d.txt", "d\n"), ("e.txt", "e\n"));
+        var wt = await env.DiscoverAsync(dir);
+
+        File.AppendAllText(Path.Combine(dir, "a.txt"), "more\n");
+        await env.Collector.RefreshAsync(wt, None);
+        Assert.Single(env.FileEvents("a.txt"));
+
+        env.Sink.Clear();
+        foreach (var n in new[] { "b", "c", "d", "e" }) File.Delete(Path.Combine(dir, n + ".txt"));
+        File.AppendAllText(Path.Combine(dir, "a.txt"), "again\n");
+        await env.Collector.RefreshAsync(wt, None);
+
+        Assert.Equal(["a.txt"], env.Sink.OfType(EventTypes.GitFileStatus).Select(e => e.FilePath)); // the known path still updates
+        await env.Applied();
+        Assert.Equal(4, env.State.Read(s => s.Worktrees[wt].DeletedFiles)); // counts stay exact
+        Assert.Equal(["a.txt"], env.State.Read(s => s.Files.Values.Where(f => f.WorktreeId == wt).Select(f => f.Path).ToList()));
+
+        // Back under the limit: per-file events resume, and the known path goes clean.
+        env.Sink.Clear();
+        GitTestEnv.RunGit(dir, "checkout", "--", ".");
+        GitTestEnv.Write(dir, "b.txt", "changed\n");
+        await env.Collector.RefreshAsync(wt, None);
+        Assert.Equal("clean", env.FileEvents("a.txt").Single().Status);
+        Assert.Equal("M", env.FileEvents("b.txt").Single().Status);
+    }
+
+    [Fact]
     public async Task Commit_is_detected_once_with_dedupe_key()
     {
         await using var env = await GitTestEnv.CreateAsync();

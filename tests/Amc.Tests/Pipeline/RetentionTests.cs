@@ -41,5 +41,45 @@ public class RetentionTests : IDisposable
         Assert.Contains(left, x => x.Type == EventTypes.GitCommitCreated);
     }
 
+    private static AgentEvent Status(string status, int daysAgo, string wt, string file) => new()
+    {
+        Type = EventTypes.GitFileStatus, Source = EventSources.Git, Ts = Now.AddDays(-daysAgo), WorktreeId = wt, FilePath = file,
+        Data = Json.ToObject(new GitFileStatusData(status)),
+    };
+
+    private static AgentEvent Lifecycle(string type, int daysAgo, string wt) => new()
+    {
+        Type = type, Source = EventSources.Git, Ts = Now.AddDays(-daysAgo), WorktreeId = wt,
+        Data = Json.ToObject(new WorktreeData("/r/" + wt, "r")),
+    };
+
+    [Fact]
+    public void Compaction_drops_newest_rows_of_removed_worktrees_and_old_clean_files()
+    {
+        using var store = new EventStore(Path.Combine(_dir.Path, "amc.db"));
+        store.Append([
+            Lifecycle(EventTypes.WorktreeCreated, 40, "gone"), Status("D", 30, "gone", "x.cs"), Status("D", 30, "gone", "y.cs"),
+            Lifecycle(EventTypes.WorktreeDeleted, 20, "gone"),                                   // removed long ago → its rows go
+            Lifecycle(EventTypes.WorktreeCreated, 40, "back"), Status("M", 30, "back", "x.cs"),
+            Lifecycle(EventTypes.WorktreeDeleted, 20, "back"), Lifecycle(EventTypes.WorktreeCreated, 10, "back"), // restored → kept
+            Lifecycle(EventTypes.WorktreeCreated, 40, "fresh"), Status("M", 3, "fresh", "z.cs"),
+            Lifecycle(EventTypes.WorktreeDeleted, 2, "fresh"),                                   // removed recently → kept
+            Lifecycle(EventTypes.WorktreeCreated, 40, "w"),
+            Status("clean", 30, "w", "old-clean.cs"),                                            // stale clean newest → goes
+            Status("clean", 2, "w", "new-clean.cs"),                                             // recent → kept
+            Status("M", 30, "w", "old-dirty.cs"),                                                // still dirty → kept
+            Status("M", 30, "w", "both.cs"), Status("clean", 20, "w", "both.cs"),                // superseded, then stale clean → both go
+            Status("M", 3, "w", "recent.cs"), Status("clean", 1, "w", "recent.cs"),              // superseded row is recent → kept
+        ]);
+        var max = store.Append([Status("clean", 30, "w", "after-snapshot.cs")])[0].Seq - 1;
+
+        var r = store.Prune(Now, maxSeq: max, detailDays: 7, historyDays: 180);
+
+        var left = store.Query(new EventQuery(Limit: 100)).Where(e => e.Type == EventTypes.GitFileStatus)
+            .Select(e => $"{e.WorktreeId}|{e.FilePath}").Order().ToList();
+        Assert.Equal(5, r.Compacted);
+        Assert.Equal(["back|x.cs", "fresh|z.cs", "w|after-snapshot.cs", "w|new-clean.cs", "w|old-dirty.cs", "w|recent.cs", "w|recent.cs"], left);
+    }
+
     public void Dispose() => _dir.Dispose();
 }

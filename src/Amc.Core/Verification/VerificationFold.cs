@@ -107,7 +107,7 @@ public static class VerificationFold
         if (dirty.Agents.Count == 0 && dirty.Worktrees.Count == 0) return;
         if (dirty.Worktrees.Count > 0)
             foreach (var (id, log) in s.Verification)
-                if (log.Claims.Count > 0 && Verifier.TreeWorktrees(s, id).Overlaps(dirty.Worktrees)) dirty.Agents.Add(id);
+                if (log.Claims.Count > 0 && !Settled(s, id) && Verifier.TreeWorktrees(s, id).Overlaps(dirty.Worktrees)) dirty.Agents.Add(id);
         foreach (var id in dirty.Agents)
         {
             if (!s.Agents.TryGetValue(id, out var a)) continue;
@@ -120,6 +120,16 @@ public static class VerificationFold
         dirty.Agents.Clear();
         dirty.Worktrees.Clear();
     }
+
+    /// <summary>
+    /// Agents that ended more than <see cref="SettledAfter"/> ago keep their counts: later Git changes in a shared
+    /// worktree are not theirs, and walking every old log on each batch made recomputation grow with history.
+    /// Their own late events (settle, sub-agent runs) still mark them dirty directly.
+    /// </summary>
+    public static readonly TimeSpan SettledAfter = TimeSpan.FromHours(1);
+
+    private static bool Settled(WorldState s, string agentId) =>
+        s.Agents.TryGetValue(agentId, out var a) && a.IsTerminal && a.CompletedAt is { } done && s.Clock - done > SettledAfter;
 
     private static AgentVerification Log(WorldState s, string agentId)
     {

@@ -31,7 +31,7 @@ The event log is pruned every 6 hours (`retention` in the Health tab):
 
 | Kind | Kept | Config |
 |------|------|--------|
-| Superseded "latest value" events (file git status, worktree status) | 7 days; the newest per file/worktree is always kept | `DetailRetentionDays` |
+| Superseded "latest value" events (file git status, worktree status) | 7 days; the newest per file/worktree is kept, except git status of worktrees removed more than 7 days ago and a "clean" status older than 8 days | `DetailRetentionDays` |
 | Detail: tool/command calls, process start/exit, file reads, agent text output, tests, notifications | 7 days | `DetailRetentionDays` |
 | History: agent lifecycle, prompts, token usage, commits, messages, tasks, audit | 180 days | `HistoryRetentionDays` |
 
@@ -39,6 +39,24 @@ A fresh state snapshot is written before each run and only events covered by it 
 exact. Freed space is returned to disk (incremental vacuum). Caveat: after an upgrade that changes how state
 is derived (`Reducer.Version`), state is rebuilt from the *retained* events, so counters derived from pruned
 detail (for example tool-call counts older than the detail window) restart from what is still in the log.
+
+The in-memory state (what the dashboard and `/api/state` show) has its own, shorter windows, applied by the
+reducer in event time so a replay prunes exactly the same things (section `StateRetention`, in days; 0 keeps
+that kind forever):
+
+| Kind | Dropped from state after | Config |
+|------|--------------------------|--------|
+| A removed worktree's files (and its file writes in claim checks); the worktree itself once no remaining agent refers to it | 1 day after the removal | `RemovedWorktreeDays` |
+| Files that are clean (or never seen dirty by Git) and untouched | 7 days | `IdleFileDays` |
+| Commits, test runs, risk findings | 14 days | `HistoryDays` |
+| Agent sessions with no active agent in the tree (with their usage marks, risk findings, messages, ended terminals) | 14 days after their last activity | `FinishedAgentDays` |
+| Per-response usage marks (de-duplication of streamed usage, guard token rates) | 7 days | `UsageMarkDays` |
+| Claim-check details of sessions that ended (their claim counts are cleared with them) | 7 days after the end | `VerificationDays` |
+
+The timeline (`/api/events`) still pages through the full event log, so history older than these windows is
+not lost, only no longer held in memory. Token totals of agents still in state are cumulative and are not
+reduced when their usage marks age out. A worktree with more than 500 dirty paths (for example a no-checkout
+scratch worktree, where every file shows as deleted) reports only its summary counts for new paths.
 
 ## Windows (native)
 

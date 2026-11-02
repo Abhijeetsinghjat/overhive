@@ -87,7 +87,10 @@ of events (`Reducer.Apply(state, event)` in `Amc.Core`), so state after a restar
 equals state before it. Snapshots of `WorldState` are stored every N events to keep
 startup fast; startup = load latest snapshot + replay the tail. Snapshots carry `Reducer.Version`;
 a snapshot from another version is discarded and the full log is replayed, so changes
-to the fold semantics apply to all of history.
+to the fold semantics apply to all of history. The reducer also bounds the state: a retention sweep
+(`RetentionFold`, every 10 minutes of *event* time, its last run stored in the snapshot) drops finished
+agent trees, removed worktrees, idle clean files and old commits/test runs/risks, so a replay prunes
+exactly what the live daemon pruned (windows in TROUBLESHOOTING.md, Retention).
 
 **Time-based rules** that no event triggers (a sub-agent silent for 30 min with no
 completion recorded becomes `unknown`) are applied by `StalenessMonitor`, which
