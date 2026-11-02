@@ -13,7 +13,9 @@ install_service() {
     launchctl bootout "$domain/dev.overhive.amcd" 2>/dev/null || true
     launchctl bootstrap "$domain" "$plist"
     echo "Installed and started (launchd agent, starts at login). Logs: ~/Library/Logs/Overhive/amcd.log"
-  elif [[ -z "${AMC_NO_SYSTEMD:-}" ]] && command -v systemctl >/dev/null && systemctl --user is-system-running >/dev/null 2>&1; then
+  # "degraded" only means some other unit failed (common on Ubuntu); the user manager still works.
+  elif [[ -z "${AMC_NO_SYSTEMD:-}" ]] && command -v systemctl >/dev/null &&
+       [[ "$(systemctl --user is-system-running 2>/dev/null)" =~ ^(running|degraded|starting|initializing)$ ]]; then
     mkdir -p "$HOME/.config/systemd/user"
     install -m 0644 "$src/amcd.service" "$HOME/.config/systemd/user/amcd.service"
     systemctl --user daemon-reload

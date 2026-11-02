@@ -53,6 +53,9 @@ version is 0.x, minor versions may change behaviour.
 - A worktree with more than 500 dirty paths (a no-checkout scratch clone where every file shows as deleted)
   no longer keeps a state entry per file: only files an agent touched stay; one such clone with 60,000
   paths had doubled the state after the upgrade.
+- Linux install: the installer skipped the systemd user service (no start at login, an old unit kept on
+  update) when `systemctl --user is-system-running` reported `degraded`, which only means some unrelated
+  unit failed and is common on Ubuntu.
 - Overhive's own hook commands (`… # agent-mission-control`, the rewake waiter that appends to
   `rewake.log`, `agentctl hook-forward`) are no longer reported as the agent's risky actions. Only exact
   hook commands are skipped: `cat …/token` or `rm -rf ~ # agent-mission-control` are still classified.
