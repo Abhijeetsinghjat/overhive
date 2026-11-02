@@ -48,6 +48,7 @@ that kind forever):
 |------|--------------------------|--------|
 | A removed worktree's files (and its file writes in claim checks); the worktree itself once no remaining agent refers to it | 1 day after the removal | `RemovedWorktreeDays` |
 | Files that are clean (or never seen dirty by Git) and untouched | 7 days | `IdleFileDays` |
+| Files no agent touched, in a worktree with more than 500 dirty paths (a no-checkout scratch clone shows every file as deleted) | at the next sweep (10 min) | `OversizedWorktreeFiles` |
 | Commits, test runs, risk findings | 14 days | `HistoryDays` |
 | Agent sessions with no active agent in the tree (with their usage marks, risk findings, messages, ended terminals) | 14 days after their last activity | `FinishedAgentDays` |
 | Per-response usage marks (de-duplication of streamed usage, guard token rates) | 7 days | `UsageMarkDays` |

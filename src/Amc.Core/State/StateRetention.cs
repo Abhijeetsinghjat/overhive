@@ -26,6 +26,11 @@ public sealed class StateRetention
     public double UsageMarkDays { get; set; } = 7;
     /// <summary>Verification ingredients (claims, runs, edits) of an agent tree that ended this long ago are dropped.</summary>
     public double VerificationDays { get; set; } = 7;
+    /// <summary>
+    /// A worktree with more dirty paths than this (a no-checkout scratch clone shows every file as deleted) keeps
+    /// only files an agent touched; the collector stops reporting new paths there at the same size.
+    /// </summary>
+    public int OversizedWorktreeFiles { get; set; } = 500;
     /// <summary>How often (in event time) the sweep runs.</summary>
     public double SweepEveryMinutes { get; set; } = 10;
 
@@ -59,7 +64,7 @@ public static class RetentionFold
         var now = s.Clock;
         PruneAgents(s, Cut(now, p.FinishedAgentDays), changed);
         PruneVerification(s, Cut(now, p.VerificationDays), changed);
-        PruneFilesAndWorktrees(s, Cut(now, p.RemovedWorktreeDays), Cut(now, p.IdleFileDays), changed);
+        PruneFilesAndWorktrees(s, Cut(now, p.RemovedWorktreeDays), Cut(now, p.IdleFileDays), p.OversizedWorktreeFiles, changed);
 
         var history = Cut(now, p.HistoryDays);
         Remove(s.Commits, c => c.At < history, EntityKinds.Commit, changed);
@@ -154,16 +159,22 @@ public static class RetentionFold
         }
     }
 
-    private static void PruneFilesAndWorktrees(WorldState s, DateTimeOffset removedCut, DateTimeOffset idleCut, HashSet<EntityRef> changed)
+    private static void PruneFilesAndWorktrees(WorldState s, DateTimeOffset removedCut, DateTimeOffset idleCut, int oversized,
+        HashSet<EntityRef> changed)
     {
         var goneWts = removedCut == DateTimeOffset.MinValue
             ? []
             : s.Worktrees.Values.Where(w => w.Removed && w.UpdatedAt < removedCut).Select(w => w.Id).ToHashSet();
-        if (goneWts.Count == 0 && idleCut == DateTimeOffset.MinValue) return;
+        var bigWts = oversized <= 0
+            ? []
+            : s.Worktrees.Values.Where(w => !w.Removed && w.Modified + w.Added + w.DeletedFiles + w.Untracked + w.Conflicted > oversized)
+                .Select(w => w.Id).ToHashSet();
+        if (goneWts.Count == 0 && bigWts.Count == 0 && idleCut == DateTimeOffset.MinValue) return;
 
         List<FileChange>? drop = null;
         foreach (var f in s.Files.Values)
-            if (goneWts.Contains(f.WorktreeId) || (f.GitStatus is null or "clean" && f.LastChangedAt < idleCut))
+            if (goneWts.Contains(f.WorktreeId) || (bigWts.Contains(f.WorktreeId) && f.Agents.Count == 0)
+                || (f.GitStatus is null or "clean" && f.LastChangedAt < idleCut))
                 (drop ??= []).Add(f);
         foreach (var f in drop ?? [])
         {
