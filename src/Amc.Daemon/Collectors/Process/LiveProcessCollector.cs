@@ -111,7 +111,7 @@ public sealed class LiveProcessCollector(
                 ["t"] = "live",
                 ["processes"] = JsonSerializer.SerializeToNode(result.Processes, Json.Options),
             };
-            broadcaster.PublishLive(msg.ToJsonString(Json.Options));
+            broadcaster.PublishLive("live", msg.ToJsonString(Json.Options));
         }
 
         var st = result.Stats;

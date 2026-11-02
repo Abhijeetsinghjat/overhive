@@ -130,7 +130,7 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
     {
         var list = new List<AgentEvent>();
         var (hit, inferred, abs) = await AttributeAsync(name, input, o.Cwd, ct);
-        ctx.RememberToolUse(new ToolUseInfo(toolUseId, name, (JsonObject)input.DeepClone(), o.AgentId, o.SessionId, o.Ts, hit, inferred, o.Cwd));
+        ctx.RememberToolUse(new ToolUseInfo(toolUseId, name, input, o.AgentId, o.SessionId, o.Ts, hit, inferred, o.Cwd)); // stores a compacted copy
         var evidence = inferred ? Evidence.Inferred : Evidence.Reported;
         var relOrAbs = hit?.RelativePath is { Length: > 0 } rel ? rel : abs;
 
@@ -235,6 +235,7 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
             list.Add(Status(o, EventTypes.AgentCompleted, AgentStatus.Completed, "Handed back to parent", ctx.EndKey(o.AgentId, o.SessionId)));
 
         Notify(o, hit, toolUseId, name, ActivityKinds.End);
+        ctx.ToolEnded(toolUseId);
         return list;
     }
 
@@ -253,15 +254,20 @@ public sealed partial class ClaudeEventMapper(ClaudeContext ctx, IWorktreeIndex 
         if (!WriteTools.Contains(name)) yield break;
         var created = name == "Write" && Str(result, "type") == "create";
         var (patch, added, removed) = RenderPatch(result?["structuredPatch"] as JsonArray);
-        if (created && patch is null && Str(input, "content") is { } content)
+        if (created && patch is null && ContentLines(input) is { } lines)
         {
-            added = content.Length == 0 ? 0 : content.Split('\n').Length - (content.EndsWith('\n') ? 1 : 0);
+            added = lines;
             removed = 0;
         }
         yield return New(o, created ? EventTypes.FileCreated : EventTypes.FileModified,
             new FileChangeData(toolUseId, name, null, added, removed, patch is null ? null : Redactor.RedactAndCap(patch), abs),
             $"file:{toolUseId}", hit: hit, filePath: filePath);
     }
+
+    /// <summary>Lines of a Write's content: counted at compaction (remembered/queued inputs) or from the full content.</summary>
+    private static int? ContentLines(JsonObject input) =>
+        input[ClaudePayloadTrim.ContentLinesKey] is JsonValue v && v.TryGetValue<int>(out var n) ? n
+        : Str(input, "content") is { } content ? ClaudePayloadTrim.LineCount(content) : null;
 
     /// <summary>Renders Claude Code's structuredPatch (hunks with oldStart/oldLines/newStart/newLines/lines) as unified hunks.</summary>
     public static (string? Patch, int? Added, int? Removed) RenderPatch(JsonArray? hunks)
