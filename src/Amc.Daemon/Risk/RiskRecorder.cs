@@ -110,7 +110,7 @@ public sealed class RiskRecorder : BackgroundService
         {
             if (e.Payload<CommandData>() is not { } c) return result;
             var ctx = Context(s, e.AgentId!, c.Cwd, e.WorktreeId, env);
-            findings = RiskClassifier.ClassifyCommand(c.Command, ctx);
+            findings = RiskClassifier.ClassifyCommand(e.FullCommand ?? WithoutCapMarker(c.Command), ctx);
             command = c.Command; toolUseId = c.ToolUseId;
         }
         else
@@ -152,11 +152,32 @@ public sealed class RiskRecorder : BackgroundService
                 AgentId = agent.Id, SessionId = agent.SessionId, WorktreeId = ctx.Worktree?.Id, RepositoryId = ctx.Worktree?.RepositoryId,
                 Ts = p.StartedAt, // when the command started running
             };
-            foreach (var f in RiskClassifier.ClassifyCommand(p.Command, ctx.Context))
+            foreach (var f in RiskClassifier.ClassifyCommand(WithoutTruncatedWord(p.Command), ctx.Context))
                 result.Add(ToEvent(source, f, Evidence.Observed, p.Command, EventSources.Process, null, p.Pid));
         }
         seen.IntersectWith(live);
         return result;
+    }
+
+    /// <summary>
+    /// A command stored capped (<see cref="Amc.Core.Security.Redactor.RedactAndCap"/>: "…[truncated N chars]…" + newline + tail) without the
+    /// marker and the partial first line, which may be the middle of a heredoc or a quoted string and must not be read as commands.
+    /// Live events carry <see cref="AgentEvent.FullCommand"/> instead; this covers events that arrive already capped.
+    /// </summary>
+    public static string? WithoutCapMarker(string? command)
+    {
+        if (command is null || !command.StartsWith("…[truncated ", StringComparison.Ordinal)) return command;
+        var marker = command.IndexOf('\n');
+        var partial = marker < 0 ? -1 : command.IndexOf('\n', marker + 1);
+        return partial < 0 ? "" : command[(partial + 1)..];
+    }
+
+    /// <summary>A process command line cut by the collector ("…" appended): the cut last word is dropped, it is not a path.</summary>
+    public static string WithoutTruncatedWord(string command)
+    {
+        if (!command.EndsWith('…') || command.Length <= Collectors.Processes.ProcParsers.MaxCommandChars) return command;
+        var cut = command.LastIndexOfAny([' ', '\t', '\n']);
+        return cut < 0 ? "" : command[..cut];
     }
 
     private static AgentEvent ToEvent(AgentEvent src, RiskFinding f, Evidence evidence, string? command, string origin,

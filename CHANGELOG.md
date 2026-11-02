@@ -31,12 +31,33 @@ version is 0.x, minor versions may change behaviour.
   screencast (about 37 frames/s at 2x instead of 8).
 - Better text contrast: dark text on amber primary buttons, a darker amber accent in the light theme and
   lighter "faint" text in the dark theme (WCAG AA).
+- The risky-command log is much quieter on normal agent work (a month of real use: 386 findings, 11
+  critical and 352 warn, replay to 221 with 2 critical and 23 warn; see docs/RISKS.md). Temporary and
+  scratch directories (`/tmp`, `$TMPDIR`, `/var/folders`, `%TEMP%`, Claude scratchpads) are no longer
+  "outside the worktree", and deleting a temp directory that holds a scratch worktree is info, not critical
+  (the temp root itself, home and `/` stay critical). Literal shell variables assigned earlier in the same
+  command (`S=/tmp/x; rm -rf $S/y`) are resolved. Force-pushes to a bare repository on disk are info (none
+  in a temp dir); `--force-with-lease` to a feature branch is info; main/master stay critical. `git branch
+  -D` is info except for main/master. `git reset --hard` is info when the worktree is clean or the repo is
+  a temp scratch clone; git's own helper processes (`…/git-core/git reset --hard` run by `git worktree add`)
+  are ignored. Single-file writes and deletes outside the worktree are info for ordinary files under home
+  and warn for dotfiles, `.git/`, `~/bin`, `~/Library`, `AppData`, files directly in home and anything
+  outside home. The Overhive API token is warn (local-only credential), and `ls`/`stat`/`chmod` on a warn
+  credential is info. `rmdir` without `-r`/`/s` is not reported.
 - New 3D logo: the three hive cells are now extruded, lit honeycomb cells with the watching eye on the
   raised centre cell. Adds a full favicon set (SVG, 16/32 px PNG, Apple touch icon, 192/512 px app icons),
   web app manifests for the dashboard and the phone page, a flat `logo-mono.svg` for tiny sizes, and a
   social preview image (`docs/media/social-preview.png`).
 
 ### Fixed
+- Overhive's own hook commands (`… # agent-mission-control`, the rewake waiter that appends to
+  `rewake.log`, `agentctl hook-forward`) are no longer reported as the agent's risky actions. Only exact
+  hook commands are skipped: `cat …/token` or `rm -rf ~ # agent-mission-control` are still classified.
+- A dangerous command padded past 16K characters no longer escapes the risk rules: hook payloads keep
+  the Bash command up to 1 MB (head and tail beyond), and the recorder classifies the full redacted command
+  instead of the 16K copy that is stored. Text that only looks like a command (PowerShell `iex`/Base64 in a
+  POSIX heredoc, a capped command's partial first line, a process command line cut by the collector) is
+  no longer read as one, and commands after `then`/`do`/`else` are classified.
 - The daemon's state no longer grows without bound: removed worktrees and their files, idle clean files,
   finished agent sessions (14 days), old commits, test runs and risk findings (14 days), usage marks and
   claim-check details (7 days) are dropped from memory in event time (`StateRetention`; the timeline keeps

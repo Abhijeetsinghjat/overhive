@@ -229,7 +229,7 @@ public class RiskClassifierTests
     [Theory]
     [InlineData("git push --force", RiskSeverity.Warn)]
     [InlineData("git push -f origin feat/x", RiskSeverity.Warn)]
-    [InlineData("git push --force-with-lease origin HEAD", RiskSeverity.Warn)]
+    [InlineData("git push --force-with-lease origin HEAD", RiskSeverity.Info)]
     [InlineData("git push origin +feat/x", RiskSeverity.Warn)]
     [InlineData("git push -f origin main", RiskSeverity.Critical)]
     [InlineData("git push --force origin HEAD:master", RiskSeverity.Critical)]
@@ -279,8 +279,8 @@ public class RiskClassifierTests
         Assert.Equal(RiskSeverity.Warn, Single("git clean -xfd", RiskRules.GitClean).Severity);
         Assert.Equal(RiskSeverity.Warn, Single("git clean -f -d", RiskRules.GitClean).Severity);
         Assert.Equal(RiskSeverity.Info, Single("git clean -f", RiskRules.GitClean).Severity);
-        Assert.Equal(RiskSeverity.Warn, Single("git branch -D spike", RiskRules.GitBranchForceDelete).Severity);
-        Assert.Equal(RiskSeverity.Warn, Single("git branch --delete --force spike", RiskRules.GitBranchForceDelete).Severity);
+        Assert.Equal(RiskSeverity.Info, Single("git branch -D spike", RiskRules.GitBranchForceDelete).Severity);
+        Assert.Equal(RiskSeverity.Info, Single("git branch --delete --force spike", RiskRules.GitBranchForceDelete).Severity);
         Assert.Equal(RiskSeverity.Critical, Single("git branch -D main", RiskRules.GitBranchForceDelete).Severity);
     }
 
@@ -375,7 +375,7 @@ public class RiskClassifierTests
     public void Mv_from_outside_counts_as_delete_there()
     {
         var f = Single("mv /home/u/data/db.sqlite .", RiskRules.DeleteOutsideWorktree);
-        Assert.Equal(RiskSeverity.Warn, f.Severity);
+        Assert.Equal(RiskSeverity.Info, f.Severity); // an ordinary file under home
         Assert.Equal(RiskSeverity.Warn, Single("rm /home/u/notes.txt", RiskRules.DeleteOutsideWorktree).Severity);
         Assert.Equal(RiskSeverity.Critical, Single("sudo rm /etc/hosts", RiskRules.DeleteOutsideWorktree).Severity);
     }
