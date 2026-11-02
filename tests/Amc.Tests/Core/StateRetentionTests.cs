@@ -76,6 +76,20 @@ public class StateRetentionTests
     }
 
     [Fact]
+    public void Oversized_worktree_keeps_only_files_an_agent_touched()
+    {
+        _s.Retention.OversizedWorktreeFiles = 2;
+        Apply(_f.Repo("r"), _f.Worktree("big", "/r/big", "r", modified: 3), _f.Worktree("small", "/r/small", "r", modified: 2), _f.Main("m"));
+        Apply(_f.Edit("m", "big", "mine.cs"), _f.GitStatus("big", "mine.cs", "M"), _f.GitStatus("big", "a.cs", "D"),
+            _f.GitStatus("big", "b.cs", "D"), _f.GitStatus("small", "c.cs", "D"), _f.GitStatus("small", "d.cs", "D"));
+
+        Tick(TimeSpan.FromMinutes(11));
+
+        Assert.Equal(["big|mine.cs", "small|c.cs", "small|d.cs"], _s.Files.Keys.Order());
+        Assert.Equal(Json.Serialize(StateIndex.Build(_s)), Json.Serialize(_s.Index));
+    }
+
+    [Fact]
     public void Finished_agent_trees_are_dropped_with_their_usage_and_risks_active_trees_are_kept()
     {
         Apply(_f.Main("old"), _f.Sub("old-sub", "old"), _f.Main("live"), _f.Sub("live-sub", "live"));
