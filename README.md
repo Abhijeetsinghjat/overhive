@@ -90,9 +90,8 @@ admin rights: it installs into `%LOCALAPPDATA%\Overhive`, puts `overhive` (also 
 user PATH and starts the daemon at logon, hidden, through a per-user scheduled task named `Overhive`. It does
 not change Claude Code or other AI-tool settings (`overhive hooks install` does that, separately).
 
-From the next release, a Windows build needs no .NET: download `overhive-<version>-win-x64.zip` and
-`SHA256SUMS` from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases) (v0.2.0 has no Windows zip
-yet), then in PowerShell:
+From v0.3.0, a Windows build needs no .NET: download `overhive-<version>-win-x64.zip` and `SHA256SUMS`
+from [Releases](https://github.com/Abhijeetsinghjat/overhive/releases), then in PowerShell:
 
 ```powershell
 Get-FileHash overhive-<version>-win-x64.zip -Algorithm SHA256   # compare with SHA256SUMS
@@ -100,14 +99,14 @@ Expand-Archive overhive-<version>-win-x64.zip -DestinationPath .
 powershell -ExecutionPolicy Bypass -File .\overhive-<version>-win-x64\install-release.ps1
 ```
 
-Or, also from the next release, with [Scoop](https://scoop.sh):
+Or with [Scoop](https://scoop.sh) (available shortly after each release, once its manifest is added):
 
 ```powershell
 scoop bucket add overhive https://github.com/Abhijeetsinghjat/overhive
 scoop install overhive
 ```
 
-From source today (needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Git):
+From source (needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Git):
 
 ```powershell
 git clone https://github.com/Abhijeetsinghjat/overhive; cd overhive
