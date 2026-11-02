@@ -5,6 +5,11 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-02
+
+Still beta. First release with a native Windows build (early preview), plus a 3D dashboard, much lower
+daemon memory over long uptimes, and a quieter risky-command log.
+
 ### Added
 - Native Windows install (early preview), no admin rights needed: `scripts\install.ps1` builds from source,
   and releases gain a self-contained `overhive-<version>-win-x64.zip` with `install-release.ps1`. Both put
@@ -182,5 +187,6 @@ First public release: a free, open-source, local control center for AI coding ag
 - Self-contained release archives (no .NET needed) with `SHA256SUMS` and GitHub build provenance;
   systemd user service that starts on login.
 
+[0.3.0]: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Abhijeetsinghjat/overhive/releases/tag/v0.1.0
