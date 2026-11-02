@@ -17,7 +17,7 @@ public static partial class RiskClassifier
     public static IReadOnlyList<RiskFinding> ClassifyCommand(string? command, RiskContext ctx)
     {
         var findings = new List<RiskFinding>();
-        if (string.IsNullOrWhiteSpace(command)) return findings;
+        if (string.IsNullOrWhiteSpace(command) || OverhiveHooks.IsHookCommand(command)) return findings;
         var a = new Analyzer(ctx, findings);
         a.Script(command, ctx.Cwd is { } c && RiskPaths.IsAbsolute(c, ctx.Windows) ? RiskPaths.Normalize(c, ctx.Windows) : null, 0,
             ctx.Windows ? ShellDialect.PowerShell : ShellDialect.Posix);
@@ -69,14 +69,16 @@ public static partial class RiskClassifier
 
     // ---- analysis ----------------------------------------------------------------------
 
-    private enum Loc { Unknown, Inside, WorktreeRoot, Temp, OtherWorktree, ToolHome, Outside, Catastrophic }
+    private enum Loc { Unknown, Inside, WorktreeRoot, Temp, TempWorktreeParent, OtherWorktree, ToolHome, Outside, Catastrophic }
 
     /// <param name="NestedDialect">How <paramref name="Nested"/> is lexed (null: like the enclosing command line).</param>
     /// <param name="Encoded">The nested script came from <c>-EncodedCommand</c>; <paramref name="Nested"/> is null when it could not be decoded.</param>
     private sealed record Unwrapped(string Name, List<string> Args, bool Elevated, string? Cwd, string? Nested,
         ShellDialect? NestedDialect = null, bool Encoded = false);
 
-    private sealed record Cmd(string Name, List<string> Args, bool Elevated, string? Cwd, string Span, ShellCommand Shell, int Index, List<ShellCommand> All);
+    /// <param name="Wrapper">The command runs a nested script (<c>bash -c</c>, <c>eval</c>, <c>pwsh -Command</c>): its arguments are script text, not paths.</param>
+    private sealed record Cmd(string Name, List<string> Args, bool Elevated, string? Cwd, string Span, ShellCommand Shell, int Index, List<ShellCommand> All,
+        bool Wrapper = false);
 
     private sealed class Analyzer
     {
@@ -86,6 +88,8 @@ public static partial class RiskClassifier
         private readonly string? _home;
         private readonly List<string> _roots;
         private readonly List<string> _known;
+        /// <summary>Shell variables assigned a literal earlier in the same command line (<c>S=/tmp/x; rm -rf $S/y</c>).</summary>
+        private readonly Dictionary<string, string> _vars = new(StringComparer.Ordinal);
 
         public Analyzer(RiskContext ctx, List<RiskFinding> findings)
         {
@@ -106,13 +110,52 @@ public static partial class RiskClassifier
         private void Add(string rule, string severity, string explanation, string span, string? target = null) =>
             _out.Add(new RiskFinding(rule, severity, explanation, span, target));
 
+        /// <summary>
+        /// Remembers <c>NAME=literal</c> (also after <c>export</c>/<c>local</c>/<c>declare</c>/<c>readonly</c>) so later words such as
+        /// <c>$NAME/x</c> resolve. A value from a command substitution, or one that still contains an unknown variable, makes the name
+        /// unknown again; so do <c>for NAME in</c> and <c>read NAME</c>. Prefix assignments (<c>X=1 cmd $X</c>) are not tracked: the shell
+        /// expands <c>$X</c> before they apply.
+        /// </summary>
+        private void TrackVariables(ShellCommand c)
+        {
+            var w = c.Words;
+            if (w.Count == 0) return;
+            if (w[0] is "for" or "select" && w.Count > 1) { _vars.Remove(w[1]); return; }
+            if (w[0] is "read" or "readarray" or "mapfile" or "unset")
+            {
+                foreach (var n in w.Skip(1).Where(x => !x.StartsWith('-'))) _vars.Remove(n);
+                return;
+            }
+            var start = w[0] is "export" or "local" or "declare" or "typeset" or "readonly" ? 1 : 0;
+            if (!w.Skip(start).All(x => x.StartsWith('-') || IsAssignment(x))) return; // a command: its prefix assignments do not persist
+            foreach (var a in w.Skip(start).Where(IsAssignment))
+            {
+                var eq = a.IndexOf('=');
+                var name = a[..eq];
+                var value = Expand(a[(eq + 1)..]);
+                // $(…) and `…` stay in the word: a value from a command, or with an unknown variable or a glob, is unknown.
+                if (value.IndexOfAny(['$', '`', '*', '?']) >= 0) _vars.Remove(name);
+                else _vars[name] = value;
+            }
+        }
+
+        /// <summary>Replaces <c>$NAME</c> / <c>${NAME}</c> of variables tracked by <see cref="TrackVariables"/>; others are left as written.</summary>
+        private string Expand(string word)
+        {
+            if (_vars.Count == 0 || !word.Contains('$')) return word;
+            return VarRef().Replace(word, m => _vars.TryGetValue(m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value, out var v) ? v : m.Value);
+        }
+
+        private ResolvedPath Resolve(string word, string? cwd) => RiskPaths.Resolve(Expand(word), cwd, _ctx);
+
         public void Script(string text, string? cwd, int depth, ShellDialect dialect)
         {
             if (depth > MaxDepth || string.IsNullOrWhiteSpace(text)) return;
-            if (dialect != ShellDialect.Cmd && PowerShellIex().Match(text) is { Success: true } iex)
+            // PowerShell-only syntax: in a POSIX shell this text can only be data (a heredoc body, a quoted string).
+            if (dialect == ShellDialect.PowerShell && PowerShellIex().Match(text) is { Success: true } iex)
                 Add(RiskRules.PipeToShell, RiskSeverity.Warn, "Downloads a script and runs it with Invoke-Expression: remote code runs unreviewed",
                     Cap(iex.Value));
-            if (dialect != ShellDialect.Cmd) Base64Scripts(text, cwd, depth);
+            if (dialect == ShellDialect.PowerShell) Base64Scripts(text, cwd, depth);
 
             var cmds = ShellLexer.Parse(text, dialect);
             var cur = cwd;
@@ -120,6 +163,7 @@ public static partial class RiskClassifier
             {
                 var c = cmds[k];
                 foreach (var sub in c.Substitutions) Script(sub, cur, depth + 1, dialect);
+                if (dialect == ShellDialect.Posix) TrackVariables(c);
                 var u = Unwrap(c.Words);
                 if (u is null) continue;
                 if (u.Encoded)
@@ -137,10 +181,10 @@ public static partial class RiskClassifier
                 if (CdCommands.Contains(u.Name))
                 {
                     var target = u.Args.FirstOrDefault(a => !a.StartsWith('-') || a == "-");
-                    cur = target is null ? _home : target == "-" ? null : Dir(target, cur);
+                    cur = target is null ? _home : target == "-" ? null : Dir(Expand(target), cur);
                     continue;
                 }
-                var x = new Cmd(u.Name, u.Args, u.Elevated, u.Cwd is { } ec ? Dir(ec, cur) : cur, Span(c), c, k, cmds);
+                var x = new Cmd(u.Name, u.Args, u.Elevated, u.Cwd is { } ec ? Dir(ec, cur) : cur, Span(c), c, k, cmds, u.Nested is not null || u.Encoded);
                 Deletes(x);
                 Writes(x);
                 Git(x);
@@ -194,7 +238,7 @@ public static partial class RiskClassifier
             if (loc == Loc.Catastrophic && RiskPaths.IsSystem(path, _win))
                 Add(rule, RiskSeverity.Critical, $"{what} a file in {reason}: {path}", span, path);
             else if (loc is Loc.Outside || (deleted && loc is Loc.ToolHome))
-                Add(rule, RiskSeverity.Warn, $"{what} {path}, outside the agent's worktree", span, path);
+                Add(rule, OutsideSeverity(path, loc), $"{what} {path}, outside the agent's worktree", span, path);
         }
 
         // ---- command structure -------------------------------------------------------
@@ -241,7 +285,9 @@ public static partial class RiskClassifier
                     }
                     continue;
                 }
-                if (n is "nohup" or "time" or "exec" or "builtin" or "!" or "{" or "caffeinate" or "unbuffer")
+                // Shell keywords that precede a command (`for …; do rm -rf …; done`, `if …; then …; fi`).
+                if (n is "nohup" or "time" or "exec" or "builtin" or "!" or "{" or "caffeinate" or "unbuffer"
+                    or "do" or "then" or "else" or "elif" or "if" or "while" or "until")
                 {
                     i++;
                     while (i < words.Count && words[i].StartsWith('-') && n is "time" or "caffeinate") i++;
@@ -350,7 +396,7 @@ public static partial class RiskClassifier
 
         private string? Dir(string word, string? cwd)
         {
-            var r = RiskPaths.Resolve(word, cwd, _ctx);
+            var r = RiskPaths.Resolve(Expand(word), cwd, _ctx);
             return r.Glob == GlobKind.None ? r.Path : null;
         }
 
@@ -382,7 +428,10 @@ public static partial class RiskClassifier
                 return (Loc.Catastrophic, RiskPaths.Equal(p, _home, _win) ? "the home directory" : "a directory that contains the home directory");
             foreach (var r in _roots)
                 if (RiskPaths.IsUnderOrEqual(r, p, _win) && !RiskPaths.Equal(r, p, _win))
-                    return (Loc.Catastrophic, "a parent of the agent's worktree");
+                    // A scratch worktree inside a temporary directory (e.g. a Claude scratchpad): its temp parent is scratch too.
+                    return RiskPaths.IsTemp(p, _ctx)
+                        ? (Loc.TempWorktreeParent, "a temporary directory that contains the agent's worktree")
+                        : (Loc.Catastrophic, "a parent of the agent's worktree");
             foreach (var r in _roots)
             {
                 if (RiskPaths.Equal(p, r, _win)) return (Loc.WorktreeRoot, "the agent's worktree");
@@ -416,6 +465,7 @@ public static partial class RiskClassifier
                 case "remove-item" or "ri" or "del" or "erase" or "rd" or "rmdir":
                     targets = ParseRemoveItem(x.Name, x.Args, out recursive, out var dry);
                     if (dry) return;
+                    if (x.Name is "rd" or "rmdir" && !recursive) return; // removes empty directories only
                     break;
                 case "find":
                 {
@@ -495,6 +545,7 @@ public static partial class RiskClassifier
 
         private void EvaluateDelete(Cmd x, string word, bool recursive, bool filtered, string verb)
         {
+            word = Expand(word);
             var r = RiskPaths.Resolve(word, x.Cwd, _ctx);
             if (r.UnknownVariable is { } v)
             {
@@ -522,7 +573,12 @@ public static partial class RiskClassifier
                             $"Recursive delete {(partial ? "of matching files in" : "of")} {reason} ({shown})", x.Span, p);
                         break;
                     case Loc.WorktreeRoot when r.Glob != GlobKind.Partial && !filtered:
-                        Add(RiskRules.RecursiveDelete, RiskSeverity.Warn, $"Recursive delete of the whole worktree ({shown})", x.Span, p);
+                        // A worktree in a temporary directory is a scratch checkout: removing it is cleanup.
+                        Add(RiskRules.RecursiveDelete, RiskPaths.IsTemp(p, _ctx) ? RiskSeverity.Info : RiskSeverity.Warn,
+                            $"Recursive delete of the whole worktree ({shown})", x.Span, p);
+                        break;
+                    case Loc.TempWorktreeParent when r.Glob != GlobKind.Partial && !filtered:
+                        Add(RiskRules.RecursiveDelete, RiskSeverity.Info, $"Recursive delete of {reason} ({shown})", x.Span, p);
                         break;
                     case Loc.OtherWorktree:
                         Add(RiskRules.RecursiveDelete, RiskSeverity.Warn, $"Recursive delete inside another worktree ({shown})", x.Span, p);
@@ -536,7 +592,7 @@ public static partial class RiskClassifier
             if (loc == Loc.Catastrophic && RiskPaths.IsSystem(p, _win))
                 Add(RiskRules.DeleteOutsideWorktree, RiskSeverity.Critical, $"{verb} {shown} in {reason}", x.Span, p);
             else if (loc is Loc.Outside or Loc.OtherWorktree or Loc.ToolHome)
-                Add(RiskRules.DeleteOutsideWorktree, RiskSeverity.Warn, $"{verb} {shown}, outside the agent's worktree", x.Span, p);
+                Add(RiskRules.DeleteOutsideWorktree, OutsideSeverity(p, loc), $"{verb} {shown}, outside the agent's worktree", x.Span, p);
         }
 
         // ---- rules: writes -------------------------------------------------------------------
@@ -614,14 +670,36 @@ public static partial class RiskClassifier
 
         private void CheckWrite(Cmd x, string word, string verb)
         {
-            var r = RiskPaths.Resolve(word, x.Cwd, _ctx);
+            var r = Resolve(word, x.Cwd);
             if (r.Path is not { } p || RiskPaths.IsDevice(p, _win) || RiskPaths.IsDevice(word, _win)) return;
             if (RiskPaths.Credential(p, _ctx) is not null) return; // reported by the credential rule
             var (loc, reason) = Locate(p);
             if (loc == Loc.Catastrophic && RiskPaths.IsSystem(p, _win))
                 Add(RiskRules.WriteOutsideWorktree, RiskSeverity.Critical, $"{verb} {Show(r)} in {reason}", x.Span, p);
             else if (loc is Loc.Outside or Loc.Catastrophic)
-                Add(RiskRules.WriteOutsideWorktree, RiskSeverity.Warn, $"{verb} {Show(r)}, outside the agent's worktree", x.Span, p);
+                Add(RiskRules.WriteOutsideWorktree, loc == Loc.Outside ? OutsideSeverity(p, loc) : RiskSeverity.Warn,
+                    $"{verb} {Show(r)}, outside the agent's worktree", x.Span, p);
+        }
+
+        /// <summary>
+        /// Severity of a single-file write or delete outside the worktree: info for ordinary files under the home directory
+        /// (a sibling project, notes, logs: everyday agent work, still recorded) and for one file in an AI tool's data directory;
+        /// warn for another agent's worktree, anything outside home, and locations where a write can persist or reconfigure
+        /// something: files directly in the home directory, home dotfiles and dot-directories (<c>~/.bashrc</c>, <c>~/.config/…</c>,
+        /// <c>~/.local/bin</c>), a repository's <c>.git</c> directory (hooks, config), <c>~/bin</c>, <c>~/Library</c>, <c>AppData</c>,
+        /// PowerShell profiles (<c>Documents/PowerShell</c>).
+        /// </summary>
+        private string OutsideSeverity(string p, Loc loc)
+        {
+            if (loc == Loc.ToolHome) return RiskSeverity.Info;
+            if (loc != Loc.Outside || _home is null || RiskPaths.HomeRelative(p, _home, _win) is not { Length: > 0 } rel) return RiskSeverity.Warn;
+            var segs = rel.Split('/');
+            var cmp = _win ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (segs.Length == 1 || segs[0].StartsWith('.') || segs.Any(g => g.Equals(".git", cmp))
+                || ((string[])["bin", "Library", "AppData", "Applications"]).Any(d => segs[0].Equals(d, cmp))
+                || (segs[0].Equals("Documents", cmp) && segs[1] is var d1 && (d1.Equals("PowerShell", cmp) || d1.Equals("WindowsPowerShell", cmp))))
+                return RiskSeverity.Warn;
+            return RiskSeverity.Info;
         }
 
         // ---- rules: git ------------------------------------------------------------------------
@@ -629,25 +707,54 @@ public static partial class RiskClassifier
         private void Git(Cmd x)
         {
             if (x.Name != "git") return;
+            // git's own helper processes (…/libexec/git-core/git reset --hard run by `git worktree add`, `git stash` …):
+            // the command the agent typed is classified on its own; its internals are not a second action.
+            if (IsGitInternal(x.Shell.Words.FirstOrDefault(w => Name(w) == "git"))) return;
             var a = x.Args;
             var i = 0;
+            string? dashC = null;
             while (i < a.Count && a[i].StartsWith('-'))
+            {
+                if (a[i] == "-C" && i + 1 < a.Count) dashC = dashC is null ? a[i + 1] : dashC + "/" + a[i + 1];
                 i += a[i] is "-C" or "-c" or "--git-dir" or "--work-tree" or "--namespace" ? 2 : 1;
+            }
             if (i >= a.Count) return;
             var sub = a[i];
             var rest = a.Skip(i + 1).ToList();
+            // The repository the command acts on: a scratch clone in a temporary directory holds nothing to lose.
+            var repo = dashC is null ? x.Cwd : Resolve(dashC, x.Cwd).Path;
+            var scratch = repo is not null && RiskPaths.IsTemp(repo, _ctx);
+            var x2 = scratch ? x with { Cwd = repo } : x;
             switch (sub)
             {
-                case "push": GitPush(x, rest); break;
+                case "push": GitPush(x2, rest); break;
                 case "reset" when rest.Contains("--hard"):
-                    Add(RiskRules.GitResetHard, RiskSeverity.Warn,
-                        "git reset --hard discards uncommitted changes" + (_ctx.HasUncommittedChanges == true ? " (the worktree has uncommitted changes)" : ""), x.Span);
+                {
+                    // Overhive's dirty flag describes the agent's worktree; it only applies when git runs there.
+                    var here = dashC is null || (repo is not null && _roots.Any(r => RiskPaths.IsUnderOrEqual(repo, r, _win)));
+                    var clean = here && _ctx.HasUncommittedChanges == false;
+                    Add(RiskRules.GitResetHard, scratch || clean ? RiskSeverity.Info : RiskSeverity.Warn,
+                        "git reset --hard discards uncommitted changes" +
+                        (scratch ? " (in a scratch repository in a temporary directory)"
+                            : clean ? " (the worktree had none)"
+                            : here && _ctx.HasUncommittedChanges == true ? " (the worktree has uncommitted changes)" : ""), x.Span);
                     break;
-                case "clean": GitClean(x, rest); break;
-                case "checkout" or "restore": GitDiscard(x, sub, rest); break;
-                case "branch": GitBranch(x, rest); break;
+                }
+                case "clean": GitClean(x2, rest, scratch); break;
+                case "checkout" or "restore": GitDiscard(x2, sub, rest, scratch); break;
+                case "branch": GitBranch(x2, rest); break;
             }
         }
+
+        /// <summary>An executable inside git's exec path (<c>/usr/lib/git-core/git</c>, <c>…/libexec/git-core/git</c>, <c>mingw64\libexec\git-core\git.exe</c>).</summary>
+        private static bool IsGitInternal(string? word) =>
+            word is not null && word.Replace('\\', '/').Contains("/git-core/", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>A push destination given as a path or file URL (a bare repository on disk), not a remote name or network URL.</summary>
+        private bool IsLocalRemote(string remote) =>
+            remote.StartsWith("file://", StringComparison.OrdinalIgnoreCase) || remote.StartsWith('/') || remote.StartsWith("./") || remote.StartsWith("../")
+            || remote is "." or ".." || remote.StartsWith('~')
+            || (_win && (RiskPaths.IsAbsolute(remote, true) || remote.StartsWith(".\\") || remote.StartsWith("..\\")));
 
         private void GitPush(Cmd x, List<string> rest)
         {
@@ -683,9 +790,24 @@ public static partial class RiskClassifier
                     $"Deletes remote branch {names}", x.Span);
             }
             if (force || mirror)
-                Add(RiskRules.GitForcePush, onProtected ? RiskSeverity.Critical : RiskSeverity.Warn,
-                    (mirror ? "git push --mirror overwrites every remote ref" : lease ? "Force-push (with lease) rewrites remote history" : "Force-push rewrites remote history")
-                    + (onProtected ? $" on {dests.First(d => d is not null && Protected.Contains(d))}" : ""), x.Span);
+            {
+                var remote = pos.FirstOrDefault() is { } r0 ? Expand(r0) : null;
+                if (remote is not null && IsLocalRemote(remote))
+                {
+                    // A bare repository on disk (test fixtures, local mirrors): nobody else's history. In a temp dir: nothing at all.
+                    var rp = Resolve(remote.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ? remote[7..] : remote, x.Cwd).Path;
+                    if (rp is null || !RiskPaths.IsTemp(rp, _ctx))
+                        Add(RiskRules.GitForcePush, RiskSeverity.Info, $"Force-push to a local repository ({remote}): rewrites its history", x.Span);
+                }
+                else
+                {
+                    // --force-with-lease to a feature branch is the routine "push my rebased branch"; it refuses to drop others' commits.
+                    var sev = onProtected ? RiskSeverity.Critical : lease && !mirror ? RiskSeverity.Info : RiskSeverity.Warn;
+                    Add(RiskRules.GitForcePush, sev,
+                        (mirror ? "git push --mirror overwrites every remote ref" : lease ? "Force-push (with lease) rewrites remote history" : "Force-push rewrites remote history")
+                        + (onProtected ? $" on {dests.First(d => d is not null && Protected.Contains(d))}" : ""), x.Span);
+                }
+            }
 
             string? Dest(string spec)
             {
@@ -696,7 +818,7 @@ public static partial class RiskClassifier
             }
         }
 
-        private void GitClean(Cmd x, List<string> rest)
+        private void GitClean(Cmd x, List<string> rest, bool scratch)
         {
             bool f = false, d = false, xi = false;
             for (var i = 0; i < rest.Count; i++)
@@ -715,13 +837,13 @@ public static partial class RiskClassifier
             }
             if (!f) return;
             if (d || xi)
-                Add(RiskRules.GitClean, RiskSeverity.Warn,
+                Add(RiskRules.GitClean, scratch ? RiskSeverity.Info : RiskSeverity.Warn,
                     $"git clean permanently deletes untracked{(d ? " files and directories" : " files")}{(xi ? ", including ignored ones (.env, local config, build caches)" : "")}", x.Span);
             else
                 Add(RiskRules.GitClean, RiskSeverity.Info, "git clean -f permanently deletes untracked files", x.Span);
         }
 
-        private void GitDiscard(Cmd x, string sub, List<string> rest)
+        private void GitDiscard(Cmd x, string sub, List<string> rest, bool scratch)
         {
             var dash = rest.IndexOf("--");
             var force = sub == "checkout" && rest.Any(r => r is "-f" or "--force");
@@ -733,10 +855,10 @@ public static partial class RiskClassifier
             }
             var paths = dash >= 0 ? rest.Skip(dash + 1).ToList() : rest.Where(r => !r.StartsWith('-')).ToList();
             var whole = paths.Any(p => p is "." or "./" or ":/" or "*" or ":(top)" or ":/*"
-                || (RiskPaths.Resolve(p, x.Cwd, _ctx).Path is { } rp && _roots.Any(r => RiskPaths.Equal(r, rp, _win))));
+                || (Resolve(p, x.Cwd).Path is { } rp && _roots.Any(r => RiskPaths.Equal(r, rp, _win))));
             if (!whole && !(force && dash < 0)) return;
             if (_ctx.HasUncommittedChanges == false) return;
-            Add(RiskRules.GitDiscardChanges, _ctx.HasUncommittedChanges == true ? RiskSeverity.Warn : RiskSeverity.Info,
+            Add(RiskRules.GitDiscardChanges, _ctx.HasUncommittedChanges == true && !scratch ? RiskSeverity.Warn : RiskSeverity.Info,
                 $"git {sub} {(whole ? "of the whole tree" : "--force")} discards uncommitted changes" +
                 (_ctx.HasUncommittedChanges == true ? " (the worktree has uncommitted changes)" : " (if there are any)"), x.Span);
         }
@@ -759,8 +881,10 @@ public static partial class RiskClassifier
                 else names.Add(r);
             }
             if (!(D || (d && f))) return;
+            // Info by default: a local branch ref only; its commits stay in the reflog (90 days) and on any remote it was pushed to.
+            // Whether it was merged is not knowable without running git, so only main/master are escalated.
             var prot = names.Any(Protected.Contains);
-            Add(RiskRules.GitBranchForceDelete, prot ? RiskSeverity.Critical : RiskSeverity.Warn,
+            Add(RiskRules.GitBranchForceDelete, prot ? RiskSeverity.Critical : RiskSeverity.Info,
                 $"Force-deletes branch {(names.Count > 0 ? string.Join(", ", names) : "?")}: commits not merged elsewhere are lost", x.Span);
         }
 
@@ -777,10 +901,10 @@ public static partial class RiskClassifier
             var mode = pos[0];
             foreach (var t in pos.Skip(1))
             {
-                var r = RiskPaths.Resolve(t, x.Cwd, _ctx);
+                var r = Resolve(t, x.Cwd);
                 if (r.Path is not { } p) continue;
                 var (loc, reason) = Locate(p);
-                var inside = loc is Loc.Inside or Loc.WorktreeRoot or Loc.Temp;
+                var inside = loc is Loc.Inside or Loc.WorktreeRoot or Loc.Temp or Loc.TempWorktreeParent;
                 if (x.Name == "chmod")
                 {
                     if (WorldWritable(mode))
@@ -873,7 +997,7 @@ public static partial class RiskClassifier
                 Add(RiskRules.CredentialAccess, RiskSeverity.Critical, "Exports GnuPG secret keys", x.Span);
             if (NoPathArgs.Contains(x.Name)) return;
 
-            var words = x.Args.Concat(x.Shell.Redirects.Where(r => r.Target is not null).Select(r => r.Target!));
+            var words = (x.Wrapper ? [] : x.Args).Concat(x.Shell.Redirects.Where(r => r.Target is not null).Select(r => r.Target!));
             foreach (var w0 in words)
             {
                 var w = w0;
@@ -882,7 +1006,7 @@ public static partial class RiskClassifier
                 else if (!w.StartsWith('$') && w.IndexOf('=') is var e and > 0 && !w[..e].Contains('/')) w = w[(e + 1)..]; // of=… key=…
                 if (w.StartsWith('@')) w = w[1..];
                 if (w.Length == 0) continue;
-                var r = RiskPaths.Resolve(w, x.Cwd, _ctx);
+                var r = Resolve(w, x.Cwd);
                 if (r.Path is not { } p || RiskPaths.Credential(p, _ctx) is not { } cred) continue;
                 var sev = Downgrade(cred, p, x.Name);
                 Add(RiskRules.CredentialAccess, sev, $"Command references {cred.Label}: {Show(r)} (matched by path; Overhive never opens it)", x.Span, p);
@@ -895,8 +1019,9 @@ public static partial class RiskClassifier
             if (sev == RiskSeverity.Warn && cred.Label is ".env secrets file" or "private key / certificate file"
                 && _roots.Any(r => RiskPaths.IsUnderOrEqual(path, r, _win)))
                 sev = RiskSeverity.Info; // the project's own .env / test certificates
-            if (sev == RiskSeverity.Critical && command is not null && UseCommands.Contains(command))
-                sev = RiskSeverity.Warn;
+            // ssh -i, ls, stat, chmod … use or list the file without printing it: one level lower.
+            if (command is not null && UseCommands.Contains(command))
+                sev = sev == RiskSeverity.Critical ? RiskSeverity.Warn : RiskSeverity.Info;
             return sev;
         }
 
@@ -1069,7 +1194,7 @@ public static partial class RiskClassifier
                 case "icacls" or "takeown" or "cacls":
                     foreach (var w in a.Where(w => !w.StartsWith('-') && !w.StartsWith('/')))
                     {
-                        var r = RiskPaths.Resolve(w, x.Cwd, _ctx);
+                        var r = Resolve(w, x.Cwd);
                         if (r.Path is { } p && Locate(p) is (Loc.Catastrophic, var reason) && RiskPaths.IsSystem(p, _win))
                         { Add(RiskRules.ChownRecursive, RiskSeverity.Critical, $"Changes ownership or ACLs of {reason} ({Show(r)}) with {x.Name}", x.Span, p); break; }
                     }
@@ -1091,6 +1216,8 @@ public static partial class RiskClassifier
         }
     }
 
+    [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")]
+    private static partial Regex VarRef();
     [GeneratedRegex(@"^([ugoa]*)([+=])([rwxXst]*)$")]
     private static partial Regex SymbolicMode();
     [GeneratedRegex(@"\b(?:iex|invoke-expression)\b|\[scriptblock\]::create", RegexOptions.IgnoreCase)]

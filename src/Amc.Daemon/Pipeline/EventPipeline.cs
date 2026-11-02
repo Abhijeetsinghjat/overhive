@@ -197,8 +197,12 @@ public sealed class EventPipeline : BackgroundService, IEventSink
     public static AgentEvent Normalize(AgentEvent e)
     {
         var data = (JsonObject)e.Data.DeepClone();
+        // Risk classification must see the whole command, not the capped copy that is stored (docs/RISKS.md).
+        string? full = null;
+        if (e.Type == EventTypes.CommandStarted && data["command"] is JsonValue cv && cv.TryGetValue<string>(out var cmd) && cmd.Length > Redactor.DefaultCap)
+            full = Redactor.Redact(cmd);
         RedactNode(data);
-        return e with { Data = data, Ts = e.Ts.ToUniversalTime() };
+        return e with { Data = data, Ts = e.Ts.ToUniversalTime(), FullCommand = full };
     }
 
     private static void RedactNode(JsonNode? node)

@@ -212,7 +212,9 @@ public static class RiskPaths
         (".local/share/keyrings", true, "GNOME keyring", RiskSeverity.Critical),
         ("AppData/Roaming/Microsoft/Credentials", true, "Windows credential store", RiskSeverity.Critical),
         ("AppData/Local/Microsoft/Credentials", true, "Windows credential store", RiskSeverity.Critical),
-        (".local/state/agent-mission-control/token", false, "Overhive API token", RiskSeverity.Critical),
+        // Warn, not critical: it only opens the local Overhive API (a 0700 socket / loopback port on this machine), and
+        // reading it is how scripts and agents call that API; still a real secret, so it is never silent.
+        (".local/state/agent-mission-control/token", false, "Overhive API token", RiskSeverity.Warn),
         (".npmrc", false, "npm auth config", RiskSeverity.Warn),
         (".pypirc", false, "PyPI credentials", RiskSeverity.Warn),
         (".gem/credentials", false, "RubyGems credentials", RiskSeverity.Warn),

@@ -11,8 +11,13 @@ public static class ClaudePayloadTrim
 {
     /// <summary>Remembered tool input strings (paths, descriptions, patterns, task titles): head kept.</summary>
     public const int MaxInputChars = 1024;
-    /// <summary>The Bash command (it is the end event's command): head kept.</summary>
+    /// <summary>The Bash command of a remembered tool start (it is the end event's command): head kept.</summary>
     public const int MaxCommandChars = 16 * 1024;
+    /// <summary>
+    /// The Bash command of a queued hook payload: kept whole up to this bound so the risk recorder classifies the full
+    /// command (a dangerous tail padded past 16K must not escape); above it, head and tail halves are kept.
+    /// </summary>
+    public const int MaxClassifiedCommandChars = 1024 * 1024;
     /// <summary>Strings of a queued hook payload outside tool_input: tail kept, like <see cref="Amc.Core.Security.Redactor.RedactAndCap"/>.
     /// Above the 16K cap every persisted event string gets, so events are unchanged; test summaries sit at the tail.</summary>
     public const int MaxPayloadChars = 64 * 1024;
@@ -26,7 +31,9 @@ public static class ClaudePayloadTrim
     /// A small copy of a tool input: top-level scalars only (strings capped), plus TodoWrite's todos.
     /// Nested objects and arrays (MultiEdit edits, AskUserQuestion questions, MCP arguments) are never read after the start.
     /// </summary>
-    public static JsonObject CompactInput(JsonObject input)
+    public static JsonObject CompactInput(JsonObject input) => CompactInput(input, MaxCommandChars);
+
+    private static JsonObject CompactInput(JsonObject input, int maxCommandChars)
     {
         var o = new JsonObject();
         foreach (var (k, v) in input)
@@ -38,7 +45,7 @@ public static class ClaudePayloadTrim
                     break;
                 case JsonValue jv when jv.TryGetValue<string>(out var s):
                     if (k == "content" && !input.ContainsKey(ContentLinesKey)) o[ContentLinesKey] = LineCount(s);
-                    o[k] = Head(s, k == "command" ? MaxCommandChars : MaxInputChars);
+                    o[k] = k == "command" ? HeadAndTail(s, maxCommandChars) : Head(s, MaxInputChars);
                     break;
                 case JsonValue jv:
                     o[k] = jv.DeepClone();
@@ -57,7 +64,7 @@ public static class ClaudePayloadTrim
     /// </summary>
     public static long CompactHookPayload(JsonObject payload)
     {
-        if (payload["tool_input"] is JsonObject input) payload["tool_input"] = CompactInput(input);
+        if (payload["tool_input"] is JsonObject input) payload["tool_input"] = CompactInput(input, MaxClassifiedCommandChars);
         foreach (var key in new[] { "tool_response", "tool_output", "tool_result" })
             if (payload[key] is JsonObject r)
                 foreach (var drop in DroppedResponseKeys) r.Remove(drop);
@@ -88,6 +95,18 @@ public static class ClaudePayloadTrim
         if (s.Length <= max) return s;
         if (char.IsHighSurrogate(s[max - 1])) max--;
         return s[..max];
+    }
+
+    /// <summary>
+    /// Up to 16K: the head (as before). Above: the first and last halves joined by a newline, so a command padded in the middle
+    /// still shows both ends to the risk classifier; the newline only ever ends a command, never joins two.
+    /// </summary>
+    internal static string HeadAndTail(string s, int max)
+    {
+        if (s.Length <= max) return s;
+        if (max <= MaxCommandChars) return Head(s, max);
+        var half = max / 2;
+        return Head(s, half) + "\n" + Tail(s, half);
     }
 
     private static string Tail(string s, int max)

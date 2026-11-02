@@ -33,8 +33,11 @@ public static partial class Redactor
 
     public static bool IsSensitiveName(string name) => SensitiveName().IsMatch(name);
 
+    /// <summary>Cap of every persisted event string (<see cref="RedactAndCap"/>'s default).</summary>
+    public const int DefaultCap = 16 * 1024;
+
     /// <summary>Redacts and caps a text field (keeps the tail, which is usually where errors and summaries are).</summary>
-    public static string? RedactAndCap(string? text, int maxChars = 16 * 1024)
+    public static string? RedactAndCap(string? text, int maxChars = DefaultCap)
     {
         if (text is null) return null;
         var r = Redact(text);

@@ -53,6 +53,13 @@ public sealed record AgentEvent
     public string? DedupeKey { get; init; }
     public JsonObject Data { get; init; } = new();
 
+    /// <summary>
+    /// Live-only, never persisted or sent: the redacted shell command of a <c>command.started</c> event before the 16K cap
+    /// every stored string gets (set by the pipeline when it caps the command), so the risk recorder classifies the whole command.
+    /// </summary>
+    [JsonIgnore]
+    public string? FullCommand { get; init; }
+
     public T? Payload<T>() where T : class => Data.Deserialize<T>(Json.Options);
 
     public static AgentEvent Create<T>(string type, string source, T payload, Evidence evidence = Evidence.Observed) where T : class
