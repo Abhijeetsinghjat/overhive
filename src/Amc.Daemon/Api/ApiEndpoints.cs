@@ -22,7 +22,7 @@ public static class ApiEndpoints
         {
             overall = health.Overall(),
             components = health.Snapshot(),
-            database = new { ok = store.Ping(), events = store.Count() },
+            database = new { ok = store.Ping(), events = store.CountApprox() },
             queue = new { depth = pipeline.QueueDepth, dropped = pipeline.Dropped },
             websocket = new { clients = b.ClientCount },
             seq = state.Read(s => s.Seq),
@@ -31,7 +31,14 @@ public static class ApiEndpoints
             stage = Amc.Core.Product.Stage,
         }));
 
-        api.MapGet("/state", (StateStore state) => Results.Content(state.SerializeState(), "application/json"));
+        // Serialized under the read lock into pooled chunks, written to the client after the lock is released.
+        api.MapGet("/state", async (HttpContext ctx, StateStore state) =>
+        {
+            using var json = state.SerializeStateUtf8();
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength = json.Length;
+            await json.WriteToAsync(ctx.Response.Body, ctx.RequestAborted);
+        });
 
         api.MapGet("/events", (HttpRequest r, EventStore store, StateStore state) =>
         {

@@ -40,13 +40,17 @@ public sealed class EventPipeline : BackgroundService, IEventSink
     private readonly HealthRegistry _health;
     private readonly AmcOptions _options;
     private readonly ILogger<EventPipeline> _log;
+    private readonly TimeProvider _time;
     private long _sinceSnapshot;
+    private DateTimeOffset _lastSnapshotAt;
     private long _dropped;
 
     public EventPipeline(EventStore store, StateStore state, Broadcaster broadcaster, HealthRegistry health,
-        IOptions<AmcOptions> options, ILogger<EventPipeline> log)
+        IOptions<AmcOptions> options, ILogger<EventPipeline> log, TimeProvider? time = null)
     {
         _store = store; _state = state; _broadcaster = broadcaster; _health = health; _options = options.Value; _log = log;
+        _time = time ?? TimeProvider.System;
+        _lastSnapshotAt = _time.GetUtcNow();
         _channel = Channel.CreateBounded<(AgentEvent, TaskCompletionSource<AgentEvent?>?)>(
             new BoundedChannelOptions(_options.IngestQueueCapacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _health.Register(HealthName);
@@ -96,6 +100,7 @@ public sealed class EventPipeline : BackgroundService, IEventSink
         state.ReducerVersion = Reducer.Version;
         _state.Load(state);
         _sinceSnapshot = replayed;
+        _lastSnapshotAt = _time.GetUtcNow();
         _log.LogInformation("Restored state at seq {Seq} ({Replayed} events replayed) in {Ms} ms", state.Seq, replayed, sw.ElapsedMilliseconds);
         _health.Ok(HealthName, $"restored at seq {state.Seq}");
     }
@@ -146,11 +151,8 @@ public sealed class EventPipeline : BackgroundService, IEventSink
             var changed = _state.Apply(stored);
             _broadcaster.Publish(stored, changed);
             _sinceSnapshot += stored.Count;
-            if (_sinceSnapshot >= _options.SnapshotEveryEvents)
-            {
+            if (SnapshotDue(_sinceSnapshot, _time.GetUtcNow() - _lastSnapshotAt, _options))
                 SaveSnapshot();
-                _sinceSnapshot = 0;
-            }
         }
         foreach (var (e, done) in batch) done?.TrySetResult(storedById.GetValueOrDefault(e.Id));
 
@@ -161,11 +163,34 @@ public sealed class EventPipeline : BackgroundService, IEventSink
         if (Dropped == 0) _health.Ok(HealthName, $"seq {_state.Read(s => s.Seq)}");
     }
 
-    /// <summary>One serialization, inside the read lock (the live state already carries the reducer version).</summary>
+    /// <summary>Enough events since the last snapshot and enough time: a burst must not write one every few hundred ms.</summary>
+    public static bool SnapshotDue(long sinceSnapshot, TimeSpan sinceLast, AmcOptions o) =>
+        sinceSnapshot >= o.SnapshotEveryEvents && sinceLast >= TimeSpan.FromMinutes(Math.Max(0, o.SnapshotMinIntervalMinutes));
+
+    /// <summary>
+    /// Serialized and compressed into pooled chunks inside the read lock (the live state already carries the reducer
+    /// version); the database write happens after the lock is released.
+    /// </summary>
     private void SaveSnapshot()
     {
-        var (seq, json) = _state.Read(s => (s.Seq, Json.Serialize(s)));
-        _store.SaveSnapshot(seq, json);
+        var sw = Stopwatch.StartNew();
+        _lastSnapshotAt = _time.GetUtcNow(); // also on failure: retry after the interval, not on every batch
+        var (seq, encoded) = _state.EncodeSnapshot();
+        var encodeMs = sw.ElapsedMilliseconds;
+        var bytes = encoded.Length;
+        try
+        {
+            using (encoded) _store.SaveSnapshot(seq, encoded);
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            _log.LogWarning(ex, "Snapshot at seq {Seq} could not be written", seq);
+            return;
+        }
+        _sinceSnapshot = 0;
+        _health.SetCounter(HealthName, "snapshot_kb", bytes / 1024);
+        _log.LogInformation("Snapshot at seq {Seq}: {Kb} KB, encoded in {EncodeMs} ms, written in {TotalMs} ms",
+            seq, bytes / 1024, encodeMs, sw.ElapsedMilliseconds);
     }
 
     /// <summary>Redact secrets and cap every string in the payload. Applied centrally so no collector can forget.</summary>

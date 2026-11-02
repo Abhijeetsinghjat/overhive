@@ -19,6 +19,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Microsoft.NET.Sdk.Web defaults to Server GC: one heap per core, sized for request throughput. A per-user daemon
+      with a ~80 MB live heap does not need that: Workstation GC commits a fraction of the memory.
+      Concurrent (background) GC stays on so gen2 collections do not pause the WebSocket push.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 0-9: how hard the GC works to keep the heap compact (compacts the large-object heap when it fragments). -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
 </Project>

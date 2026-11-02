@@ -13,6 +13,9 @@ Restart=on-failure
 RestartSec=3
 # Daemon sets umask 077 itself; this keeps any early files private too.
 UMask=0077
+# glibc creates up to 8 malloc arenas per core for the runtime's threads; their freed memory is rarely returned.
+# Two arenas keep native memory flat (the managed heap has its own allocator). Reinstall the unit to pick this up.
+Environment=MALLOC_ARENA_MAX=2
 # Graceful shutdown lets the pipeline flush and write a final snapshot.
 KillSignal=SIGTERM
 # Sessions started from the dashboard are children of the daemon: keep them running across daemon restarts.

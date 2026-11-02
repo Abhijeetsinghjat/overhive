@@ -10,7 +10,8 @@ if [[ -z "${DOTNET_ROOT:-}" ]]; then
   done
 fi
 case "$self" in
-  amcd)     exec "$base/amcd/amcd" "$@" ;;
+  # glibc malloc arenas: see amcd.service (ignored by other C libraries, e.g. macOS).
+  amcd)     export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"; exec "$base/amcd/amcd" "$@" ;;
   agentctl|overhive) exec "$base/cli/agentctl" "$@" ;;
   *) echo "launcher: unknown name '$self' (link me as amcd, agentctl or overhive)" >&2; exit 2 ;;
 esac
