@@ -28,7 +28,9 @@ public sealed class ClaudeRewake
         public readonly TaskCompletionSource<bool> Signal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Waiter>> _waiters = new();
+    /// <summary>main agent id → armed waiters. Guarded by <see cref="_gate"/>; a set is removed when its last waiter leaves.</summary>
+    private readonly Dictionary<string, Dictionary<Guid, Waiter>> _waiters = new();
+    private readonly Lock _gate = new();
     private readonly ConcurrentDictionary<string, bool> _idle = new();
     private readonly Mailbox _mailbox;
     private readonly IEventSink _sink;
@@ -42,12 +44,27 @@ public sealed class ClaudeRewake
         _mailbox = mailbox; _sink = sink; _ctx = ctx; _health = health; _time = time;
         _mailbox.Enqueued += agentId => Signal(agentId, true);
         // Open long-polls must not hold up shutdown (hooks just exit 0 and re-arm at the next idle).
-        lifetime?.ApplicationStopping.Register(() => { foreach (var id in _waiters.Keys) Signal(id, false); });
+        lifetime?.ApplicationStopping.Register(() => { foreach (var id in WaitingAgents()) Signal(id, false); });
         _health.Register(HealthName);
         _health.Ok(HealthName, "no idle sessions waiting");
     }
 
-    public int WaitingCount(string agentId) => _waiters.TryGetValue(agentId, out var d) ? d.Count : 0;
+    public int WaitingCount(string agentId) { lock (_gate) return _waiters.TryGetValue(agentId, out var d) ? d.Count : 0; }
+
+    /// <summary>Agents with at least one armed waiter (tests, health).</summary>
+    public IReadOnlyList<string> WaitingAgents() { lock (_gate) return _waiters.Keys.ToList(); }
+
+    /// <summary>Agents tracked as idle or busy (tests, health).</summary>
+    public int TrackedSessions => _idle.Count;
+
+    /// <summary>Forgets idle/busy flags of sessions that are gone (killed without SessionEnd). Returns how many.</summary>
+    public int Prune(DateTimeOffset now)
+    {
+        var n = 0;
+        foreach (var id in _idle.Keys)
+            if (WaitingCount(id) == 0 && _ctx.IsGone(id, now) && _idle.TryRemove(id, out _)) n++;
+        return n;
+    }
 
     /// <summary>Called from every hook: tracks whether the main session is idle and releases waiters when it gets busy.</summary>
     public void Observe(string hookEvent, string sessionId, JsonObject payload)
@@ -92,22 +109,30 @@ public sealed class ClaudeRewake
             if (await TryDeliverAsync(sid, main, ct) is { } text) return text;
 
             var w = new Waiter();
-            var set = _waiters.GetOrAdd(main, _ => new());
             var id = Guid.NewGuid();
-            set[id] = w;
+            lock (_gate)
+            {
+                if (!_waiters.TryGetValue(main, out var set)) _waiters[main] = set = [];
+                set[id] = w;
+            }
             UpdateHealth();
             try
             {
                 if (_mailbox.HasPending(main)) continue;                         // raced with an enqueue
                 var remaining = deadline - _time.GetUtcNow();
                 if (remaining <= TimeSpan.Zero) return null;
-                var done = await Task.WhenAny(w.Signal.Task, Task.Delay(remaining, _time, ct));
+                // The hold timer is cancelled as soon as the signal wins, so it does not live on for up to MaxHold.
+                using var hold = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var done = await Task.WhenAny(w.Signal.Task, Task.Delay(remaining, _time, hold.Token));
+                await hold.CancelAsync();
+                ct.ThrowIfCancellationRequested();
                 if (done != w.Signal.Task || !await w.Signal.Task) return null;  // timeout or released
             }
             catch (OperationCanceledException) { return null; }
             finally
             {
-                set.TryRemove(id, out _);
+                lock (_gate)
+                    if (_waiters.TryGetValue(main, out var set) && set.Remove(id) && set.Count == 0) _waiters.Remove(main);
                 UpdateHealth();
             }
         }
@@ -134,13 +159,19 @@ public sealed class ClaudeRewake
 
     private void Signal(string agentId, bool message)
     {
-        if (!_waiters.TryGetValue(agentId, out var set)) return;
-        foreach (var w in set.Values) w.Signal.TrySetResult(message);
+        List<Waiter> ws;
+        lock (_gate)
+        {
+            if (!_waiters.TryGetValue(agentId, out var set)) return;
+            ws = [.. set.Values];
+        }
+        foreach (var w in ws) w.Signal.TrySetResult(message);
     }
 
     private void UpdateHealth()
     {
-        var n = _waiters.Values.Sum(d => d.Count);
+        int n;
+        lock (_gate) n = _waiters.Values.Sum(d => d.Count);
         _health.SetCounter(HealthName, "waiting", n);
         _health.Ok(HealthName, n == 0 ? "no idle sessions waiting" : $"{n} idle session waiter(s) armed");
     }

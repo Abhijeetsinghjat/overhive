@@ -11,7 +11,7 @@ namespace Amc.Core.State;
 public static class Reducer
 {
     /// <summary>Bump whenever folding semantics change: snapshots from another version are discarded and the log is replayed.</summary>
-    public const int Version = 11;
+    public const int Version = 12;
 
     public static HashSet<EntityRef> ApplyBatch(WorldState s, IEnumerable<AgentEvent> events)
     {
@@ -31,6 +31,7 @@ public static class Reducer
             s.Seq = e.Seq;
         }
         if (e.Ts > s.Clock) s.Clock = e.Ts;
+        RetentionFold.MaybeSweep(s, changed); // event-time retention (StateRetention)
 
         var agent = e.AgentId is null ? null : s.Agents.GetValueOrDefault(e.AgentId);
         if (agent is not null && e.Ts > agent.LastActivityAt && IsActivity(e.Type))

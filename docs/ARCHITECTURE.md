@@ -90,7 +90,10 @@ before each retention run and on shutdown. The state is serialized straight into
 64 KB chunks, no full-size string) and streamed into an SQLite blob; the two newest are kept. Startup = load
 latest snapshot + replay the tail. Snapshots carry `Reducer.Version`;
 a snapshot from another version is discarded and the full log is replayed, so changes
-to the fold semantics apply to all of history.
+to the fold semantics apply to all of history. The reducer also bounds the state: a retention sweep
+(`RetentionFold`, every 10 minutes of *event* time, its last run stored in the snapshot) drops finished
+agent trees, removed worktrees, idle clean files and old commits/test runs/risks, so a replay prunes
+exactly what the live daemon pruned (windows in TROUBLESHOOTING.md, Retention).
 
 **Time-based rules** that no event triggers (a sub-agent silent for 30 min with no
 completion recorded becomes `unknown`) are applied by `StalenessMonitor`, which
@@ -315,13 +318,16 @@ WebSocket `/ws?since=<seq>`:
 ```
 server → {t:"hello", seq, serverTime}
 server → {t:"event", e:{…}}             (replayed since `since`, then live)
-server → {t:"patch", kind, id, value}   entity upserts from the reducer
-server → {t:"live", processes:[…]}      ≤1 Hz volatile overlay
+server → {t:"patch", seq, items:[{kind, id, value}]}   entity upserts, coalesced over 250 ms (value and seq at send time)
+server → {t:"live", processes:[…]}      ≤1 Hz volatile overlay (latest wins: never queued behind itself)
 server → {t:"attention", items, urgent, hidden}   attention queue, when it changes
 server → {t:"resync"}                    client too slow / gap → refetch /api/state
 client → {t:"sub", topics:[…]} | {t:"ping"}
 ```
-Per-client bounded send queue; overflow ⇒ `resync` and the drop is counted.
+Per-client send queue bounded by count (4,096) and bytes (8 MB); `live` and `attention` are one latest-wins slot
+per topic, not queued. Overflow ⇒ the queue is freed at once, `resync` is sent and the drop is counted.
+A send that makes no progress for 30 s, or a peer that misses pings for 30 s (WebSocket keep-alive timeout),
+closes the socket, so a sleeping phone behind `tailscale serve` does not hold a queue.
 
 ## 12. Security model
 

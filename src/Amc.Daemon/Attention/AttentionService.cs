@@ -82,7 +82,7 @@ public sealed class AttentionService : BackgroundService
             }
             sends = _notifications.Observe(visible, now, _broadcaster.ClientCount);
         }
-        if (push is not null) _broadcaster.PublishLive(push);
+        if (push is not null) _broadcaster.PublishLive("attention", push);
         foreach (var (n, m) in sends) _ = _notifications.SendAsync(n, m, CancellationToken.None);
         _health.Ok(HealthName, $"{snap.Items.Count} item(s), {snap.Urgent} urgent, {snap.Hidden} dismissed/snoozed");
         return snap;

@@ -37,6 +37,13 @@ version is 0.x, minor versions may change behaviour.
   social preview image (`docs/media/social-preview.png`).
 
 ### Fixed
+- The daemon's state no longer grows without bound: removed worktrees and their files, idle clean files,
+  finished agent sessions (14 days), old commits, test runs and risk findings (14 days), usage marks and
+  claim-check details (7 days) are dropped from memory in event time (`StateRetention`; the timeline keeps
+  the full log). A worktree with more than 500 dirty paths reports summary counts only for new paths, and
+  event-log compaction also drops git status of removed worktrees and old "clean" statuses. On one real
+  installation the state went from 33 MB / 43,333 files to 5 MB / 1,287 files, and the database from
+  575 MB to 253 MB after the first retention run. The first start after upgrading replays the event log.
 - The Hive tab was blank and the **3D** button did nothing on `main`: a merge had dropped the Hive and 3D
   effects start-up from the dashboard's entry module. Restored, with a test that every view's start-up
   function is called.
@@ -59,6 +66,13 @@ version is 0.x, minor versions may change behaviour.
   read; an older daemon started on the upgraded database replays the event log instead.
 - Retention runs on wall-clock time, checked every minute, so a laptop that slept no longer postpones it
   or makes the Health tab report it as stale.
+- Daemon memory no longer grows with uptime from live buffers: remembered Claude tool calls keep only the
+  fields the end needs (not Write content or Edit strings) and are dropped 5 minutes after they end (cap
+  5,000, was 50,000 full copies); queued hook calls are compacted and bounded to 32 MB; each dashboard
+  WebSocket queue is bounded to 8 MB, process/attention updates replace each other instead of queuing,
+  patches are coalesced over 250 ms, and a socket that stops answering pings or sends for 30 s is closed;
+  terminal viewers are bounded to 4 MB queued; an hourly sweep forgets per-session state of ended sessions
+  and empty mailbox queues; the idle-session wake-up timer is cancelled when a message arrives.
 
 ## [0.2.0] - 2026-10-17
 

@@ -19,6 +19,12 @@ public sealed class GitSettings
     public TimeSpan ActiveWindow { get; init; } = TimeSpan.FromMinutes(10);
     public TimeSpan NegativeCacheTtl { get; init; } = TimeSpan.FromSeconds(60);
     public int MaxFileEventsPerRefresh { get; init; } = 5000;
+    /// <summary>
+    /// Above this many dirty paths in one worktree (e.g. a no-checkout scratch worktree where every file shows as
+    /// deleted), new paths get no per-file events: the worktree's summary counts still update, and paths already
+    /// reported keep updating until they are clean.
+    /// </summary>
+    public int MaxDirtyFilesPerWorktree { get; init; } = 500;
     public int MaxUntrackedLineCounts { get; init; } = 500;
     public long MaxUntrackedLineCountBytes { get; init; } = 256 * 1024;
     public int MaxCommitsPerRefresh { get; init; } = 50;
@@ -56,6 +62,8 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
         public WorktreeData? Summary;
         public HashSet<string> Unmerged = [];
         public DateTimeOffset LastRefreshAt = DateTimeOffset.UtcNow;
+        /// <summary>Dirty paths exceed <see cref="GitSettings.MaxDirtyFilesPerWorktree"/> (logged once per episode).</summary>
+        public bool Overflow;
     }
 
     private static readonly HashSet<string> SkipDirs = new(StringComparer.Ordinal)
@@ -467,6 +475,7 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
             t.Deleted = true; t.Files = null; t.Summary = null; t.Unmerged = [];
             root = t.Root;
             if (t.GitDir is not null && !_trackers.Values.Any(o => o != t && !o.Deleted && o.GitDir == t.GitDir)) _inotify?.Remove(t.GitDir);
+            _trackers.TryRemove(new KeyValuePair<string, Tracker>(id, t)); // a worktree that comes back gets a fresh tracker
         }
         var known = _state.Read(s => s.Worktrees.TryGetValue(id, out var w) && !w.Removed ? w.Root : null);
         if (known is null) return;
@@ -514,8 +523,17 @@ public sealed class GitCollector : BackgroundService, IWorktreeIndex
         var actor = seeded ? _activity.SoleAgent(t.Id, t.LastRefreshAt, started) : null;
         var evidence = actor is null ? Evidence.Observed : Evidence.Inferred;
 
-        // 1. Per-file deltas.
-        var changes = files.Where(kv => !t.Files.TryGetValue(kv.Key, out var old) || old != kv.Value)
+        // 1. Per-file deltas (only for paths already reported once the worktree has too many dirty paths).
+        var overflow = files.Count > _settings.MaxDirtyFilesPerWorktree;
+        if (overflow != t.Overflow)
+        {
+            t.Overflow = overflow;
+            if (overflow)
+                _log.LogInformation("{Count} dirty paths in {Root} (over {Max}): reporting summary counts only for new paths",
+                    files.Count, t.Root, _settings.MaxDirtyFilesPerWorktree);
+        }
+        var tracked = t.Files;
+        var changes = files.Where(kv => tracked.TryGetValue(kv.Key, out var old) ? old != kv.Value : !overflow)
             .Select(kv => (Path: kv.Key, State: kv.Value))
             .Concat(t.Files.Keys.Where(p => !files.ContainsKey(p)).Select(p => (Path: p, State: new FileState("clean"))))
             .ToList();

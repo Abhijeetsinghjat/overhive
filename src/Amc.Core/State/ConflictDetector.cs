@@ -91,7 +91,8 @@ public static class ConflictDetector
     {
         foreach (var f in s.Files.Values)
             if (SameFile(s, f) is { } c) yield return c;
-        foreach (var g in s.Files.Values.Where(f => f.RepositoryId is not null).GroupBy(f => GroupKey(f.RepositoryId!, f.Path)))
+        // Only dirty, attributed files can form a cross-worktree conflict: group just those (same result, far fewer rows).
+        foreach (var g in s.Files.Values.Where(f => f.RepositoryId is not null && Dirty(f) && f.Agents.Count > 0).GroupBy(f => GroupKey(f.RepositoryId!, f.Path)))
             if (CrossWorktree(s, g.ToList()) is { } c) yield return c;
         foreach (var w in s.Worktrees.Values.Where(w => !w.Removed))
         {

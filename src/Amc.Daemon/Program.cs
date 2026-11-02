@@ -19,6 +19,7 @@ builder.Configuration
     .AddCommandLine(args);
 builder.Services.Configure<AmcOptions>(builder.Configuration);
 var options = builder.Configuration.Get<AmcOptions>() ?? new AmcOptions();
+Amc.Core.State.StateRetention.Default = options.StateRetention; // before the state is restored and replayed
 
 if (options.BindAddress is not ("127.0.0.1" or "localhost" or "::1"))
     throw new InvalidOperationException(
@@ -97,7 +98,9 @@ builder.Services.AddCollectors(options);
 var app = builder.Build();
 
 app.UseMiddleware<SecurityMiddleware>();
-app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
+// KeepAliveTimeout: a peer that stops answering pings (sleeping phone behind `tailscale serve`, dropped network)
+// is aborted instead of holding its socket, send loop and queue until TCP gives up.
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(30) });
 app.UseDefaultFiles(new DefaultFilesOptions { DefaultFileNames = [] });
 app.UseStaticFiles(new StaticFileOptions
 {
