@@ -39,6 +39,7 @@ public static class AttentionDeriver
     public static IReadOnlyList<IAttentionProvider> BuiltIn { get; } = [
         new AgentAttentionProvider(), new ConflictAttentionProvider(),
         new GuardAttentionProvider(), new RiskAttentionProvider(), new VerificationAttentionProvider(),
+        new ApprovalAttentionProvider(),
     ];
 
     public static List<AttentionItem> Derive(WorldState state, DateTimeOffset now, IEnumerable<IAttentionProvider>? providers = null,

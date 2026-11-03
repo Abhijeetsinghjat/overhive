@@ -85,6 +85,9 @@ public static class EventTypes
     public const string GuardAlert = "guard.alert";                // GuardAlertData — a tree crossed a threshold (or changed level)
     public const string GuardCleared = "guard.cleared";            // GuardClearedData
     public const string GuardDismissed = "guard.dismissed";        // GuardDismissedData — hidden by the user
+    // Dashboard approvals of Claude Code tool calls (payloads in Amc.Core.Approvals)
+    public const string ApprovalRequested = "approval.requested";  // ApprovalRequestedData — a PreToolUse call is held
+    public const string ApprovalResolved = "approval.resolved";    // ApprovalResolvedData — allow / deny / expired
 
     public static bool IsFileChange(string type) =>
         type is FileCreated or FileModified or FileDeleted or FileRenamed;

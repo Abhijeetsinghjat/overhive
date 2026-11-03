@@ -171,6 +171,7 @@ export const EVENT_CATEGORIES = [
   ['audit.*', 'Control / audit'],
   ['risk.*', 'Risky actions'],
   ['guard.*', 'Runaway guard'],
+  ['approval.*', 'Approvals'],
 ];
 
 export function typeMatches(type, filter) {
@@ -251,6 +252,18 @@ export function describe(e) {
     case 'conflict.warned': [icon, iconCls] = ICON.message; text = `Agents warned about ${e.filePath || 'a conflict'}${d.auto ? ' (automatic)' : ''}`; detail = (d.recipients || []).map((r) => `${r.agentId}: ${r.outcome}`).join(' · '); break;
     case 'guard.alert': icon = '⚠'; iconCls = norm(d.severity) === 'critical' ? 'ic-fail' : 'st-blocked'; text = `Runaway guard ${norm(d.severity)}: ${oneLine(d.summary || '', 160)}`; bad = norm(d.severity) === 'critical'; break;
     case 'guard.cleared': [icon, iconCls] = ICON.ok; text = `Runaway guard cleared (${d.rule}): ${oneLine(d.reason || '', 140)}`; break;
+    case 'approval.requested': icon = '⏸'; iconCls = 'st-blocked'; text = `Waiting for approval: ${d.tool}${d.severity ? ` (${d.severity})` : ''}`; detail = d.command || d.filePath || ''; break;
+    case 'approval.resolved': {
+      const who = d.by === 'session-rule' ? 'by a session rule' : d.by === 'system' ? '' : `by ${d.by}${d.client ? ' ' + d.client : ''}`;
+      const secs = d.latencyMs != null ? ` after ${(d.latencyMs / 1000).toFixed(1)}s` : '';
+      [icon, iconCls] = d.decision === 'allow' ? ICON.ok : d.decision === 'deny' ? ICON.fail : ['⏱', 'ic-audit'];
+      text = d.decision === 'expired' ? `Approval expired${secs}: normal permission flow`
+        : d.decision === 'ask' ? `Handed to the terminal prompt ${who}${secs}`
+        : `${d.decision === 'allow' ? 'Allowed' : 'Denied'} ${who}${secs}${d.allowSimilar ? ' (+ rest of session)' : ''}`;
+      detail = d.reason || d.command || d.filePath || '';
+      bad = d.decision === 'deny';
+      break;
+    }
     case 'guard.dismissed': icon = '⚠'; text = 'Runaway guard alert dismissed'; detail = d.key || ''; break;
     default: text = t; break;
   }

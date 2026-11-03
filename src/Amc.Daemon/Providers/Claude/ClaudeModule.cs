@@ -37,16 +37,30 @@ public static class ClaudeModule
         return s;
     }
 
-    /// <summary>POST /hooks/claude — token enforced by SecurityMiddleware. Empty body = no hook output.</summary>
+    /// <summary>
+    /// POST /hooks/claude — token enforced by SecurityMiddleware. Empty body = no hook output.
+    /// <c>?approval=1</c> (the PreToolUse hook installed while Approvals.Mode is not off, with a matching longer timeout):
+    /// a call that needs approval is held until the dashboard decides (see <see cref="Approvals.ApprovalBroker"/>).
+    /// Without it the daemon never holds a hook, whatever the configuration says.
+    /// </summary>
     public static void MapClaudeEndpoints(WebApplication app)
     {
-        app.MapPost("/hooks/claude", async (HttpRequest req, ClaudeHookReceiver receiver, CancellationToken ct) =>
+        app.MapPost("/hooks/claude", async (HttpRequest req, ClaudeHookReceiver receiver, Approvals.ApprovalBroker approvals,
+            ILogger<ClaudeHookReceiver> log, CancellationToken ct) =>
         {
             JsonObject? payload;
             try { payload = await JsonNode.ParseAsync(req.Body, cancellationToken: ct) as JsonObject; }
             catch (JsonException) { payload = null; }
             if (payload is null) return Results.Empty; // fail open: never feed errors to the agent
+            Approvals.ApprovalBroker.Ticket? ticket = null;
+            try
+            {
+                // Before HandleAsync, which compacts the payload (drops Edit/Write strings the approval card shows).
+                ticket = approvals.Prepare(payload, holdable: req.Query["approval"] == "1");
+            }
+            catch (Exception ex) { log.LogWarning(ex, "Approval check failed; the call is not held"); }
             var response = await receiver.HandleAsync(payload, ct);
+            if (ticket is not null && response is null) response = await approvals.WaitAsync(ticket, ct);
             return response is null ? Results.Empty : Results.Text(response.ToJsonString(), "application/json");
         });
 

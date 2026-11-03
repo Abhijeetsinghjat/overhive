@@ -105,6 +105,19 @@ public static class DoctorCommand
             var installed = ClaudeHooksConfig.IsInstalled(json);
             checks.Add(new("claude hooks", installed, installed ? $"installed in {settingsPath}" : exists ? $"not installed in {settingsPath}" : $"{settingsPath} does not exist",
                 "agentctl hooks install"));
+            // Approvals on: PreToolUse must be the variant that can wait (else every call fails open after 3 s).
+            if (installed && settings.Approvals.Enabled)
+            {
+                var socket = Path.Combine(settings.DataDir, ClaudeHooksConfig.SocketFileName);
+                var expected = HooksCommand.ApprovalHook(ctx, socket)!;
+                var pre = (json["hooks"]?["PreToolUse"] as System.Text.Json.Nodes.JsonArray)?.OfType<System.Text.Json.Nodes.JsonObject>()
+                    .SelectMany(g => g["hooks"] as System.Text.Json.Nodes.JsonArray ?? []).Where(ClaudeHooksConfig.IsOurs).ToList() ?? [];
+                var ok = pre.Count > 0 && pre.All(h => expected.Command.Matches(h) && h?["timeout"]?.GetValue<int>() == expected.TimeoutSeconds);
+                checks.Add(new("approvals", ok,
+                    ok ? $"{settings.Approvals.EffectiveMode}: PreToolUse waits up to {settings.Approvals.EffectiveTimeoutSeconds} s for a dashboard decision"
+                       : $"Approvals.Mode is {settings.Approvals.EffectiveMode} but the PreToolUse hook is not the approval variant (or has another timeout)",
+                    "agentctl hooks install"));
+            }
         }
         catch (CliException ex)
         {

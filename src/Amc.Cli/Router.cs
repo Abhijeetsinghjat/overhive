@@ -29,6 +29,9 @@ public static class Router
         new("risks", "risks [--agent A] [--severity info|warn|critical] [--since 1h] [--limit N] [--json]",
             "Risky actions recorded for agents (deletes outside the worktree, force-pushes, credential paths, …)", RisksCommand.RunAsync,
             Values: ["agent", "severity", "since", "limit"]),
+        new("approvals", "approvals [allow|deny|ask <id> [--reason TEXT] [--similar]] [--json]",
+            "Claude Code tool calls waiting for your approval (config \"Approvals\"); allow, deny, or hand one to the terminal prompt", ApprovalsCommand.RunAsync, 0, 2,
+            Flags: ["similar"], Values: ["reason"]),
         new("events", "events [--agent A] [--type T]... [--file F] [--worktree W] [--since 10m] [--limit N] [-f]", "Event log (follow with -f)",
             EventsCommand.RunAsync, Flags: ["follow"], Values: ["agent", "type", "file", "worktree", "since", "limit"]),
         new("logs", "logs <agent> [-f] [--since 10m] [--limit N] [--lines N]", "Command/tool activity incl. stdout/stderr",
@@ -43,9 +46,9 @@ public static class Router
         new("hooks", "hooks status|install|uninstall [--tool claude|codex|gemini|grok|cursor|copilot] [--settings PATH] [--yes]",
             "Manage an AI tool's hooks so it reports to Overhive (default tool: claude)",
             HooksCommand.RunAsync, 0, 1, Flags: ["yes"], Values: ["settings", "port", "tool"]),
-        new(Amc.Core.Providers.HookForwarder.Subcommand, "hook-forward <tool> [--event E] [--wait] [--socket PATH]  (stdin: hook JSON)",
+        new(Amc.Core.Providers.HookForwarder.Subcommand, "hook-forward <tool> [--event E] [--wait] [--approval --max-time N] [--socket PATH]  (stdin: hook JSON)",
             "Forward a hook payload to amcd's private socket; what installed hooks run on Windows. Always exits 0 (fails open)",
-            HookForwardAsync, 0, 1, Flags: ["wait"], Values: ["event", "socket", "tag"]),
+            HookForwardAsync, 0, 1, Flags: ["wait", "approval"], Values: ["event", "socket", "tag", "max-time"]),
         new("doctor", "doctor [--settings PATH] [--json]", "Diagnose the installation", DoctorCommand.RunAsync, Values: ["settings"]),
         new("run", "run [--id ID] [--cols N] [--rows N] -- <cmd> [args...]", "Run an agent under a PTY owned by Overhive", RunAsync,
             AcceptsRest: true, Values: ["id", "cols", "rows"]),
@@ -103,6 +106,7 @@ public static class Router
         foreach (var (name, values) in args.Options)
             foreach (var v in values) argv.AddRange(["--" + name, v]);
         if (args.Flag("wait")) argv.Add("--wait");
+        if (args.Flag("approval")) argv.Add("--approval");
         return Hooks.HookForward.MainAsync([.. argv]);
     }
 
