@@ -9,7 +9,6 @@ using Amc.Daemon.Pipeline;
 using Amc.Daemon.Tools;
 using Amc.Tests.Git;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -266,16 +265,10 @@ public sealed class NewWorktreeTests
         builder.Services.AddSingleton(new ApiToken("tok"));
         builder.Services.AddSingleton(Options.Create(rig.Env.Options));
         builder.Services.AddSingleton(rig.Service);
-        builder.Services.AddSingleton(rig.Launcher);
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = Json.Options.PropertyNamingPolicy);
         await using var app = builder.Build();
         app.UseMiddleware<SecurityMiddleware>();
-        ToolsModule.MapNewWorktreeEndpoints(app);
-        app.MapPost("/api/sessions", async (LaunchRequest body, SessionLauncher launcher, CancellationToken ct) =>
-        {
-            var r = await launcher.LaunchAsync(body, ct);
-            return Results.Json(r, statusCode: r.StatusCode);
-        });
+        ToolsModule.MapNewWorktreeEndpoints(app); // /api/sessions sits behind the same middleware (every /api path)
         await app.StartAsync();
         var http = app.GetTestClient();
         http.BaseAddress = new Uri("http://127.0.0.1:47821/");
@@ -289,12 +282,11 @@ public sealed class NewWorktreeTests
             return (await http.SendAsync(req)).StatusCode;
         }
         var create = new { cwd = rig.RepoNative, branch = "gated" };
-        var launch = new { cwd = rig.RepoNative, tool = "faketool", worktree = new { branch = "gated2" } };
 
         Assert.Equal(HttpStatusCode.Unauthorized, await Post("/api/new-worktree", create, null));
-        Assert.Equal(HttpStatusCode.Unauthorized, await Post("/api/sessions", launch, "wrong"));
+        Assert.Equal(HttpStatusCode.Unauthorized, await Post("/api/new-worktree", create, "wrong"));
         Assert.Equal(HttpStatusCode.Forbidden, await Post("/api/new-worktree", create, "tok", origin: "https://evil.example"));
-        Assert.Equal((HttpStatusCode)421, await Post("/api/sessions", launch, "tok", host: "phone.tail1234.ts.net"));
+        Assert.Equal((HttpStatusCode)421, await Post("/api/new-worktree", create, "tok", host: "phone.tail1234.ts.net"));
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync($"/api/new-worktree/plan?cwd={Uri.EscapeDataString(rig.RepoNative)}")).StatusCode);
         Assert.False(Directory.Exists(Path.Combine(rig.Env.Dir, "ws", "app.worktrees")));
 
