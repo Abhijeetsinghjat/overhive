@@ -40,21 +40,203 @@ export async function newSessionDialog() {
   };
   tool.addEventListener('change', sync);
   sync();
+  const wt = worktreeSection(dir);
   const body = h('div', { class: 'ns-form' },
     h('label', null, h('span', null, 'Tool'), tool),
-    h('div', { class: 'ns-row' }, h('label', { for: 'ns-dir' }, h('span', null, 'Working directory')), dir.el), modelRow, promptRow, hint);
+    h('div', { class: 'ns-row' }, h('label', { for: 'ns-dir' }, h('span', null, 'Working directory')), dir.el), wt.el, modelRow, promptRow, hint);
 
   if (!list.length) { toast('Could not load the tool list', 'err'); return; }
-  if (!await confirmModal({ title: 'New agent session', body, confirmLabel: 'Start session', wide: true })) return;
+  const go = await confirmModal({ title: 'New agent session', body, confirmLabel: 'Start session', wide: true, onReady: wt.bindConfirm });
+  wt.dispose();
+  if (!go) return;
   const t = list.find((x) => x.id === tool.value);
   const cwd = dir.input.value.trim();
+  const worktree = wt.spec();
+  if (worktree) toast(`Creating worktree ${worktree.branch}…`, 'info', worktree.runSetup ? 'Then running the setup command; this can take a while.' : '');
   try {
-    const r = await api.launchSession({ tool: tool.value, cwd, model: (!modelRow.hidden && model.value.trim()) || null, prompt: (!promptRow.hidden && prompt.value.trim()) || null });
-    toast(`${t?.name || 'Session'} starting`, 'ok', r.detail || '');
-    openDrawer('terminal', { terminalId: r.terminalId, title: `${t?.name || 'Session'} — ${cwd}`, allowInput: true });
+    const r = await api.launchSession({ tool: tool.value, cwd, worktree, model: (!modelRow.hidden && model.value.trim()) || null, prompt: (!promptRow.hidden && prompt.value.trim()) || null });
+    toast(`${t?.name || 'Session'} starting`, 'ok', [r.detail || '', ...(r.warnings || [])].filter(Boolean).join(' '));
+    openDrawer('terminal', { terminalId: r.terminalId, title: `${t?.name || 'Session'} — ${r.worktreePath || cwd}`, allowInput: true });
   } catch (e) {
     toast('Could not start the session', 'err', e.message);
   }
+}
+
+/**
+ * "Run in: this folder | a new worktree" (shown once the working directory is inside a git repository). For a new
+ * worktree: branch name (new, or an existing one), base (default: the remote default branch, e.g. origin/main),
+ * location (default from the server, editable), "fetch base first" and the repository's setup command (both off by
+ * default). Every change is validated by the daemon (GET /api/new-worktree/plan); the confirm button stays disabled
+ * while something is invalid.
+ */
+function worktreeSection(dir) {
+  const here = h('input', { type: 'radio', name: 'ns-runin', value: 'here', checked: true });
+  const fresh = h('input', { type: 'radio', name: 'ns-runin', value: 'new', id: 'ns-runin-new' });
+  const runIn = h('div', { class: 'ns-runin', role: 'radiogroup', 'aria-label': 'Run in' },
+    h('span', { class: 'ns-runin-label' }, 'Run in'),
+    h('label', { class: 'ns-check' }, here, 'this folder'),
+    h('label', { class: 'ns-check' }, fresh, 'a new worktree'));
+  const branch = h('input', { class: 'input mono ns-field', id: 'ns-wt-branch', placeholder: 'e.g. feat/login-form', spellcheck: 'false', autocomplete: 'off', maxlength: 200 });
+  const existing = h('input', { type: 'checkbox', id: 'ns-wt-existing' });
+  const base = refPicker();
+  const baseRow = h('div', { class: 'ns-row' }, h('label', { for: 'ns-wt-base' }, h('span', null, 'Base (the new branch starts here)')), base.el);
+  const path = h('input', { class: 'input mono ns-field', id: 'ns-wt-path', spellcheck: 'false', autocomplete: 'off', placeholder: 'Default location' });
+  const fetch = h('input', { type: 'checkbox', id: 'ns-wt-fetch' });
+  const fetchRow = h('label', { class: 'ns-check' }, fetch, 'Fetch the base from its remote first (network)');
+  const setup = h('input', { type: 'checkbox', id: 'ns-wt-setup' });
+  const setupText = h('code', null, '');
+  const setupRow = h('label', { class: 'ns-check', hidden: true }, setup, 'Run setup first: ', setupText);
+  const status = h('div', { class: 'ns-wt-status small', 'aria-live': 'polite' });
+  const fields = h('div', { class: 'ns-wt', hidden: true },
+    h('label', null, h('span', null, 'Branch name'), branch),
+    h('label', { class: 'ns-check' }, existing, 'Use an existing branch'),
+    baseRow,
+    h('label', null, h('span', null, 'Location'), path),
+    fetchRow, setupRow, status,
+    h('div', { class: 'small muted' }, 'A new worktree is a fresh checkout: ignored files such as node_modules or .env are not there. ',
+      'Configure NewWorktree:SetupCommand for this repository to install dependencies before the agent starts.'));
+  const el = h('div', { class: 'ns-wt-wrap', hidden: true }, runIn, fields);
+
+  let plan = null;          // last plan for the current folder
+  let planFor = '';         // folder the plan belongs to
+  let pathTouched = false;  // the user typed a location: keep it
+  let ok = null;            // confirm button
+  let seq = 0;
+  let timer = 0;
+  let valid = true;
+
+  const isNew = () => !el.hidden && fresh.checked;
+  const setValid = (v) => { valid = v; if (ok) ok.disabled = !v; };
+  const show = (lines, bad) => {
+    mount(status, lines.map(([cls, text]) => h('div', { class: cls }, text)));
+    setValid(!bad);
+  };
+
+  const refresh = async () => {
+    const cwd = dir.input.value.trim();
+    const my = ++seq;
+    if (cwd !== planFor) {
+      plan = null; planFor = cwd; pathTouched = false;
+      if (!cwd) { el.hidden = true; setValid(true); return; }
+      let p = null;
+      try { p = await api.newWorktreePlan({ cwd }); } catch { p = null; }
+      if (my !== seq) return;
+      plan = p;
+      el.hidden = !p;
+      if (!p) { setValid(true); return; }
+      base.setItems(p.localBranches || [], p.remoteBranches || []);
+      base.input.value = p.defaultBase || '';
+      base.input.placeholder = p.defaultBase || 'HEAD';
+      setupRow.hidden = !p.setupCommand;
+      setupText.textContent = p.setupCommand || '';
+      if (!p.setupCommand) setup.checked = false;
+    }
+    sync();
+    if (!isNew()) { setValid(true); return; }
+    const name = branch.value.trim();
+    if (!name) { show([['muted', 'Enter a branch name.']], true); return; }
+    let r;
+    try {
+      r = await api.newWorktreePlan({ cwd, branch: name, base: existing.checked ? null : base.input.value.trim(), path: pathTouched ? path.value.trim() : null, existing: existing.checked });
+    } catch (e) {
+      if (my === seq) show([['err', e.message]], true);
+      return;
+    }
+    if (my !== seq) return;
+    if (!pathTouched) path.value = r.path || '';
+    const lines = [];
+    if (r.branchError) lines.push(['err', r.branchError]);
+    if (!existing.checked && r.baseError && !fetch.checked) lines.push(['err', r.baseError]);
+    if (r.pathError) lines.push(['err', r.pathError]);
+    (r.warnings || []).forEach((w) => lines.push(['warn', w]));
+    const bad = !!(r.branchError || r.pathError || (!existing.checked && r.baseError && !fetch.checked));
+    if (!bad) lines.unshift(['muted', existing.checked ? `Creates ${r.path} on the existing branch ${name}.` : `Creates ${r.path} on a new branch ${name}, branched off ${r.base}.`]);
+    show(lines, bad);
+  };
+  const later = (ms = 250) => { clearTimeout(timer); timer = setTimeout(refresh, ms); };
+  const sync = () => {
+    fields.hidden = !fresh.checked;
+    baseRow.hidden = existing.checked;
+    fetchRow.hidden = existing.checked;
+  };
+
+  [here, fresh, existing, fetch].forEach((x) => x.addEventListener('change', () => later(0)));
+  branch.addEventListener('input', () => later());
+  path.addEventListener('input', () => { pathTouched = path.value.trim() !== ''; later(); });
+  base.onChange = () => later();
+  dir.onChange = () => later(300);
+  later(0);
+
+  return {
+    el,
+    bindConfirm: (button) => { ok = button; ok.disabled = !valid; },
+    dispose: () => { clearTimeout(timer); seq++; },
+    spec: () => isNew() ? {
+      branch: branch.value.trim(), existingBranch: existing.checked,
+      base: existing.checked ? null : (base.input.value.trim() || null),
+      path: pathTouched ? path.value.trim() : null,
+      fetch: !existing.checked && fetch.checked, runSetup: !setupRow.hidden && setup.checked,
+    } : null,
+  };
+}
+
+/** Searchable list of local and remote branches for the base (free text such as a commit or tag is accepted too). */
+function refPicker() {
+  const input = h('input', { class: 'input mono ns-field', id: 'ns-wt-base', type: 'text', role: 'combobox', autocomplete: 'off', spellcheck: 'false',
+    'aria-autocomplete': 'list', 'aria-expanded': 'false', 'aria-controls': 'ns-wt-base-list' });
+  const list = h('div', { class: 'ns-list', id: 'ns-wt-base-list', role: 'listbox', 'aria-label': 'Branches', hidden: true });
+  const el = h('div', { class: 'ns-combo' }, input, list);
+  const self = { el, input, onChange: null, setItems: null };
+  let items = [];
+  let shown = [];
+  let active = -1;
+  let filtering = false;
+  const setActive = (i) => {
+    active = i;
+    list.querySelectorAll('.ns-opt').forEach((o, j) => o.classList.toggle('active', j === i));
+    const o = list.querySelector(`#ns-wt-base-opt-${i}`);
+    if (o) {
+      input.setAttribute('aria-activedescendant', o.id);
+      if (o.offsetTop < list.scrollTop) list.scrollTop = o.offsetTop - 4;
+      else if (o.offsetTop + o.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = o.offsetTop + o.offsetHeight - list.clientHeight + 4;
+    } else input.removeAttribute('aria-activedescendant');
+  };
+  const render = () => {
+    const q = filtering ? input.value.trim().toLowerCase() : '';
+    shown = (q ? items.filter((it) => it.name.toLowerCase().includes(q)) : items).slice(0, 300);
+    mount(list, shown.map((it, i) => {
+      const o = h('div', { class: 'ns-opt', id: `ns-wt-base-opt-${i}`, role: 'option', title: it.name },
+        h('span', { class: 'ns-opt-label' }, h('span', { class: 'ns-opt-branch mono' }, it.name), h('span', { class: 'ns-opt-tag' }, it.remote ? 'remote' : 'local')));
+      o.addEventListener('mousedown', (e) => e.preventDefault());
+      o.addEventListener('click', () => pick(i));
+      return o;
+    }), shown.length ? null : h('div', { class: 'ns-empty small muted' }, 'No branch matches; the text is used as typed (a tag or commit works too).'));
+    setActive(shown.length ? 0 : -1);
+  };
+  const open = () => { list.hidden = false; input.setAttribute('aria-expanded', 'true'); render(); };
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); filtering = false; };
+  const pick = (i) => { const it = shown[i]; if (!it) return; input.value = it.name; close(); self.onChange?.(); };
+  input.addEventListener('input', () => { filtering = true; open(); self.onChange?.(); });
+  input.addEventListener('focus', () => input.select());
+  input.addEventListener('click', () => { if (list.hidden) open(); });
+  input.addEventListener('blur', close);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) { open(); return; }
+      if (!shown.length) return;
+      setActive(e.key === 'ArrowDown' ? (active + 1) % shown.length : (active - 1 + shown.length) % shown.length);
+    } else if (e.key === 'Enter' && !list.hidden) {
+      e.preventDefault();
+      if (active >= 0) pick(active); else close();
+    } else if (e.key === 'Escape' && !list.hidden) {
+      e.preventDefault(); e.stopPropagation(); close();
+    } else if (e.key === 'Tab') close();
+  });
+  self.setItems = (local, remote) => {
+    items = [...remote.map((name) => ({ name, remote: true })), ...local.map((name) => ({ name, remote: false }))];
+  };
+  return self;
 }
 
 /**
@@ -146,13 +328,14 @@ function dirPicker(wts) {
     input.value = it.path;
     close();
     syncTitle();
+    self.onChange?.();
     input.focus();
     // Show the end of a long path (the repository / worktree folder), not its common prefix.
     input.setSelectionRange(input.value.length, input.value.length);
     input.scrollLeft = input.scrollWidth;
   };
 
-  input.addEventListener('input', () => { filtering = true; syncTitle(); open(); });
+  input.addEventListener('input', () => { filtering = true; syncTitle(); open(); self.onChange?.(); });
   // Focusing selects the prefilled path, so typing a custom path replaces it instead of appending to it.
   let justFocused = false;
   input.addEventListener('mousedown', () => { justFocused = document.activeElement !== input; });
@@ -187,5 +370,6 @@ function dirPicker(wts) {
   };
   window.addEventListener('resize', onResize);
   syncTitle();
-  return { el, input };
+  const self = { el, input, onChange: null };
+  return self;
 }

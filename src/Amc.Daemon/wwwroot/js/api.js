@@ -68,6 +68,7 @@ export const api = {
   worktreeLog: (id, path, limit = 50) => request('GET', `/api/worktrees/${encodeURIComponent(id)}/log?` + qs({ path, limit })),
   tools: () => request('GET', '/api/tools'),
   launchSession: (body) => request('POST', '/api/sessions', body),
+  newWorktreePlan: (params) => request('GET', '/api/new-worktree/plan?' + qs(params)),
   agentDiff: (id) => request('GET', `/api/agents/${encodeURIComponent(id)}/diff`),
 };
 

@@ -732,6 +732,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .ns-path-head { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; }
 .ns-path-tail { flex: 0 0 auto; max-width: calc(100% - 2.5em); overflow: hidden; text-overflow: ellipsis; }
 .ns-empty { padding: 6px 8px; }
+/* "+ New session" → run in a new worktree */
+.ns-wt-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ns-runin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.ns-runin-label { color: var(--muted); font-size: 12px; font-weight: 500; }
+.ns-form label.ns-check { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
+.ns-wt { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--border2); border-radius: 8px; }
+.ns-wt-status { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; font-family: var(--mono); font-size: 11.5px; }
+.ns-wt-status .err { color: var(--red); }
+.ns-wt-status .warn { color: var(--orange); }
+.ns-wt-status .muted { color: var(--muted); }
+
 /* The header wraps onto more rows instead of pushing New session, Health, theme, 3D and help off-screen.
    The status counters drop their words below 2100px (number, glyph and tooltip stay) so it is one row on most screens. */
 .header { flex-wrap: wrap; height: auto; min-height: 54px; row-gap: 6px; padding-top: 6px; padding-bottom: 6px; }
