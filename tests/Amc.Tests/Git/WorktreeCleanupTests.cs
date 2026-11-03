@@ -408,6 +408,105 @@ public sealed class WorktreeCleanupTests
         Assert.False(t.RemoteBranchExists());
     }
 
+    /// <summary>Ignore rules for every worktree of the repository (info/exclude in the common git dir).</summary>
+    private static void IgnoreRules(Setup t, string rules)
+    {
+        var common = GitTestEnv.RunGit(t.Main, "rev-parse", "--path-format=absolute", "--git-common-dir").Out.Trim();
+        Directory.CreateDirectory(Path.Combine(common, "info"));
+        File.WriteAllText(Path.Combine(common, "info", "exclude"), rules);
+    }
+
+    private static void RegenerableOutput(Setup t)
+    {
+        GitTestEnv.Write(t.Wt, "node_modules/left-pad/index.js", "module.exports = 1;\n");
+        GitTestEnv.Write(t.Wt, "src/bin/Debug/app.dll", "binary");
+        GitTestEnv.Write(t.Wt, "tools/cache.pyc", "pyc");
+    }
+
+    [Fact]
+    public async Task Auto_mode_never_deletes_ignored_files_that_are_not_regenerable()
+    {
+        await using var t = await CreateAsync(mode: "auto");
+        IgnoreRules(t, ".env\nnode_modules/\nbin/\n*.pyc\n");
+        RegenerableOutput(t);
+        GitTestEnv.Write(t.Wt, ".env", "API_KEY=local\n");
+        await t.MergedViaGhAsync();
+        t.Clock.Now = t.W.Merged!.DetectedAt + TimeSpan.FromMinutes(31);
+
+        var r = Assert.Single(await t.Service.RunAutoAsync(None));
+        Assert.Equal(CleanupOutcomes.Blocked, r.Outcome);
+        var check = Assert.Single(r.Plan!.Checks, c => c.Name == CleanupPlan.IgnoredCheck);
+        Assert.False(check.Ok);
+        Assert.Equal([".env"], r.Plan.IgnoredFiles);
+        Assert.Contains(".env", r.Detail);
+        Assert.True(File.Exists(Path.Combine(t.Wt, ".env")));
+        await t.Env.Applied();
+        Assert.Equal(CleanupOutcomes.Blocked, t.W.LastCleanup?.Outcome);
+        // It stays a suggestion.
+        Assert.Single(t.Env.State.Read(s => new MergedWorktreeAttentionProvider().Collect(s, new AttentionContext(DateTimeOffset.UtcNow, AttentionSettings.Default)).ToList()));
+    }
+
+    [Fact]
+    public async Task Regenerable_ignored_output_does_not_block_removal()
+    {
+        await using var t = await CreateAsync(mode: "auto");
+        IgnoreRules(t, ".env\nnode_modules/\nbin/\n*.pyc\n");
+        RegenerableOutput(t);
+        await t.MergedViaGhAsync();
+        var plan = await t.Cleaner.PlanAsync(t.WtId, None);
+        Assert.True(plan!.Checks.Single(c => c.Name == CleanupPlan.IgnoredCheck).Ok);
+        Assert.False(plan.NeedsIgnoredConfirmation);
+
+        t.Clock.Now = t.W.Merged!.DetectedAt + TimeSpan.FromMinutes(31);
+        var r = Assert.Single(await t.Service.RunAutoAsync(None));
+        Assert.True(r.Ok, r.Detail);
+        Assert.False(Directory.Exists(t.Wt));
+    }
+
+    [Fact]
+    public async Task Manual_cleanup_deletes_non_regenerable_ignored_files_only_with_the_extra_confirmation()
+    {
+        await using var t = await CreateAsync();
+        IgnoreRules(t, ".env\n*.pem\n");
+        GitTestEnv.Write(t.Wt, ".env", "API_KEY=local\n");
+        GitTestEnv.Write(t.Wt, "certs/dev.pem", "key\n");
+
+        await t.MergedViaGhAsync();
+        var dry = await t.Cleaner.CleanupAsync(t.WtId, confirmed: true, dryRun: true, auto: false, None);
+        Assert.True(dry.Ok, dry.Detail);
+        Assert.Contains(".env", dry.Detail);
+        Assert.Equal(2, dry.Plan!.IgnoredTotal);
+
+        var r = await t.Cleaner.CleanupAsync(t.WtId, confirmed: true, dryRun: false, auto: false, None);
+        Assert.Equal(("unconfirmed-ignored", 428), (r.Outcome, r.StatusCode));
+        Assert.True(File.Exists(Path.Combine(t.Wt, ".env")));
+        Assert.True(t.BranchExists());
+
+        var ok = await t.Cleaner.CleanupAsync(t.WtId, confirmed: true, dryRun: false, auto: false, None, confirmIgnored: true);
+        Assert.True(ok.Ok, ok.Detail);
+        Assert.False(Directory.Exists(t.Wt));
+    }
+
+    [Theory]
+    [InlineData("node_modules/", true)]
+    [InlineData("web/node_modules/", true)]
+    [InlineData("src/Api/obj/", true)]
+    [InlineData("pkg/mod.pyc", true)]
+    [InlineData(".venv/", true)]
+    [InlineData(".env", false)]
+    [InlineData(".env.local", false)]
+    [InlineData("config/local.json", false)]
+    [InlineData("certs/dev.pem", false)]
+    [InlineData("data/db.sqlite", false)]
+    public void Regenerable_ignored_paths(string path, bool regenerable)
+    {
+        Assert.Equal(regenerable, new WorktreeCleanupOptions().IsRegenerable(path));
+        // A configured list replaces the default.
+        var custom = new WorktreeCleanupOptions { RegenerableIgnored = ["data"] };
+        Assert.True(custom.IsRegenerable("data/db.sqlite"));
+        Assert.False(custom.IsRegenerable("node_modules/"));
+    }
+
     [Fact]
     public async Task Api_requires_token_confirmation_and_control_permission()
     {

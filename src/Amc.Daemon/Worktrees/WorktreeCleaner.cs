@@ -10,11 +10,17 @@ using Microsoft.Extensions.Options;
 namespace Amc.Daemon.Worktrees;
 
 /// <summary>What a cleanup would remove and the result of every safety check, computed live (never from cached state).</summary>
+/// <param name="IgnoredFiles">Ignored paths inside the worktree that are not regenerable (e.g. .env), first 50; removal deletes them.</param>
+/// <param name="IgnoredTotal">How many such paths there are in all.</param>
 public sealed record CleanupPlan(
     string WorktreeId, string Root, string? Branch, string? RemoteBranch, WorktreeMerge? Merged, string Mode,
-    IReadOnlyList<CleanupCheck> Checks)
+    IReadOnlyList<CleanupCheck> Checks, IReadOnlyList<string> IgnoredFiles, int IgnoredTotal)
 {
-    public bool CanRemove => Checks.All(c => c.Ok);
+    public const string IgnoredCheck = "ignored-files";
+    /// <summary>Every safety check passes. Non-regenerable ignored files do not count here: a person may confirm them.</summary>
+    public bool CanRemove => Checks.All(c => c.Ok || c.Name == IgnoredCheck);
+    /// <summary>Removal would delete ignored files that are not regenerable: manual cleanup needs confirmIgnored, auto mode never removes.</summary>
+    public bool NeedsIgnoredConfirmation => IgnoredTotal > 0;
 }
 
 public sealed record CleanupResult(bool Ok, string Outcome, string Detail, CleanupPlan? Plan, IReadOnlyList<CleanupStep> Steps, int StatusCode = 200);
@@ -105,6 +111,21 @@ public sealed class WorktreeCleaner(GitCli git, StateStore state, IEventSink sin
         }
         else Add("clean", false, "cannot check: the worktree is missing");
 
+        // Ignored files are deleted with the folder: regenerable ones (node_modules, bin, dist …) are fine, others
+        // (.env, keys, local config, data) need an explicit confirmation and block automatic removal.
+        var ignored = new List<string>();
+        if (exists)
+        {
+            var ls = await git.RunAsync(w.Root, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], ct);
+            if (!ls.Ok) Add(CleanupPlan.IgnoredCheck, false, "could not list ignored files: " + ls.Stderr.Trim());
+            else
+            {
+                ignored = await NonRegenerableIgnoredAsync(w.Root, ls.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries), ct);
+                Add(CleanupPlan.IgnoredCheck, ignored.Count == 0, ignored.Count == 0 ? "no ignored files other than regenerable ones (build output, dependencies, caches)"
+                    : $"{ignored.Count} ignored path(s) that are not regenerable would be deleted: " + string.Join(", ", ignored.Take(10)) + (ignored.Count > 10 ? ", …" : ""));
+            }
+        }
+
         // Unpushed work: every commit must be in the merged PR's head (gh) or on some remote branch (git).
         if (liveHead is null) Add("pushed", false, "no HEAD commit");
         else if (m is { Source: MergeSources.GitHub, PrHeadOid: { Length: > 0 } oid })
@@ -127,7 +148,29 @@ public sealed class WorktreeCleaner(GitCli git, StateStore state, IEventSink sin
             : users.Count == 0 ? "no process has its current directory inside" : "in use by: " + string.Join(", ", users.Take(5)));
 
         var remote = Opt.DeleteRemoteBranch && m is { Source: MergeSources.GitHub } && liveBranch is not null ? "origin/" + liveBranch : null;
-        return new CleanupPlan(w.Id, w.Root, liveBranch ?? w.Branch, remote, m, Opt.EffectiveMode.ToString().ToLowerInvariant(), checks);
+        return new CleanupPlan(w.Id, w.Root, liveBranch ?? w.Branch, remote, m, Opt.EffectiveMode.ToString().ToLowerInvariant(), checks,
+            ignored.Take(50).ToList(), ignored.Count);
+    }
+
+    /// <summary>
+    /// Ignored paths that are not regenerable. <c>--directory</c> collapses a wholly ignored directory into one entry
+    /// ("tools/" for tools/cache.pyc); such a directory that is not itself regenerable is listed file by file (bounded), so
+    /// regenerable files inside it are not counted. If that listing is too large, the directory is kept as one entry.
+    /// </summary>
+    private async Task<List<string>> NonRegenerableIgnoredAsync(string root, IEnumerable<string> entries, CancellationToken ct)
+    {
+        var result = new List<string>();
+        var expanded = 0;
+        foreach (var e in entries)
+        {
+            if (Opt.IsRegenerable(e)) continue;
+            if (!e.EndsWith('/') || ++expanded > 20) { result.Add(e); continue; }
+            var inner = await git.RunAsync(root, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", e], ct, maxOutput: 1024 * 1024);
+            if (!inner.Ok || inner.Truncated) { result.Add(e); continue; }
+            var files = inner.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries).Where(p => !Opt.IsRegenerable(p)).ToList();
+            result.AddRange(files.Count > 200 ? [e] : files);
+        }
+        return result.Distinct().Order(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Processes (any, best effort: those whose cwd we may read) whose current directory is inside the root. Null when unsupported.</summary>
@@ -162,27 +205,30 @@ public sealed class WorktreeCleaner(GitCli git, StateStore state, IEventSink sin
 
     /// <param name="confirmed">Manual cleanups need it (428 otherwise).</param>
     /// <param name="dryRun">Only plan and check; nothing is run or recorded.</param>
-    /// <param name="auto">Automatic cleanup (auto mode): needs no confirmation, recorded with source system.</param>
-    public async Task<CleanupResult> CleanupAsync(string worktreeId, bool confirmed, bool dryRun, bool auto, CancellationToken ct)
+    /// <param name="auto">Automatic cleanup (auto mode): needs no confirmation, recorded with source system. Never deletes
+    /// ignored files that are not regenerable.</param>
+    /// <param name="confirmIgnored">Manual cleanups that would delete non-regenerable ignored files (e.g. .env) need it (428 otherwise).</param>
+    public async Task<CleanupResult> CleanupAsync(string worktreeId, bool confirmed, bool dryRun, bool auto, CancellationToken ct, bool confirmIgnored = false)
     {
         await _gate.WaitAsync(ct);
-        try { return await CleanupCoreAsync(worktreeId, confirmed, dryRun, auto, ct); }
+        try { return await CleanupCoreAsync(worktreeId, confirmed, dryRun, auto, confirmIgnored, ct); }
         finally { _gate.Release(); }
     }
 
-    private async Task<CleanupResult> CleanupCoreAsync(string worktreeId, bool confirmed, bool dryRun, bool auto, CancellationToken ct)
+    private async Task<CleanupResult> CleanupCoreAsync(string worktreeId, bool confirmed, bool dryRun, bool auto, bool confirmIgnored, CancellationToken ct)
     {
         if (Opt.EffectiveMode == CleanupMode.Off && !dryRun)
             return new(false, "disabled", "Worktree cleanup is off (WorktreeCleanup:Mode=off)", null, [], 409);
         var plan = await PlanAsync(worktreeId, ct);
         if (plan is null) return new(false, "unknown", "Unknown worktree (it may already be removed)", null, [], 404);
         if (dryRun)
-            return new(plan.CanRemove, "dry-run", plan.CanRemove ? "Would remove " + Describe(plan) : "Would not remove: " + Blockers(plan), plan, []);
+            return new(plan.CanRemove, "dry-run", !plan.CanRemove ? "Would not remove: " + Blockers(plan)
+                : "Would remove " + Describe(plan) + (plan.NeedsIgnoredConfirmation ? $", including {IgnoredText(plan)} (needs confirmIgnored / --include-ignored)" : ""), plan, []);
         if (!auto && !confirmed) return new(false, "unconfirmed", "Removing a worktree is destructive and requires confirm=true", plan, [], 428);
 
-        if (!plan.CanRemove)
+        if (!plan.CanRemove || auto && plan.NeedsIgnoredConfirmation)
         {
-            var detail = Blockers(plan);
+            var detail = Blockers(plan, includeIgnored: auto);
             if (!auto || !_lastAutoBlock.TryGetValue(worktreeId, out var prev) || prev != detail)
             {
                 if (auto) _lastAutoBlock[worktreeId] = detail;
@@ -190,6 +236,8 @@ public sealed class WorktreeCleaner(GitCli git, StateStore state, IEventSink sin
             }
             return new(false, CleanupOutcomes.Blocked, "Not removed: " + detail, plan, [], 409);
         }
+        if (plan.NeedsIgnoredConfirmation && !confirmIgnored)
+            return new(false, "unconfirmed-ignored", $"Removing this worktree would also delete {IgnoredText(plan)}; it requires confirmIgnored=true", plan, [], 428);
         _lastAutoBlock.Remove(worktreeId);
 
         var repo = state.Read(s => s.Worktrees.TryGetValue(worktreeId, out var w) && s.Repositories.TryGetValue(w.RepositoryId, out var r) ? (r.CommonDir, r.MainWorktree) : default);
@@ -271,7 +319,11 @@ public sealed class WorktreeCleaner(GitCli git, StateStore state, IEventSink sin
     private static string Describe(CleanupPlan p) =>
         $"{p.Root}" + (p.Branch is { } b ? $", local branch {b}" : "") + (p.RemoteBranch is { } r ? $", remote branch {r}" : "");
 
-    public static string Blockers(CleanupPlan p) => string.Join("; ", p.Checks.Where(c => !c.Ok).Select(c => $"{c.Name}: {c.Detail}"));
+    public static string Blockers(CleanupPlan p, bool includeIgnored = false) =>
+        string.Join("; ", p.Checks.Where(c => !c.Ok && (includeIgnored || c.Name != CleanupPlan.IgnoredCheck)).Select(c => $"{c.Name}: {c.Detail}"));
+
+    private static string IgnoredText(CleanupPlan p) =>
+        $"{p.IgnoredTotal} ignored path(s) that are not regenerable ({string.Join(", ", p.IgnoredFiles.Take(5))}{(p.IgnoredTotal > 5 ? ", …" : "")})";
 
     private static string Err(GitResult r)
     {

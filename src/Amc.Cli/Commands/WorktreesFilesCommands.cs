@@ -96,7 +96,7 @@ public static partial class WorktreesCommand
         foreach (var w in targets)
         {
             var path = $"api/worktrees/{w.Id}/cleanup"; // ids ("wt:<hex>") are safe path segments
-            var res = await ctx.Client.SendAsync(HttpMethod.Post, path, new { confirm = apply, dryRun = !apply }, ct);
+            var res = await ctx.Client.SendAsync(HttpMethod.Post, path, new { confirm = apply, dryRun = !apply, confirmIgnored = apply && args.Flag("include-ignored") }, ct);
             if (res.Status == 401) throw AmcClient.ToException(res, "worktrees clean");
             var node = res.Node as JsonObject;
             if (node is not null) results.Add(node.DeepClone());
@@ -104,7 +104,7 @@ public static partial class WorktreesCommand
             if (args.Json) continue;
 
             var plan = node?["plan"] as JsonObject;
-            var canRemove = plan?["checks"] is JsonArray checks && checks.All(c => c?["ok"]?.GetValue<bool>() == true);
+            var canRemove = plan?["checks"] is JsonArray checks && checks.All(c => c?["ok"]?.GetValue<bool>() == true || c?["name"]?.ToString() == "ignored-files");
             var verb = !apply ? (canRemove ? s.Green("would remove") : s.Yellow("would keep")) : res.Success ? s.Green("removed") : s.Red(node?["outcome"]?.ToString() ?? "failed");
             ctx.Out.WriteLine($"{s.Bold(Fmt.HomeRelative(w.Root, ctx.Home))}  {verb}");
             if (plan is not null)
@@ -112,6 +112,14 @@ public static partial class WorktreesCommand
                 ctx.Out.WriteLine($"  worktree       {plan["root"]}");
                 if (plan["branch"] is { } b) ctx.Out.WriteLine($"  local branch   {b}");
                 if (plan["remoteBranch"] is { } rb) ctx.Out.WriteLine($"  remote branch  {rb}");
+                if (plan["ignoredFiles"] is JsonArray { Count: > 0 } ig)
+                {
+                    var total = plan["ignoredTotal"]?.GetValue<int>() ?? ig.Count;
+                    ctx.Out.WriteLine(s.Yellow(s.Bold($"  ⚠ also deletes {total} ignored path(s) that are not regenerable:")));
+                    foreach (var p in ig) ctx.Out.WriteLine(s.Yellow($"      {p}"));
+                    if (total > ig.Count) ctx.Out.WriteLine(s.Yellow($"      … and {total - ig.Count} more"));
+                    ctx.Out.WriteLine(s.Yellow("    removing needs --yes --include-ignored"));
+                }
                 foreach (var c in (plan["checks"] as JsonArray ?? []).OfType<JsonObject>())
                 {
                     var ok = c["ok"]?.GetValue<bool>() == true;

@@ -1179,3 +1179,5 @@ html[data-effects="off"] body.attn-m::before, html[data-effects="off"] body.attn
 /* Merged worktrees: cleanup button and the checks in its confirm dialog */
 .btn-merged { border-color: var(--green); }
 .cleanup-checks { margin-top: 8px; display: grid; gap: 2px; }
+.cleanup-ignored { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--yellow, #e8d44d); border-radius: 4px; }
+.cleanup-ignored ul { margin: 4px 0; padding-left: 18px; max-height: 160px; overflow: auto; }

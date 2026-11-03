@@ -306,7 +306,11 @@ not the main worktree; not locked; HEAD and branch unchanged since detection; `g
 in the merged PR head, or with git-only evidence `git rev-list HEAD --not --remotes` empty, which also covers a
 detached HEAD); no non-terminal agent attributed to it or with its cwd inside; no open Overhive terminal there; no
 process whose current directory is inside (all processes the process source can read: `/proc`, libproc, the
-Windows PEB; best effort). Then, run from the main worktree with git's normal locking (`GitCli` `mutating: true`:
+Windows PEB; best effort); no ignored files that are not regenerable (`git ls-files --others --ignored
+--exclude-standard --directory`, a collapsed directory that is not regenerable listed file by file; regenerable =
+any path segment or `*.ext` in `RegenerableIgnored`, default `node_modules`, `bin`, `obj`, `dist`, `build`, `target`,
+caches, virtualenvs …). That last check blocks auto mode; a manual cleanup shows the paths and needs
+`confirmIgnored: true` (CLI `--include-ignored`, dashboard: type `delete ignored files`). Then, run from the main worktree with git's normal locking (`GitCli` `mutating: true`:
 no `GIT_OPTIONAL_LOCKS=0`, still `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`):
 
 1. `git worktree remove <path>` (never `--force`);
@@ -319,7 +323,8 @@ Every attempt (removed / partial / failed / blocked) is a `worktree.cleaned` eve
 `audit.control` entry (`cleanup-worktree`); the collector then re-lists the repository (`worktree.deleted`).
 Failed and partial cleanups are not retried automatically.
 
-**Modes**: `suggest` (default) shows **Merged — clean up** on the worktree and a low-priority attention item; the
+**Modes**: `suggest` (default) shows **Merged — clean up** on the worktree and a low-priority attention item (also in
+`auto` mode, for worktrees it may not remove); the
 dialog shows the plan (`GET /api/worktrees/{id}/cleanup`) and needs confirmation (`POST … {confirm:true}`). `auto`
 cleans worktrees merged via gh `GracePeriodMinutes` (default 30) after detection when every check passes (with
 `AutoRemoveLikelyMerged` also git-inferred ones), source `system`. `off` disables detection and cleanup.
@@ -361,7 +366,7 @@ POST /api/guard/pause                {rootAgentId}: pause the session tree
 GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
 POST /api/attention/dismiss|snooze|restore   {id, minutes?}
 GET  /api/worktrees/{id}/cleanup     cleanup plan + live safety checks (read-only)
-POST /api/worktrees/{id}/cleanup     {confirm, dryRun}: remove a merged worktree (see "Worktree cleanup")
+POST /api/worktrees/{id}/cleanup     {confirm, dryRun, confirmIgnored}: remove a merged worktree (see "Worktree cleanup")
 POST /api/worktrees/check-merged     run merge detection now
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
 ```

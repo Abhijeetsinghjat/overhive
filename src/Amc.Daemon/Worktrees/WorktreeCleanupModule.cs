@@ -10,7 +10,8 @@ using Microsoft.Extensions.Options;
 
 namespace Amc.Daemon.Worktrees;
 
-public sealed record CleanupRequest(bool Confirm = false, bool DryRun = false);
+/// <param name="ConfirmIgnored">Also delete ignored files that are not regenerable (e.g. .env) listed in the plan.</param>
+public sealed record CleanupRequest(bool Confirm = false, bool DryRun = false, bool ConfirmIgnored = false);
 
 /// <summary>
 /// Periodic merge detection (every minute it checks whether a repository is due; gh is asked at most every
@@ -82,7 +83,8 @@ public static class WorktreeCleanupModule
             sp.GetService<IProcSource>(), sp.GetRequiredService<IOptions<AmcOptions>>(), sp.GetService<GitCollector>(), sp.GetRequiredService<ILogger<WorktreeCleaner>>()));
         s.AddSingleton<WorktreeCleanupService>();
         s.AddHostedService(sp => sp.GetRequiredService<WorktreeCleanupService>());
-        if (options.WorktreeCleanup.EffectiveMode == CleanupMode.Suggest) s.AddSingleton<IAttentionProvider, MergedWorktreeAttentionProvider>();
+        // Also in auto mode: a worktree auto mode may not remove (e.g. ignored .env files) stays a suggestion.
+        if (options.WorktreeCleanup.EffectiveMode != CleanupMode.Off) s.AddSingleton<IAttentionProvider, MergedWorktreeAttentionProvider>();
         return s;
     }
 
@@ -100,7 +102,7 @@ public static class WorktreeCleanupModule
             body ??= new CleanupRequest();
             if (!body.DryRun && !opt.Value.EnableControl)
                 return Results.Json(new OperationResult(false, "Control is disabled (EnableControl=false)", 403), statusCode: 403);
-            var r = await cleaner.CleanupAsync(id, body.Confirm, body.DryRun, auto: false, ct);
+            var r = await cleaner.CleanupAsync(id, body.Confirm, body.DryRun, auto: false, ct, body.ConfirmIgnored);
             return Results.Json(r, statusCode: r.StatusCode);
         });
 

@@ -23,6 +23,42 @@ public sealed class WorktreeCleanupOptions
     public bool UseGh { get; set; } = true;
     /// <summary>Auto mode also removes worktrees that git alone infers as merged ("likely merged"). Off by default.</summary>
     public bool AutoRemoveLikelyMerged { get; set; }
+    /// <summary>
+    /// Ignored paths that are safe to delete with a worktree because they can be regenerated: a directory name matching any
+    /// path segment, or "*.ext" matching the file name. Empty means <see cref="DefaultRegenerableIgnored"/>; a configured
+    /// list replaces the default. Any other ignored path (.env, *.pem, local config, data) blocks automatic removal and
+    /// needs an explicit confirmation for a manual one.
+    /// </summary>
+    public List<string> RegenerableIgnored { get; set; } = [];
+
+    public static readonly IReadOnlyList<string> DefaultRegenerableIgnored =
+    [
+        "node_modules", "bin", "obj", "dist", "build", "out", "target", ".next", ".nuxt", ".turbo", ".cache", "coverage",
+        "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv", "venv", "*.pyc", ".gradle", ".angular", ".svelte-kit",
+        ".parcel-cache", ".vite", ".tox",
+    ];
+
+    public IReadOnlyList<string> EffectiveRegenerableIgnored => RegenerableIgnored.Count > 0 ? RegenerableIgnored : DefaultRegenerableIgnored;
+
+    /// <summary>Whether an ignored path (relative, '/'-separated, directories with a trailing '/') can be regenerated.</summary>
+    public bool IsRegenerable(string relativePath)
+    {
+        var segments = relativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0) return false;
+        var cmp = PathText.Windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var raw in EffectiveRegenerableIgnored)
+        {
+            var p = raw.Trim().Trim('/');
+            if (p.Length == 0) continue;
+            if (p.StartsWith("*.", StringComparison.Ordinal))
+            {
+                if (segments[^1].EndsWith(p[1..], cmp)) return true;
+            }
+            else if (segments.Any(s => s.Equals(p, cmp))) return true;
+        }
+        return false;
+    }
+
     /// <summary>Repositories never checked nor cleaned: repository name, main worktree path or common git dir.</summary>
     public List<string> ExcludeRepositories { get; set; } = [];
 

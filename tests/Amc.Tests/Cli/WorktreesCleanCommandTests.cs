@@ -70,6 +70,26 @@ public sealed class WorktreesCleanCommandTests : IDisposable
         Assert.True(real["confirm"]!.GetValue<bool>());
         Assert.False(real["dryRun"]!.GetValue<bool>());
         Assert.Contains("$ git worktree remove /r/wt-x", _h.Out.ToString());
+        Assert.False(real["confirmIgnored"]!.GetValue<bool>());
+
+        _h.Daemon.Requests.Clear();
+        Assert.Equal(0, await _h.Run("worktrees", "clean", "/r/wt-x", "--yes", "--include-ignored"));
+        Assert.True(JsonNode.Parse(_h.Daemon.Single("POST", "/cleanup").Body!)!["confirmIgnored"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Dry_run_lists_ignored_files_that_would_be_deleted()
+    {
+        _h.Daemon.On("POST", "/api/worktrees/wt:x/cleanup", _ => (HttpStatusCode.OK, """
+            {"ok":true,"outcome":"dry-run","detail":"Would remove /r/wt-x","plan":{"root":"/r/wt-x","branch":"feat/x","ignoredFiles":[".env"],"ignoredTotal":1,
+             "checks":[{"name":"ignored-files","ok":false,"detail":"1 ignored path(s)"}]},"steps":[]}
+            """));
+        Assert.Equal(0, await _h.Run("worktrees", "clean"));
+        var text = _h.Out.ToString();
+        Assert.Contains("would remove", text);
+        Assert.Contains("also deletes 1 ignored path(s) that are not regenerable", text);
+        Assert.Contains("      .env", text);
+        Assert.Contains("--include-ignored", text);
     }
 
     public void Dispose() => _h.Dispose();

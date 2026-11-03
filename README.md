@@ -200,16 +200,18 @@ without fetching (*inferred*, shown as "likely merged"). By default it only **su
 and the result of every safety check, and asks before running `git worktree remove` (never `--force`) and
 `git branch -d`. Nothing is removed while the worktree has uncommitted or untracked files, unpushed commits, is
 locked or the main worktree, or while an agent, an Overhive terminal or any process is working inside it.
+Ignored files that cannot be regenerated (`.env`, keys, local config; unlike `node_modules`, `bin`, `dist` …) are
+listed and need a second confirmation (`--include-ignored`), and auto mode never deletes them.
 
 ```
 overhive worktrees                       # list, with merged status
 overhive worktrees clean                 # dry run: what would be removed and why / why not
-overhive worktrees clean <path> --yes    # remove
+overhive worktrees clean <path> --yes    # remove (add --include-ignored to also delete listed .env etc.)
 ```
 
 Configure in `config.json`: `{"WorktreeCleanup": {"Mode": "suggest"}}` (`"auto"` removes after
 `GracePeriodMinutes`, default 30, when every check passes; `"off"` disables it), `DeleteRemoteBranch` (default
-false), `ExcludeRepositories` (names or paths). Details: [ARCHITECTURE.md](docs/ARCHITECTURE.md#worktree-cleanup),
+false), `ExcludeRepositories` (names or paths), `RegenerableIgnored` (ignored paths safe to delete). Details: [ARCHITECTURE.md](docs/ARCHITECTURE.md#worktree-cleanup),
 [SECURITY.md](docs/SECURITY.md).
 
 ## Documentation

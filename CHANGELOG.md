@@ -15,7 +15,9 @@ version is 0.x, minor versions may change behaviour.
   whose tip gh confirmed as the PR head); the remote branch is deleted only with `DeleteRemoteBranch` and only
   when its tip is the PR head. Blocked for the main or a locked worktree, uncommitted or untracked files,
   unpushed commits, an active agent, an open Overhive terminal or any process with its current directory
-  inside; all re-checked right before removal. `Mode: "auto"` removes after a 30 min grace period. New
+  inside; all re-checked right before removal. Ignored files that are not regenerable (`.env`, keys, local
+  config; `RegenerableIgnored` lists the safe ones such as `node_modules`, `bin`, `dist`) block auto mode and
+  need an extra confirmation (`confirmIgnored`, `--include-ignored`) for a manual cleanup. `Mode: "auto"` removes after a 30 min grace period. New
   events `worktree.merged` and `worktree.cleaned` (timeline), `GET/POST /api/worktrees/{id}/cleanup`,
   `POST /api/worktrees/check-merged`, and `overhive worktrees clean [<path>] [--dry-run] [--yes]`.
 
