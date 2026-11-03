@@ -99,7 +99,7 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
         if (Directory.Exists(cwd) && SessionLauncher.InsideAllowedRoot(GitPaths.RealPath(cwd) ?? cwd))
         {
             try { await collector.ResolveAsync(PathText.Normalize(GitPaths.RealPath(cwd) ?? cwd), ct); }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException) { log.LogDebug(ex, "resolve {Cwd}", cwd); }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException) { log.LogDebug(ex, "resolve {Cwd}", LogSafe(cwd)); }
         }
         var dir = SessionLauncher.ValidateCwd(cwd, state, _options, out var why);
         if (dir is null) return Fail(why, 400);
@@ -244,7 +244,7 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
             RepositoryId = plan.RepositoryId, WorktreeId = wtId,
             Data = Json.ToObject(new AuditData("worktree.add", root, "ok", result.Describe() + $" via {via}")),
         }, ct);
-        log.LogInformation("Created worktree {Path} (branch {Branch}, base {Base}) via {Via}", root, req.Branch, baseUsed ?? "-", via);
+        log.LogInformation("Created worktree {Path} (branch {Branch}, base {Base}) via {Via}", LogSafe(root), LogSafe(req.Branch), LogSafe(baseUsed ?? "-"), LogSafe(via));
         return result;
     }
 
@@ -254,7 +254,10 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
     /// </summary>
     public async Task<SetupResult> RunSetupAsync(NewWorktreeResult wt, CancellationToken ct)
     {
-        if (wt.SetupArgs is not { Count: > 0 } a) return new(false, "No setup command is configured for this repository (NewWorktree:SetupCommand)");
+        // The command comes from the user's config only (looked up again here, never taken from a request).
+        var repo = wt.WorktreeId is null ? null : state.Read(s => s.Worktrees.GetValueOrDefault(wt.WorktreeId) is { } w ? s.Repositories.GetValueOrDefault(w.RepositoryId) : null);
+        var (_, configured) = repo?.MainWorktree is { } main ? SetupFor(repo.Name, main) : (null, null);
+        if (configured is not { Count: > 0 } a) return new(false, "No setup command is configured for this repository (NewWorktree:SetupCommand)");
         var exe = ToolRegistry.FindExecutable(a[0]);
         if (exe is null) return new(false, $"Setup command `{a[0]}` was not found on PATH");
         var psi = new ProcessStartInfo(exe)
@@ -347,6 +350,9 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
     /// <summary>Readable form of an argument list ("npm ci", quoting arguments with spaces).</summary>
     internal static string Display(IEnumerable<string> args) =>
         string.Join(' ', args.Select(a => a.Length > 0 && !a.Any(c => char.IsWhiteSpace(c) || c is '"' or '\'') ? a : "\"" + a.Replace("\"", "\\\"") + "\""));
+
+    /// <summary>A value for a log line: no line breaks (log forging).</summary>
+    internal static string LogSafe(string? s) => (s ?? "").Replace("\r", " ").Replace("\n", " ");
 
     /// <summary>The OS form of a canonical path (backslashes on Windows) for the filesystem APIs and git arguments.</summary>
     internal static string Native(string path) => PathText.Windows ? path.Replace('/', '\\') : path;

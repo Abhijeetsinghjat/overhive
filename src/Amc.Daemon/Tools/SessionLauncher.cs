@@ -112,7 +112,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
                 $"{tool.Command}{(req.Model is { Length: > 0 } ? $" {tool.ModelFlag} {req.Model}" : "")} in terminal {terminalId}" +
                 (wt is not null ? $"; created {wt.Describe()}" : ""))),
         }, ct);
-        log.LogInformation("Launched {Tool} in {Cwd} (terminal {Terminal}, pid {Pid})", tool.Name, cwd, terminalId, proc.Id);
+        log.LogInformation("Launched {Tool} in {Cwd} (terminal {Terminal}, pid {Pid})", tool.Name, NewWorktreeService.LogSafe(cwd), terminalId, proc.Id);
         var detail = $"{tool.Name} is starting in its terminal; it appears in the agent tree within a few seconds";
         if (wt is not null) detail = $"Created {wt.Describe()}. " + detail;
         return new(true, detail, terminalId, proc.Id, 202, wt?.Path, wt?.WorktreeId, wt?.Warnings);
@@ -126,7 +126,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
             Type = EventTypes.AuditControl, Source = EventSources.User, Evidence = Evidence.Observed, WorktreeId = wt.WorktreeId,
             Data = Json.ToObject(new AuditData("launch", wt.Path!, "failed", $"{tool.Command} in terminal {terminalId}: {why}; created {wt.Describe()} (left in place)")),
         }, ct);
-        log.LogWarning("Session start in new worktree {Path} failed: {Why}", wt.Path, why);
+        log.LogWarning("Session start in new worktree {Path} failed: {Why}", NewWorktreeService.LogSafe(wt.Path), NewWorktreeService.LogSafe(why));
         return new(false, $"{why}. The worktree was created and left in place: {wt.Path} (branch {wt.Branch}).", StatusCode: 500,
             WorktreePath: wt.Path, WorktreeId: wt.WorktreeId, Warnings: wt.Warnings);
     }
