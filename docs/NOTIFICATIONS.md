@@ -18,6 +18,7 @@ sent anywhere unless you configure your own ntfy server.
 | Session exited unexpectedly, last 24 h | normal | usually observed |
 | Conflicts between agents (same file, same worktree, same path in several worktrees) | normal | observed / inferred |
 | Session finished, last hour | low | from the status |
+| Worktree's branch merged ("Merged — clean up"; only in `WorktreeCleanup` mode `suggest`) | low | observed (gh) / inferred (git) |
 
 Ordered by priority, then the oldest first. The header badge (**⚑**) counts urgent items; click it or press
 **`a`** for the whole queue. The Overview panel ("Needs you") shows the same list. Each item has its main

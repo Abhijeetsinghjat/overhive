@@ -13,7 +13,9 @@ public sealed record GitResult(int ExitCode, string Stdout, string Stderr, bool 
 /// <summary>
 /// Runs git without a shell (ArgumentList only), never taking optional locks (so an agent's
 /// own git commands are never blocked by our index.lock), never prompting, with a timeout,
-/// an output cap and a global concurrency limit.
+/// an output cap and a global concurrency limit. The few commands that change a repository (worktree cleanup only)
+/// pass <c>mutating: true</c>: they run with git's normal locking (required locks are always taken; optional locks
+/// are not suppressed) and still never prompt for credentials.
 /// </summary>
 public sealed class GitCli(HealthRegistry health, ILogger<GitCli> log)
 {
@@ -32,14 +34,14 @@ public sealed class GitCli(HealthRegistry health, ILogger<GitCli> log)
     private readonly SemaphoreSlim _gate = new(4, 4);
 
     public async Task<GitResult> RunAsync(string workDir, IReadOnlyList<string> args, CancellationToken ct = default,
-        int maxOutput = DefaultMaxOutput, TimeSpan? timeout = null)
+        int maxOutput = DefaultMaxOutput, TimeSpan? timeout = null, bool mutating = false)
     {
         await _gate.WaitAsync(ct);
-        try { return await RunCoreAsync(workDir, args, maxOutput, timeout ?? DefaultTimeout, ct); }
+        try { return await RunCoreAsync(workDir, args, maxOutput, timeout ?? DefaultTimeout, mutating, ct); }
         finally { _gate.Release(); }
     }
 
-    private async Task<GitResult> RunCoreAsync(string workDir, IReadOnlyList<string> args, int maxOutput, TimeSpan timeout, CancellationToken ct)
+    private async Task<GitResult> RunCoreAsync(string workDir, IReadOnlyList<string> args, int maxOutput, TimeSpan timeout, bool mutating, CancellationToken ct)
     {
         health.Increment(HealthName, "git_calls");
         var psi = new ProcessStartInfo("git")
@@ -55,7 +57,12 @@ public sealed class GitCli(HealthRegistry health, ILogger<GitCli> log)
         foreach (var a in Prefix) psi.ArgumentList.Add(a);
         foreach (var a in args) psi.ArgumentList.Add(a);
         foreach (var v in Scrubbed) psi.Environment.Remove(v);
-        psi.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        if (mutating)
+        {
+            psi.Environment.Remove("GIT_OPTIONAL_LOCKS");
+            psi.Environment["GCM_INTERACTIVE"] = "never"; // Git Credential Manager: fail instead of opening a dialog
+        }
+        else psi.Environment["GIT_OPTIONAL_LOCKS"] = "0";
         psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
         psi.Environment["GIT_LITERAL_PATHSPECS"] = "1";
         psi.Environment["GIT_PAGER"] = "cat";

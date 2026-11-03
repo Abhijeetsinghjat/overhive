@@ -1175,3 +1175,7 @@ html[data-effects="off"] body.attn-m::before, html[data-effects="off"] body.attn
 }
 @media (max-width: 1520px) { .header .theme-btn .lbl { display: none; } .header .theme-btn { padding: 3px 9px; } }
 @media (max-width: 1520px) { .header { gap: 9px; } .fx-btn .fx-cube { display: none; } .fx-btn { padding: 3px 9px; } }
+
+/* Merged worktrees: cleanup button and the checks in its confirm dialog */
+.btn-merged { border-color: var(--green); }
+.cleanup-checks { margin-top: 8px; display: grid; gap: 2px; }

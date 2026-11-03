@@ -57,6 +57,7 @@ function actionTitle(a) {
     case 'open-terminal': return 'Open the live terminal of this agent (answer prompts there)';
     case 'reply': return 'Send a message through the agent\'s message transport';
     case 'open-conflict': return 'Show the conflict details';
+    case 'open-worktree': return 'Open the worktree: review the safety checks and clean it up';
     default: return 'Open this agent';
   }
 }
