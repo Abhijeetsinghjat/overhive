@@ -51,21 +51,6 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         if (agentctl is null) return new(false, "agentctl was not found next to the daemon or on PATH (run scripts/install.sh)", StatusCode: 409);
 
         var terminalId = Ulid.NewId();
-        // Everything that can be checked is checked before the worktree exists. From here on a failure leaves it in
-        // place (never deleted automatically) and the result says where it is.
-        NewWorktreeResult? wt = null;
-        if (req.Worktree is { } spec)
-        {
-            wt = await worktrees!.CreateAsync(new CreateWorktreeRequest(req.Cwd, spec.Branch, spec.Base, spec.Path, spec.ExistingBranch,
-                spec.Fetch, terminalId, tool.Id), "dashboard", ct);
-            if (!wt.Ok) return new(false, wt.Error ?? "Could not create the worktree", StatusCode: wt.StatusCode);
-            cwd = NewWorktreeService.Native(wt.Path!);
-            if (spec.RunSetup)
-            {
-                var setup = await worktrees.RunSetupAsync(wt, ct);
-                if (!setup.Ok) return await FailedAfterWorktreeAsync(wt, tool, terminalId, setup.Detail, ct);
-            }
-        }
         var psi = new ProcessStartInfo(agentctl)
         {
             WorkingDirectory = cwd, UseShellExecute = false,
@@ -80,6 +65,23 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         }
         psi.Environment.Remove("CLAUDECODE");                  // never look like a child of another Claude session
         psi.Environment.Remove("CLAUDE_CODE_CHILD_SESSION");
+
+        // Everything that can be checked is checked before the worktree exists. From here on a failure leaves it in
+        // place (never deleted automatically) and the result says where it is.
+        NewWorktreeResult? wt = null;
+        if (req.Worktree is { } spec)
+        {
+            wt = await worktrees!.CreateAsync(new CreateWorktreeRequest(req.Cwd, spec.Branch, spec.Base, spec.Path, spec.ExistingBranch,
+                spec.Fetch, terminalId, tool.Id), "dashboard", ct);
+            if (!wt.Ok) return new(false, wt.Error ?? "Could not create the worktree", StatusCode: wt.StatusCode);
+            cwd = NewWorktreeService.Native(wt.Path!);           // the root git reported for the new worktree
+            psi.WorkingDirectory = cwd;
+            if (spec.RunSetup)
+            {
+                var setup = await worktrees.RunSetupAsync(wt, ct);
+                if (!setup.Ok) return await FailedAfterWorktreeAsync(wt, tool, terminalId, setup.Detail, ct);
+            }
+        }
 
         Process proc;
         try { proc = Process.Start(psi) ?? throw new InvalidOperationException("process did not start"); }
