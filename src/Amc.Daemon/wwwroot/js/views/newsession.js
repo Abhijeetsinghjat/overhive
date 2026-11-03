@@ -52,7 +52,7 @@ export async function newSessionDialog() {
   const t = list.find((x) => x.id === tool.value);
   const cwd = dir.input.value.trim();
   const worktree = wt.spec();
-  if (worktree) toast(`Creating worktree ${worktree.branch}…`, 'info', worktree.runSetup ? 'Then running the setup command; this can take a while.' : '');
+  if (worktree) toast('Creating the worktree…', 'info', worktree.runSetup ? 'Then running the setup command; this can take a while.' : '');
   try {
     const r = await api.launchSession({ tool: tool.value, cwd, worktree, model: (!modelRow.hidden && model.value.trim()) || null, prompt: (!promptRow.hidden && prompt.value.trim()) || null });
     toast(`${t?.name || 'Session'} starting`, 'ok', [r.detail || '', ...(r.warnings || [])].filter(Boolean).join(' '));
@@ -108,7 +108,7 @@ function worktreeSection(dir) {
   const isNew = () => !el.hidden && fresh.checked;
   const setValid = (v) => { valid = v; if (ok) ok.disabled = !v; };
   const show = (lines, bad) => {
-    mount(status, lines.map(([cls, text]) => h('div', { class: cls }, text)));
+    mount(status, lines.map(([cls, text]) => h('div', { class: cls, text })));
     setValid(!bad);
   };
 

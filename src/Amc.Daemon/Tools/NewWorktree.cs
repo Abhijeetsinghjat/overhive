@@ -92,19 +92,18 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
     /// </summary>
     public async Task<NewWorktreePlan> PlanAsync(string? cwd, string? branch, string? baseRef, string? path, bool existing, CancellationToken ct)
     {
-        // Discover the folder's repository first (a CLI run may be the first time Overhive sees it), then apply the
-        // same rule as any session start: inside the home directory, a known repository/worktree or a workspace root.
-        if (string.IsNullOrWhiteSpace(cwd) || cwd.Contains('\0') || !PathText.IsAbsolute(cwd))
-            return Fail("Working directory must be an absolute path", 400);
-        if (Directory.Exists(cwd) && SessionLauncher.InsideAllowedRoot(GitPaths.RealPath(cwd) ?? cwd))
-        {
-            try { await collector.ResolveAsync(PathText.Normalize(GitPaths.RealPath(cwd) ?? cwd), ct); }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException) { log.LogDebug(ex, "resolve {Cwd}", LogSafe(cwd)); }
-        }
+        // The same rule as any session start: inside the home directory, a known repository/worktree or a workspace
+        // root. A repository under a workspace root that discovery has not listed yet (e.g. just cloned) is found by
+        // rescanning the configured roots; the request's path itself is never handed to git.
         var dir = SessionLauncher.ValidateCwd(cwd, state, _options, out var why);
         if (dir is null) return Fail(why, 400);
+        if (state.Resolver.Resolve(PathText.Normalize(dir)) is not { Worktree.Removed: false })
+        {
+            try { await collector.ScanAsync(ct); }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException) { log.LogDebug(ex, "workspace rescan failed"); }
+        }
         if (state.Resolver.Resolve(PathText.Normalize(dir)) is not { } hit || hit.Worktree.Removed)
-            return Fail("The folder is not inside a git repository Overhive knows", 400);
+            return Fail("The folder is not inside a git repository Overhive knows (repositories under a workspace root, or used by an agent)", 400);
         var wt = hit.Worktree;
         var repo = state.Read(s => s.Repositories.GetValueOrDefault(wt.RepositoryId));
         var mainRoot = repo?.MainWorktree ?? wt.Root;
@@ -227,10 +226,23 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
         var real = GitPaths.RealPath(Native(path)) ?? path;
         var known = state.Resolver.Resolve(path) is { RelativePath: "" } r1 ? r1.Worktree
             : state.Resolver.Resolve(real) is { RelativePath: "" } r2 ? r2.Worktree : null;
-        var root = known?.Root ?? PathText.Normalize(real);
-        var wtId = known?.Id ?? Ids.Worktree(root);
         var newBranch = !req.ExistingBranch;
         var baseUsed = newBranch ? plan.Base : null;
+        if (known is null)
+        {
+            // git created it, but the repository's worktree list does not show it: mark it anyway, start nothing.
+            var guess = PathText.Normalize(real);
+            await sink.PublishAndWaitAsync(new AgentEvent
+            {
+                Type = EventTypes.WorktreeProvisioned, Source = EventSources.User, Evidence = Evidence.Observed,
+                RepositoryId = plan.RepositoryId, WorktreeId = Ids.Worktree(guess),
+                Data = Json.ToObject(new WorktreeProvisionedData(guess, req.Branch, baseUsed, newBranch, via, req.TerminalId, req.Tool)),
+            }, ct);
+            return new(false, $"git created the worktree at {guess}, but it does not appear in `git worktree list`; it was left in place", 500);
+        }
+        // From here on the path is the one git reported (discovery), not the request's text.
+        var root = known.Root;
+        var wtId = known.Id;
         await sink.PublishAndWaitAsync(new AgentEvent
         {
             Type = EventTypes.WorktreeProvisioned, Source = EventSources.User, Evidence = Evidence.Observed,
