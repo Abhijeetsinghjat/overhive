@@ -1,7 +1,7 @@
 // A Claude Code tool call held for the user's decision (config "Approvals"; docs/AGENT_INTEGRATION.md).
 // Used by the "Needs you" inbox, the agent detail panel and the phone page (/m). Allow / Deny answer the
-// agent's PreToolUse hook; without a decision before the countdown ends, Claude Code's normal permission
-// flow applies (the call is never allowed silently).
+// agent's PreToolUse hook; "Ask in terminal" hands it to Claude Code's own prompt at once. Without a decision before
+// the countdown ends, Claude Code's normal permission flow applies (the call is never allowed silently).
 import { h } from '../util.js';
 import { api } from '../api.js';
 import { toast } from './overlay.js';
@@ -18,10 +18,10 @@ export async function decide(id, decision, { reason = '', allowSimilar = false }
   try {
     const r = await api.decideApproval(id, decision, { reason: reason || undefined, allowSimilar, client: client() });
     drafts.delete(id);
-    toast(r?.message || (decision === 'allow' ? 'Allowed' : 'Denied'), 'ok');
+    toast(r?.message || ({ allow: 'Allowed', ask: 'Answer in the terminal' }[decision] || 'Denied'), 'ok');
     return r;
   } catch (e) {
-    toast(decision === 'allow' ? 'Allow failed' : 'Deny failed', 'err', e.message);
+    toast(({ allow: 'Allow', ask: 'Ask in terminal' }[decision] || 'Deny') + ' failed', 'err', e.message);
     return null;
   } finally {
     busy.delete(id);
@@ -77,8 +77,11 @@ export function approvalCard(p, { compact = false } = {}) {
     p.preview && !compact ? h('pre', { class: 'ap-preview' }, previewLines(p.preview)) : null,
     h('div', { class: 'attn-actions ap-actions' },
       btn('Allow', 'Let the agent run this tool call now', 'btn-primary', () => decide(p.id, 'allow')),
-      p.similarLabel ? btn('Allow similar for this session', 'Also allow later calls of this session that match: ' + p.similarLabel + ' (kept in memory until the session ends or Overhive restarts)', '',
+      // Never offered for critical findings (the daemon sends no similarLabel then): those are decided one call at a time.
+      p.similarLabel ? btn(p.command ? 'Allow this command for this session' : 'Allow edits to this file for this session',
+        'Also allow ' + p.similarLabel + ' for the rest of this session, without asking (kept in memory until the session ends or Overhive restarts)', '',
         () => decide(p.id, 'allow', { allowSimilar: true })) : null,
+      btn('Ask in terminal', 'Hand this call to Claude Code now: its own permission prompt appears in the terminal', 'btn-ghost', () => decide(p.id, 'ask')),
       reason,
       btn('Deny', 'Block this tool call; the agent sees the reason', 'btn-danger', () => decide(p.id, 'deny', { reason: reason.value.trim() }))));
 }

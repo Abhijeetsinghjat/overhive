@@ -312,7 +312,7 @@ POST /api/guard/pause                {rootAgentId}: pause the session tree
 GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
 POST /api/attention/dismiss|snooze|restore   {id, minutes?}
 GET  /api/approvals                  tool calls held for a decision (Approvals mode) + mode, timeout
-POST /api/approvals/{id}/allow|deny  {reason?, allowSimilar?, client?}: a control action (gated like /control)
+POST /api/approvals/{id}/allow|deny|ask  {reason?, allowSimilar?, client?}: a control action (gated like /control)
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies); ?approval=1 may hold PreToolUse
 ```
 

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace Amc.Daemon.Approvals;
 
-/// <summary>Body of POST /api/approvals/{id}/allow|deny (every field optional).</summary>
+/// <summary>Body of POST /api/approvals/{id}/allow|deny|ask (every field optional).</summary>
 public sealed record ApprovalDecisionRequest(string? Reason = null, bool AllowSimilar = false, string? Client = null);
 
 /// <summary>
@@ -46,7 +46,8 @@ public static class ApprovalsModule
         api.MapPost("/{id}/{decision}", async (string id, string decision, HttpContext http, ApprovalBroker broker, IOptions<AmcOptions> opt,
             CancellationToken ct) =>
         {
-            if (decision is not (ApprovalDecisions.Allow or ApprovalDecisions.Deny)) return Results.NotFound(new { error = "use /allow or /deny" });
+            if (decision is not (ApprovalDecisions.Allow or ApprovalDecisions.Deny or ApprovalDecisions.Ask))
+                return Results.NotFound(new { error = "use /allow, /deny or /ask" });
             if (!opt.Value.EnableControl)
                 return Results.Json(new OperationResult(false, "Control is disabled (EnableControl=false)", 403), statusCode: 403);
             var remote = !SecurityMiddleware.IsUnixSocket(http) && !SecurityMiddleware.IsLoopbackHost(http.Request.Host.Host);

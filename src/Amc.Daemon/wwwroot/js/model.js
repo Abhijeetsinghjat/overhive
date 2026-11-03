@@ -257,7 +257,9 @@ export function describe(e) {
       const who = d.by === 'session-rule' ? 'by a session rule' : d.by === 'system' ? '' : `by ${d.by}${d.client ? ' ' + d.client : ''}`;
       const secs = d.latencyMs != null ? ` after ${(d.latencyMs / 1000).toFixed(1)}s` : '';
       [icon, iconCls] = d.decision === 'allow' ? ICON.ok : d.decision === 'deny' ? ICON.fail : ['⏱', 'ic-audit'];
-      text = d.decision === 'expired' ? `Approval expired${secs}: normal permission flow` : `${d.decision === 'allow' ? 'Allowed' : 'Denied'} ${who}${secs}${d.allowSimilar ? ' (+ similar)' : ''}`;
+      text = d.decision === 'expired' ? `Approval expired${secs}: normal permission flow`
+        : d.decision === 'ask' ? `Handed to the terminal prompt ${who}${secs}`
+        : `${d.decision === 'allow' ? 'Allowed' : 'Denied'} ${who}${secs}${d.allowSimilar ? ' (+ rest of session)' : ''}`;
       detail = d.reason || d.command || d.filePath || '';
       bad = d.decision === 'deny';
       break;

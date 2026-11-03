@@ -93,7 +93,7 @@ public sealed class ApprovalBroker
         var need = ApprovalPolicy.Evaluate(_settings, tool, payload["tool_input"] as JsonObject, ctx);
         if (need is null) return null;
         bool auto;
-        lock (_rules) auto = _rules.TryGetValue(sid, out var keys) && keys.Contains(need.SimilarKey);
+        lock (_rules) auto = need.SimilarKey is { } key && _rules.TryGetValue(sid, out var keys) && keys.Contains(key);
         return new Ticket(need, agentId, sid, wt?.Id, wt?.RepositoryId, cwd, Str(payload, "tool_use_id"), auto);
     }
 
@@ -108,9 +108,9 @@ public sealed class ApprovalBroker
             if (t.AutoAllowed)
             {
                 await _sink.PublishAsync(Resolved(t, "auto-" + NewId()[..12], ApprovalDecisions.Allow, ApprovalActors.SessionRule,
-                    "Matched an \"Allow similar\" rule for this session: " + t.Need.SimilarLabel, 0, null, includeRequest: true), ct);
+                    "Allowed for this session: " + t.Need.SimilarLabel, 0, null, includeRequest: true), ct);
                 _health.Increment(HealthName, "auto_allowed");
-                return ApprovalHookOutput.Allow("Allowed by an Overhive session rule (Allow similar)");
+                return ApprovalHookOutput.Allow("Allowed by an Overhive session rule (" + t.Need.SimilarLabel + ")");
             }
             if (_pending.Count >= MaxPending)
             {
@@ -158,6 +158,7 @@ public sealed class ApprovalBroker
             {
                 ApprovalDecisions.Allow => ApprovalHookOutput.Allow(),
                 ApprovalDecisions.Deny => ApprovalHookOutput.Deny(outcome.Reason),
+                ApprovalDecisions.Ask => ApprovalHookOutput.Ask(),
                 _ => null,
             };
         }
@@ -175,25 +176,35 @@ public sealed class ApprovalBroker
     }
 
     /// <summary>
-    /// Allow or deny a held call. Single-use: the first decision wins, later ones (and unknown or expired ids) get 404.
-    /// <paramref name="allowSimilar"/> (allow only) also allows later calls of this session with the same similar-key.
+    /// Allow, deny or "ask" (hand to Claude Code's prompt now) a held call. Single-use: the first decision wins, later ones
+    /// (and unknown or expired ids) get 404. <paramref name="allowSimilar"/> (allow only, never for critical findings) also
+    /// allows the exact same command in the same directory, or edits to the same file, for the rest of the session.
     /// </summary>
     public async Task<ResolveResult> ResolveAsync(string id, string decision, string? reason, bool allowSimilar, string by, string? client,
         CancellationToken ct = default)
     {
-        if (decision is not (ApprovalDecisions.Allow or ApprovalDecisions.Deny))
-            return new(false, 400, "decision must be allow or deny");
-        if (!IsWellFormed(id) || !_pending.TryRemove(id, out var w))
+        if (decision is not (ApprovalDecisions.Allow or ApprovalDecisions.Deny or ApprovalDecisions.Ask))
+            return new(false, 400, "decision must be allow, deny or ask");
+        if (!IsWellFormed(id) || !_pending.TryGetValue(id, out var peek))
+            return new(false, 404, "No such pending approval (already decided, expired, or the agent moved on)");
+        if (allowSimilar && decision == ApprovalDecisions.Allow && peek.Ticket.Need.SimilarKey is null)
+            return new(false, 400, "Allow for this session is not offered for critical findings; allow or deny this call only");
+        if (!_pending.TryRemove(id, out var w))
             return new(false, 404, "No such pending approval (already decided, expired, or the agent moved on)");
         reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim() is var r && r.Length > MaxReason ? r[..MaxReason] : reason.Trim();
         var similar = allowSimilar && decision == ApprovalDecisions.Allow;
-        if (similar) AddRule(w.Ticket.SessionId, w.Ticket.Need.SimilarKey);
+        if (similar) AddRule(w.Ticket.SessionId, w.Ticket.Need.SimilarKey!);
         var latency = (long)Math.Max(0, (_time.GetUtcNow() - w.RequestedAt).TotalMilliseconds);
         w.Done.TrySetResult(new Outcome(decision, reason));
         UpdateHealth();
-        _health.Increment(HealthName, decision == ApprovalDecisions.Allow ? "allowed" : "denied");
+        _health.Increment(HealthName, decision switch { ApprovalDecisions.Allow => "allowed", ApprovalDecisions.Deny => "denied", _ => "asked" });
         await _sink.PublishAsync(Resolved(w.Ticket, w.Id, decision, by, reason, latency, client, similar: similar), ct);
-        return new(true, 200, decision == ApprovalDecisions.Allow ? "Allowed" + (similar ? " (and similar calls in this session)" : "") : "Denied", latency);
+        return new(true, 200, decision switch
+        {
+            ApprovalDecisions.Allow => "Allowed" + (similar ? " (and " + w.Ticket.Need.SimilarLabel + " for the rest of this session)" : ""),
+            ApprovalDecisions.Deny => "Denied",
+            _ => "Handed to Claude Code: answer the permission prompt in its terminal",
+        }, latency);
     }
 
     /// <summary>Releases every held call with no decision (shutdown). Each is recorded as expired.</summary>
@@ -234,7 +245,9 @@ public sealed class ApprovalBroker
     private AgentEvent Resolved(Ticket t, string id, string decision, string by, string? reason, long latency, string? client,
         bool similar = false, bool includeRequest = false) =>
         Event(t, EventTypes.ApprovalResolved, _time.GetUtcNow(), new ApprovalResolvedData(id, decision, by, reason, latency, client, similar,
-            includeRequest ? t.Need.Tool : null, includeRequest ? t.Need.Command : null, includeRequest ? t.Need.FilePath : null));
+            includeRequest ? t.Need.Tool : null, includeRequest ? t.Need.Command : null, includeRequest ? t.Need.FilePath : null,
+            includeRequest ? t.ToolUseId : null,
+            includeRequest ? [.. t.Need.Findings.Select(f => new ApprovalFinding(f.RuleId, f.Severity, f.Explanation, f.Span, f.Target))] : null));
 
     private static AgentEvent Event<T>(Ticket t, string type, DateTimeOffset at, T data) where T : class => new()
     {

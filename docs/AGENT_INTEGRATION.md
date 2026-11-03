@@ -141,16 +141,16 @@ per-session tokens; researching it was declined.
 ## Approvals (Claude Code)
 
 Overhive can hold a Claude Code tool call until the user allows or denies it in the dashboard, on the phone
-page (`/m`) or with `overhive approvals allow|deny <id> [--reason TEXT] [--similar]`. It uses Claude Code's
+page (`/m`) or with `overhive approvals allow|deny|ask <id> [--reason TEXT] [--similar]`. It uses Claude Code's
 documented `PreToolUse` decision control: the hook answers
 
 ```json
-{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow" | "deny",
+{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow" | "deny" | "ask",
                           "permissionDecisionReason": "…" } }
 ```
 
 "allow" skips Claude Code's permission prompt (deny and ask rules in the user's settings still apply);
-"deny" blocks the call and Claude sees the reason. Answering nothing (exit 0, empty output) leaves the call
+"deny" blocks the call and Claude sees the reason; "ask" shows Claude Code's own permission prompt. Answering nothing (exit 0, empty output) leaves the call
 to Claude Code's normal permission flow, which is what every fallback does.
 
 **Off by default.** Config section `Approvals` in `~/.config/agent-mission-control/config.json`:
@@ -184,18 +184,22 @@ to answer. The daemon holds a call only on the `?approval=1` route, so a stale 3
 |-------|-------------|-------------|
 | Allow (dashboard, phone page, CLI) | `permissionDecision: allow` | `approval.resolved` allow, by `local` or `remote`, latency |
 | Deny, optional reason | `permissionDecision: deny`, reason "Denied by the user in Overhive: …" | `approval.resolved` deny |
-| Allow similar for this session | allow; later calls of the same session with the same rules, severity and command prefix (first two words, e.g. `git push`) or the same file are allowed at once | `approval.resolved` by `session-rule` (in memory; cleared at `SessionEnd` and on restart) |
+| Ask in terminal | `permissionDecision: ask`: Claude Code's own prompt appears at once | `approval.resolved` ask |
+| Allow this command for this session / Allow edits to this file for this session (not offered for critical findings) | allow; later calls of the same session with exactly the same command (whitespace aside) in the same working directory, or edits to the same file, are allowed at once | `approval.resolved` by `session-rule` (in memory; cleared at `SessionEnd` and on restart) |
 | No decision within `T` | nothing (normal permission flow) | `approval.resolved` expired |
 | Claude Code cancels the hook, the transport times out | nothing | expired |
 | Daemon stops or restarts, or is down | nothing (the transport fails open) | expired (at shutdown, or on the next start) |
 | Any error in the daemon | nothing | — |
 
-Overhive never allows a call without a decision or a rule the user created. While a call waits, the session
-waits too; the terminal prompt appears only after the timeout. A held call is an urgent **Needs you** item
+Overhive never allows a call without a decision or a rule the user created. While a call is held, the session
+waits too: Claude Code's terminal prompt appears only after a decision (**Ask in terminal** brings it up at
+once) or the timeout. A critical finding is decided one call at a time: only Allow, Deny and Ask are offered. A held call is an urgent **Needs you** item
 (notifications included when enabled) and a card in the agent's panel: agent, tool, working directory, the
 full command or the file with a diff preview (Edit old/new strings truncated at 1,500 characters each), the
 risk findings, a countdown, and the buttons. Resolved and expired items disappear; the events stay in the
-timeline. Ids are 128-bit random and single-use: the first decision wins, later ones get 404.
+timeline. The risk recorder still records the call's finding (Risks tab, timeline), but it does not raise a
+second "Needs you" item while the call is held or after it was allowed, denied or handed to the terminal. A
+call that timed out falls back to the normal risk item. Ids are 128-bit random and single-use: the first decision wins, later ones get 404.
 
 At most 100 calls are held at once; further calls use the normal permission flow. Only Claude Code is
 supported for now. Codex, Gemini CLI, Cursor, Copilot CLI and Grok have similar hook decisions, but they are

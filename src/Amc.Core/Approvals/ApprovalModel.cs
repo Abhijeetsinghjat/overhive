@@ -63,6 +63,8 @@ public static class ApprovalDecisions
 {
     public const string Allow = "allow";
     public const string Deny = "deny";
+    /// <summary>The user chose to answer in Claude Code's own permission prompt (hook answers "ask" at once).</summary>
+    public const string Ask = "ask";
     /// <summary>No decision in time, the hook went away, or the daemon stopped: Claude Code's normal permission flow applies.</summary>
     public const string Expired = "expired";
 }
@@ -74,7 +76,7 @@ public static class ApprovalActors
     public const string Local = "local";
     /// <summary>A client that reached the daemon through an AllowedHosts name (e.g. tailscale serve).</summary>
     public const string Remote = "remote";
-    /// <summary>An "Allow similar for this session" rule matched.</summary>
+    /// <summary>An "allow this exact command / edits to this file for this session" rule matched.</summary>
     public const string SessionRule = "session-rule";
     /// <summary>Timeout, hook gone or daemon stopping.</summary>
     public const string System = "system";
@@ -113,7 +115,9 @@ public sealed record ApprovalResolvedData(
     /// <summary>Set when a session rule decided without a prior request event.</summary>
     string? Tool = null,
     string? Command = null,
-    string? FilePath = null);
+    string? FilePath = null,
+    string? ToolUseId = null,
+    IReadOnlyList<ApprovalFinding>? Findings = null);
 
 /// <summary>A pending approval in the state (removed when resolved; the events stay in the log).</summary>
 public sealed class PendingApproval
@@ -131,9 +135,51 @@ public sealed class PendingApproval
     public string? Preview { get; set; }
     public string? Severity { get; set; }
     public List<ApprovalFinding> Findings { get; set; } = [];
+    /// <summary>What "allow for this session" covers (the exact command in this directory, or this file); null when not offered (critical findings).</summary>
     public string? SimilarLabel { get; set; }
     public DateTimeOffset RequestedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// A call the user decided (allow / deny / ask, also by a session rule), kept briefly so the risk finding of that
+/// same call does not raise a second "Needs you" item (<see cref="ApprovalCoverage"/>). Expired calls are not kept:
+/// their finding falls back to the normal risk item.
+/// </summary>
+public sealed class ApprovalOutcome
+{
+    public required string Id { get; init; }
+    public string? AgentId { get; init; }
+    public string? ToolUseId { get; init; }
+    public required string Decision { get; init; }
+    public List<ApprovalFinding> Findings { get; init; } = [];
+    public DateTimeOffset RequestedAt { get; init; }
+    public DateTimeOffset DecidedAt { get; init; }
+}
+
+/// <summary>Whether a risk finding is the same call as a pending or decided approval (one card, not two).</summary>
+public static class ApprovalCoverage
+{
+    /// <summary>Process scans and transcripts may record the finding a little before the request or after the decision.</summary>
+    public static readonly TimeSpan Slack = TimeSpan.FromMinutes(10);
+
+    public static bool Covers(WorldState s, Risk.Risk r)
+    {
+        if (r.AgentId is null || (s.Approvals.Count == 0 && s.ApprovalOutcomes.Count == 0)) return false;
+        foreach (var a in s.Approvals.Values)
+            if (Same(r, a.AgentId, a.ToolUseId, a.Findings, a.RequestedAt, null)) return true;
+        foreach (var o in s.ApprovalOutcomes.Values)
+            if (Same(r, o.AgentId, o.ToolUseId, o.Findings, o.RequestedAt, o.DecidedAt)) return true;
+        return false;
+    }
+
+    private static bool Same(Risk.Risk r, string? agentId, string? toolUseId, List<ApprovalFinding> findings, DateTimeOffset from, DateTimeOffset? to)
+    {
+        if (r.AgentId != agentId) return false;
+        if (toolUseId is not null && r.ToolUseId == toolUseId) return true;
+        if (r.At < from - Slack || (to is { } t && r.At > t + Slack)) return false;
+        return findings.Any(f => f.RuleId == r.RuleId && (f.Span == r.Span || (f.Target is not null && f.Target == r.Target)));
+    }
 }
 
 internal static class ApprovalReducer
@@ -154,8 +200,24 @@ internal static class ApprovalReducer
                 changed.Add(new(EntityKinds.Approval, d.ApprovalId));
                 break;
             case EventTypes.ApprovalResolved when e.Payload<ApprovalResolvedData>() is { } r:
-                if (s.Approvals.Remove(r.ApprovalId)) changed.Add(new(EntityKinds.Approval, r.ApprovalId));
+            {
+                s.Approvals.Remove(r.ApprovalId, out var pending);
+                if (pending is not null) changed.Add(new(EntityKinds.Approval, r.ApprovalId));
+                if (r.Decision is ApprovalDecisions.Allow or ApprovalDecisions.Deny or ApprovalDecisions.Ask)
+                {
+                    s.ApprovalOutcomes[r.ApprovalId] = new ApprovalOutcome
+                    {
+                        Id = r.ApprovalId, AgentId = pending?.AgentId ?? e.AgentId, ToolUseId = pending?.ToolUseId ?? r.ToolUseId,
+                        Decision = r.Decision, Findings = pending?.Findings ?? [.. r.Findings ?? []],
+                        RequestedAt = pending?.RequestedAt ?? e.Ts, DecidedAt = e.Ts,
+                    };
+                    // Only recent outcomes matter (ApprovalCoverage.Slack): keep the newest few hundred.
+                    if (s.ApprovalOutcomes.Count > WorldState.MaxApprovalOutcomes)
+                        foreach (var old in s.ApprovalOutcomes.Values.OrderBy(o => o.DecidedAt).Take(s.ApprovalOutcomes.Count - WorldState.MaxApprovalOutcomes).ToList())
+                            s.ApprovalOutcomes.Remove(old.Id);
+                }
                 break;
+            }
         }
     }
 }
@@ -169,9 +231,12 @@ public sealed record ApprovalNeed(
     string? Preview,
     string? Severity,
     IReadOnlyList<RiskFinding> Findings,
-    /// <summary>"Allow similar" key: same tool kind, same rules and severity, same command prefix (or same file).</summary>
-    string SimilarKey,
-    string SimilarLabel);
+    /// <summary>
+    /// "Allow for this session" key: the exact (whitespace-normalized) command in the same working directory, or edits
+    /// to the same file. Null when not offered: a critical finding is decided one call at a time.
+    /// </summary>
+    string? SimilarKey,
+    string? SimilarLabel);
 
 /// <summary>
 /// Pure decision whether a Claude Code PreToolUse call waits for approval, and what the card shows. Uses the
@@ -207,31 +272,28 @@ public static class ApprovalPolicy
         if (relevant.Count == 0 && !(allEdits && isEdit)) return null;
 
         var severity = relevant.Count == 0 ? null : relevant.Select(f => f.Severity).Aggregate(RiskSeverity.Max);
-        var rules = string.Join(",", relevant.Select(f => f.RuleId).Distinct().Order(StringComparer.Ordinal));
-        string key, label;
-        if (command is not null)
+        string? key = null, label = null;
+        if (severity != RiskSeverity.Critical)
         {
-            var prefix = CommandPrefix(command);
-            key = $"cmd|{rules}|{severity}|{prefix}";
-            label = $"{(rules.Length > 0 ? rules + " · " : "")}commands starting with “{prefix}”";
-        }
-        else
-        {
-            key = $"file|{(isEdit ? "edit" : tool)}|{rules}|{severity}|{path}";
-            label = $"{(isEdit ? "edits of" : tool + " of")} {path}{(rules.Length > 0 ? " · " + rules : "")}";
+            if (command is not null)
+            {
+                key = $"cmd|{ctx.Cwd}|{NormalizeCommand(command)}";
+                label = $"this exact command in {ctx.Cwd ?? "the same directory"}";
+            }
+            else if (path is not null)
+            {
+                key = $"file|{(isEdit ? "edit" : tool)}|{path}";
+                label = isEdit ? $"edits to {path}" : $"{tool} of {path}";
+            }
         }
         return new ApprovalNeed(relevant.Count > 0 ? "risk" : "edit", tool, command, path, Preview(tool, input),
             severity, relevant, key, label);
     }
 
-    /// <summary>The first two words of the first line (e.g. "git push", "rm -rf"), at most 80 characters.</summary>
-    public static string CommandPrefix(string command)
-    {
-        var first = command.TrimStart().Split('\n')[0];
-        var words = first.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Take(2);
-        var p = string.Join(' ', words);
-        return p.Length <= 80 ? p : p[..80];
-    }
+    /// <summary>The command with runs of spaces and tabs collapsed and the ends trimmed (line breaks kept: they separate commands).</summary>
+    public static string NormalizeCommand(string command) =>
+        string.Join('\n', command.Replace("\r\n", "\n").Split('\n')
+            .Select(l => string.Join(' ', l.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)))).Trim();
 
     /// <summary>Diff-style preview of what a file tool writes; null for other tools.</summary>
     public static string? Preview(string tool, JsonObject input)
@@ -297,6 +359,9 @@ public static class ApprovalPolicy
 public static class ApprovalHookOutput
 {
     public static JsonObject Allow(string reason = "Approved by the user in Overhive") => Build(ApprovalDecisions.Allow, reason);
+
+    /// <summary>Hand the call to Claude Code's own permission prompt now (the reason is shown in that prompt).</summary>
+    public static JsonObject Ask() => Build(ApprovalDecisions.Ask, "Overhive: the user chose to answer in the terminal");
 
     public static JsonObject Deny(string? userReason) =>
         Build(ApprovalDecisions.Deny, "Denied by the user in Overhive" + (string.IsNullOrWhiteSpace(userReason) ? "." : ": " + userReason.Trim()));

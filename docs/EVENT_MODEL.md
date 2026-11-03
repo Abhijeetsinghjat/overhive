@@ -57,7 +57,7 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `guard.alert` / `guard.cleared` | `GuardAlertData` / `GuardClearedData` | runaway guard (level changes only; see RUNAWAY_GUARD.md) | reported (agent counts carry their status evidence) |
 | `guard.dismissed` | `GuardDismissedData` | Overhive user | observed |
 | `approval.requested` | `ApprovalRequestedData` (approval id, tool, command or file, diff preview, findings, expiry) | a Claude Code PreToolUse call held for a decision (Approvals mode; see AGENT_INTEGRATION.md) | reported |
-| `approval.resolved` | `ApprovalResolvedData` (decision allow / deny / expired, by local / remote / session-rule / system, reason, latency) | the user's decision, a session rule, a timeout or a daemon restart | reported (observed for restart expiry) |
+| `approval.resolved` | `ApprovalResolvedData` (decision allow / deny / ask / expired, by local / remote / session-rule / system, reason, latency) | the user's decision, a session rule, a timeout or a daemon restart | reported (observed for restart expiry) |
 | `risk.detected` | `RiskData` (rule, severity, explanation, matched span, target, redacted command) | risk recorder on commands, child processes and file events ([RISKS.md](RISKS.md)) | of the source: reported / observed |
 
 ## Dedupe keys (shared by hook and transcript ingestion)

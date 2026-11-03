@@ -18,7 +18,7 @@ internal static class RiskReducer
             Id = id, Seq = e.Seq, AgentId = e.AgentId, SessionId = e.SessionId, WorktreeId = e.WorktreeId,
             RuleId = d.RuleId, Severity = severity, Explanation = d.Explanation, Span = d.Span, Target = d.Target,
             Command = d.Command, Evidence = e.Evidence, Origin = d.Origin, SourceType = d.SourceType, SourceSeq = d.SourceSeq,
-            Pid = d.Pid, At = e.Ts,
+            Pid = d.Pid, ToolUseId = d.ToolUseId, At = e.Ts,
         };
         changed.Add(new(EntityKinds.Risk, id));
         if (agent is not null)

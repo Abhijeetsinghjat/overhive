@@ -10,8 +10,11 @@ version is 0.x, minor versions may change behaviour.
   `"Mode": "risky"` holds the calls the risk rules rate warn or critical; `"all-edits"` also holds every
   Write/Edit/MultiEdit/NotebookEdit. A held call is an urgent **Needs you** card (also on the phone page and
   in the agent panel) with the command or file and a diff preview, the risk finding, **Allow**, **Deny**
-  with a reason the agent sees, and **Allow similar for this session**. `overhive approvals` lists them and
-  `overhive approvals allow|deny <id> [--reason]` decides. Without a decision within `TimeoutSeconds`
+  with a reason the agent sees, **Ask in terminal** (hands the call to Claude Code's own prompt at once)
+  and, except for critical findings, **Allow this command for this session** (exact command, same
+  directory) or **Allow edits to this file for this session**. The risk recorder's finding for the same
+  call is merged into that card rather than raising a second item. `overhive approvals` lists them and
+  `overhive approvals allow|deny|ask <id> [--reason] [--similar]` decides. Without a decision within `TimeoutSeconds`
   (default 120), when the daemon is down or on any error, Claude Code's normal permission flow applies:
   nothing is allowed silently. Decisions are control actions (token, Origin/Host checks, `EnableControl`,
   plus `Approvals.AllowRemote`), ids are random and single-use, and `approval.requested` /

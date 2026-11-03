@@ -135,6 +135,10 @@ public sealed class ApprovalHooksTests : IDisposable
         Assert.Equal(ExitCodes.Error, await _h.Run("approvals", "allow", id, "--similar"));
         Assert.True((bool)JsonNode.Parse(_h.Daemon.Single("POST", "/allow").Body!)!["allowSimilar"]!);
         Assert.Equal(ExitCodes.Usage, await _h.Run("approvals", "deny", id, "--similar"));
+        _h.Daemon.On("POST", $"/api/approvals/{id}/ask", _ => (HttpStatusCode.OK, """{"ok":true,"message":"Handed to Claude Code"}"""));
+        Assert.Equal(0, await _h.Run("approvals", "ask", "01234567"));
+        Assert.Equal("cli", (string?)JsonNode.Parse(_h.Daemon.Single("POST", "/ask").Body!)!["client"]);
+        Assert.Equal(ExitCodes.Usage, await _h.Run("approvals", "ask", id, "--similar"));
         Assert.Equal(ExitCodes.Usage, await _h.Run("approvals", "maybe"));
     }
 }

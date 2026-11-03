@@ -69,7 +69,7 @@ export const api = {
   tools: () => request('GET', '/api/tools'),
   launchSession: (body) => request('POST', '/api/sessions', body),
   agentDiff: (id) => request('GET', `/api/agents/${encodeURIComponent(id)}/diff`),
-  decideApproval: (id, decision, body) => request('POST', `/api/approvals/${encodeURIComponent(id)}/${decision === 'allow' ? 'allow' : 'deny'}`, body || {}),
+  decideApproval: (id, decision, body) => request('POST', `/api/approvals/${encodeURIComponent(id)}/${['allow', 'ask'].includes(decision) ? decision : 'deny'}`, body || {}),
 };
 
 /** Builds a query string; arrays become repeated keys, null/'' are skipped. */

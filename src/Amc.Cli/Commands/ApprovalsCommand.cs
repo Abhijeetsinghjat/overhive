@@ -9,7 +9,8 @@ namespace Amc.Cli.Commands;
 
 /// <summary>
 /// `overhive approvals`: Claude Code tool calls waiting for a decision (GET /api/approvals);
-/// `approvals allow|deny &lt;id&gt; [--reason TEXT] [--similar]` decides one (an id prefix is enough).
+/// `approvals allow|deny|ask &lt;id&gt; [--reason TEXT] [--similar]` decides one (an id prefix is enough). "ask" hands the call
+/// to Claude Code's own permission prompt now; --similar also allows the exact command (or edits to the file) for the session.
 /// </summary>
 public static class ApprovalsCommand
 {
@@ -34,9 +35,10 @@ public static class ApprovalsCommand
             }
             case "allow":
             case "deny":
+            case "ask":
             {
                 if (args.Positionals.Count != 2) throw new UsageException($"usage: agentctl approvals {sub} <id> [--reason TEXT]{(sub == "allow" ? " [--similar]" : "")}");
-                if (sub == "deny" && args.Flag("similar")) throw new UsageException("--similar only applies to allow");
+                if (sub != "allow" && args.Flag("similar")) throw new UsageException("--similar only applies to allow");
                 var id = await ResolveId(ctx, args.Positionals[1], ct);
                 var r = await ctx.Client.SendAsync(HttpMethod.Post, $"api/approvals/{AmcClient.Seg(id)}/{sub}",
                     new { reason = args.Opt("reason"), allowSimilar = args.Flag("similar"), client = "cli" }, ct);
@@ -49,7 +51,7 @@ public static class ApprovalsCommand
                 return r.Success ? ExitCodes.Ok : ExitCodes.Error;
             }
             default:
-                throw new UsageException($"unknown approvals subcommand '{sub}' (list | allow | deny)");
+                throw new UsageException($"unknown approvals subcommand '{sub}' (list | allow | deny | ask)");
         }
     }
 

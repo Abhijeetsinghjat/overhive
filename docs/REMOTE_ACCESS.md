@@ -53,7 +53,7 @@ Then open `https://my-laptop.tail1234.ts.net/m` on the phone.
 ## Approving tool calls from the phone
 
 With approvals on ([AGENT_INTEGRATION.md](AGENT_INTEGRATION.md#approvals-claude-code)), held Claude Code calls
-appear on `/m` with **Allow**, **Deny** and **Allow similar**. Through an SSH tunnel the phone is a local
+appear on `/m` with **Allow**, **Deny**, **Ask in terminal** and the per-session allow. Through an SSH tunnel the phone is a local
 client. Through `tailscale serve` it is a remote one: decisions are recorded as `remote`, and
 `"Approvals": { "AllowRemote": false }` restricts deciding to local clients.
 

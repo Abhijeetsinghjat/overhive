@@ -172,9 +172,12 @@ with `overhive approvals allow|deny <id>`. It is off by default. Turn it on in
 `risky` holds the calls the [risk rules](docs/RISKS.md) rate warn or critical (`MinSeverity` can raise
 that to critical). `all-edits` also holds every Write, Edit, MultiEdit and NotebookEdit. Everything else
 runs as before, with no added delay. A held call shows up in **Needs you** as urgent, with the command or
-the file and a diff preview, the risk finding, and **Allow**, **Deny** (with a reason the agent sees) and
-**Allow similar for this session**. Without a decision within the timeout, or if Overhive is down, Claude
-Code asks in its terminal as usual. Overhive never allows a call on its own. Details:
+the file and a diff preview, the risk finding, and **Allow**, **Deny** (with a reason the agent sees),
+**Ask in terminal** (Claude Code's own prompt, now) and, unless a finding is critical, **Allow this command
+for this session** (the exact command in the same directory) or **Allow edits to this file for this
+session**. While a call is held, Claude Code's terminal prompt appears only after a decision or the timeout.
+Without a decision within the timeout, or if Overhive is down, Claude Code asks in its terminal as usual.
+Overhive never allows a call on its own. Details:
 [Approvals](docs/AGENT_INTEGRATION.md#approvals-claude-code).
 
 Add a tool Overhive does not know yet:

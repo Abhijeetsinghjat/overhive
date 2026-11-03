@@ -210,37 +210,114 @@ public sealed class ApprovalTests : IDisposable
         Assert.Equal(400, (await b.ResolveAsync(id, "maybe", null, false, ApprovalActors.Local, null)).StatusCode);
     }
 
-    // ---- allow similar ----
+    // ---- allow for this session, ask ----
 
     [Fact]
-    public async Task Allow_similar_is_scoped_to_the_session_rule_and_command_prefix()
+    public async Task Allow_for_this_session_covers_only_the_exact_command_in_the_same_directory()
     {
         var b = Broker();
-        var wait = b.WaitAsync(b.Prepare(Bash("git push --force origin main"))!, CancellationToken.None);
+        var wait = b.WaitAsync(b.Prepare(Bash("git reset --hard"))!, CancellationToken.None);   // warn
         var id = await PendingId();
-        Assert.Contains("git push", _state.Read(s => s.Approvals[id].SimilarLabel));
+        Assert.Equal("this exact command in /work/repo", _state.Read(s => s.Approvals[id].SimilarLabel));
         await b.ResolveAsync(id, ApprovalDecisions.Allow, null, allowSimilar: true, ApprovalActors.Local, null);
         await wait;
         Assert.True(Events(EventTypes.ApprovalResolved).Single().Payload<ApprovalResolvedData>()!.AllowSimilar);
 
-        // Same session, same rule + severity, same prefix: allowed at once by the rule, recorded, no new pending item.
-        var again = b.Prepare(Bash("git push --force origin HEAD:main"))!;
+        // The same command (whitespace aside) in the same session and directory: allowed at once, recorded, no new card.
+        var again = b.Prepare(Bash("  git reset   --hard "))!;
         Assert.True(again.AutoAllowed);
         Assert.Contains("\"allow\"", (await b.WaitAsync(again, CancellationToken.None))!.ToJsonString());
         var auto = Events(EventTypes.ApprovalResolved).Last().Payload<ApprovalResolvedData>()!;
-        Assert.Equal((ApprovalActors.SessionRule, "git push --force origin HEAD:main"), (auto.By, auto.Command));
+        Assert.Equal((ApprovalActors.SessionRule, "  git reset   --hard "), (auto.By, auto.Command));
         Assert.Single(Events(EventTypes.ApprovalRequested));
 
-        // Not similar: another session, another command, a different risk.
-        Assert.False(b.Prepare(Bash("git push --force origin main", Other))!.AutoAllowed);
-        Assert.False(b.Prepare(Bash(Risky))!.AutoAllowed);
-        Assert.False(b.Prepare(Bash("git push --force origin feature"))!.AutoAllowed); // warn, not critical
-        // Deny never creates a rule, and the session's rules end with it.
+        // Anything else asks again: another variant, another directory, another session.
+        Assert.False(b.Prepare(Bash("git reset --hard HEAD~3"))!.AutoAllowed);
+        var elsewhere = Bash("git reset --hard");
+        elsewhere["cwd"] = "/work/wt-feature";
+        Assert.False(b.Prepare(elsewhere)!.AutoAllowed);
+        Assert.False(b.Prepare(Bash("git reset --hard", Other))!.AutoAllowed);
+        // The session's rules end with it.
         Assert.Equal(1, b.RuleCount(ClaudeHarness.SessionId));
         b.Prepare(ClaudeHarness.Hook("SessionEnd"));
         Assert.Equal(0, b.RuleCount(ClaudeHarness.SessionId));
-        Assert.False(b.Prepare(Bash("git push --force origin HEAD:main"))!.AutoAllowed);
+        Assert.False(b.Prepare(Bash("git reset --hard"))!.AutoAllowed);
     }
+
+    [Fact]
+    public async Task Critical_findings_are_never_offered_a_session_wide_allow()
+    {
+        var b = Broker();
+        var ticket = b.Prepare(Bash("git push --force origin main"))!;
+        Assert.Null(ticket.Need.SimilarKey);
+        var wait = b.WaitAsync(ticket, CancellationToken.None);
+        var id = await PendingId();
+        Assert.Null(_state.Read(s => s.Approvals[id].SimilarLabel));
+        Assert.Equal(400, (await b.ResolveAsync(id, ApprovalDecisions.Allow, null, allowSimilar: true, ApprovalActors.Local, null)).StatusCode);
+        Assert.True((await b.ResolveAsync(id, ApprovalDecisions.Allow, null, false, ApprovalActors.Local, null)).Ok);   // still pending: plain allow works
+        await wait;
+        Assert.Equal(0, b.RuleCount(ClaudeHarness.SessionId));
+        Assert.False(b.Prepare(Bash("git push --force origin main"))!.AutoAllowed);
+    }
+
+    [Fact]
+    public async Task Allow_edits_to_this_file_covers_that_file_only()
+    {
+        var b = Broker(ApprovalModes.AllEdits);
+        var wait = b.WaitAsync(b.Prepare(Edit("/work/repo/src/a.cs", "a", "b"))!, CancellationToken.None);
+        var id = await PendingId();
+        Assert.Equal("edits to /work/repo/src/a.cs", _state.Read(s => s.Approvals[id].SimilarLabel));
+        await b.ResolveAsync(id, ApprovalDecisions.Allow, null, allowSimilar: true, ApprovalActors.Local, null);
+        await wait;
+        Assert.True(b.Prepare(Edit("/work/repo/src/a.cs", "c", "d"))!.AutoAllowed);
+        Assert.False(b.Prepare(Edit("/work/repo/src/b.cs", "c", "d"))!.AutoAllowed);
+    }
+
+    [Fact]
+    public async Task Ask_in_terminal_hands_the_call_to_claude_codes_prompt_at_once()
+    {
+        var b = Broker();
+        var wait = b.WaitAsync(b.Prepare(Bash(Risky))!, CancellationToken.None);
+        var id = await PendingId();
+        Assert.True((await b.ResolveAsync(id, ApprovalDecisions.Ask, null, false, ApprovalActors.Local, "dashboard")).Ok);
+        Assert.Equal("""{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"Overhive: the user chose to answer in the terminal"}}""",
+            (await wait.WaitAsync(TimeSpan.FromSeconds(5)))!.ToJsonString());
+        Assert.Equal(ApprovalDecisions.Ask, Events(EventTypes.ApprovalResolved).Single().Payload<ApprovalResolvedData>()!.Decision);
+    }
+
+    [Fact]
+    public async Task One_card_per_call_the_risk_item_is_merged_while_pending_and_after_a_decision()
+    {
+        var b = Broker(hold: TimeSpan.FromMilliseconds(300));
+        var ticket = b.Prepare(Bash(Risky))!;
+        var wait = b.WaitAsync(ticket, CancellationToken.None);
+        var id = await PendingId();
+        // The recorder's finding for the same call (reported, same tool_use_id) and for its process (observed, same span).
+        var finding = ticket.Need.Findings[0];
+        await _sink.PublishAsync(RiskEvent(ticket, finding, ticket.ToolUseId));
+        await _sink.PublishAsync(RiskEvent(ticket, finding, null, observed: true));
+        IReadOnlyList<AttentionItem> Items() => _state.Read(s => AttentionDeriver.Derive(s, _h.Time.Now));
+        Assert.Equal([AttentionKinds.Approval], Items().Select(i => i.Kind));
+
+        await b.ResolveAsync(id, ApprovalDecisions.Deny, null, false, ApprovalActors.Local, null);
+        await wait;
+        Assert.Empty(Items());                                                    // denied: no second "Needs you" item
+        Assert.Equal(2, _state.Read(s => s.Risks.Count));                          // still in the Risks tab
+
+        // A call nobody decided falls back to the normal risk item.
+        var t2 = b.Prepare(Bash("git reset --hard"))!;
+        Assert.Null(await b.WaitAsync(t2, CancellationToken.None));
+        await _sink.PublishAsync(RiskEvent(t2, t2.Need.Findings[0], t2.ToolUseId));
+        Assert.Equal([AttentionKinds.Risk], Items().Select(i => i.Kind));
+    }
+
+    private AgentEvent RiskEvent(ApprovalBroker.Ticket t, RiskFinding f, string? toolUseId, bool observed = false) => new()
+    {
+        Type = EventTypes.RiskDetected, Source = observed ? EventSources.Process : EventSources.System,
+        Evidence = observed ? Evidence.Observed : Evidence.Reported, AgentId = t.AgentId, SessionId = t.SessionId, Ts = _h.Time.Now,
+        DedupeKey = $"risk:{t.AgentId}:{f.RuleId}:{observed}:{toolUseId}",
+        Data = Json.ToObject(new RiskData(f.RuleId, f.Severity, f.Explanation, f.Span, f.Target, t.Need.Command, ToolUseId: toolUseId)),
+    };
 
     // ---- policy (pure) ----
 
@@ -277,7 +354,7 @@ public sealed class ApprovalTests : IDisposable
         var key = ApprovalPolicy.Evaluate(risky, "Read", new JsonObject { ["file_path"] = "/home/u/.ssh/id_ed25519" }, ctx)!;
         Assert.Equal(RiskSeverity.Critical, key.Severity);
         Assert.Contains(key.Findings, f => f.RuleId == RiskRules.CredentialAccess);
-        Assert.Equal("git push", ApprovalPolicy.CommandPrefix("  git push --force origin main\necho done"));
+        Assert.Equal("git push --force\necho done", ApprovalPolicy.NormalizeCommand("  git  push\t--force \r\necho   done "));
     }
 
     [Fact]

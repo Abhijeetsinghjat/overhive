@@ -54,6 +54,8 @@ public sealed class RiskAttentionProvider : IAttentionProvider
     {
         var recent = state.Risks.Values
             .Where(r => r.Severity is RiskSeverity.Critical or RiskSeverity.Warn && ctx.Now - r.At <= ctx.Settings.FailureWindow)
+            // The same call held for approval (or already allowed / denied there) is one card, not two.
+            .Where(r => !Amc.Core.Approvals.ApprovalCoverage.Covers(state, r))
             .ToList();
 
         foreach (var r in recent.Where(r => r.Severity == RiskSeverity.Critical))

@@ -79,6 +79,9 @@ public sealed class WorldState
     /// <summary>Tool calls held for a dashboard decision (see Amc.Core.Approvals); removed when resolved.</summary>
     public Dictionary<string, Amc.Core.Approvals.PendingApproval> Approvals { get; set; } = [];
     public const int MaxApprovals = 500;
+    /// <summary>Recently decided approvals (allow / deny / ask), so their risk finding is not a second "Needs you" item.</summary>
+    public Dictionary<string, Amc.Core.Approvals.ApprovalOutcome> ApprovalOutcomes { get; set; } = [];
+    public const int MaxApprovalOutcomes = 300;
 
     public object? Get(EntityRef r) => r.Kind switch
     {
