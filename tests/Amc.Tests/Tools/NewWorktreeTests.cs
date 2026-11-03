@@ -9,6 +9,7 @@ using Amc.Daemon.Pipeline;
 using Amc.Daemon.Tools;
 using Amc.Tests.Git;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -269,7 +270,12 @@ public sealed class NewWorktreeTests
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = Json.Options.PropertyNamingPolicy);
         await using var app = builder.Build();
         app.UseMiddleware<SecurityMiddleware>();
-        ToolsModule.MapSessionEndpoints(app);
+        ToolsModule.MapNewWorktreeEndpoints(app);
+        app.MapPost("/api/sessions", async (LaunchRequest body, SessionLauncher launcher, CancellationToken ct) =>
+        {
+            var r = await launcher.LaunchAsync(body, ct);
+            return Results.Json(r, statusCode: r.StatusCode);
+        });
         await app.StartAsync();
         var http = app.GetTestClient();
         http.BaseAddress = new Uri("http://127.0.0.1:47821/");

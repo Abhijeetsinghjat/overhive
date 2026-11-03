@@ -26,32 +26,6 @@ public static class ToolsModule
         return s;
     }
 
-    /// <summary>Starting sessions ("+ New session") and creating worktrees for them. Same gates as every /api call.</summary>
-    public static void MapSessionEndpoints(IEndpointRouteBuilder app)
-    {
-        // Start a new session of any configured tool in a Overhive-owned terminal.
-        app.MapPost("/api/sessions", async (LaunchRequest body, SessionLauncher launcher, CancellationToken ct) =>
-        {
-            var r = await launcher.LaunchAsync(body, ct);
-            return Results.Json(r, statusCode: r.StatusCode);
-        });
-
-        // "+ New session" → "a new worktree": branches, default base and location for a folder, and validation of the
-        // branch / base / location typed so far (read-only: runs only local git queries).
-        app.MapGet("/api/new-worktree/plan", async (string? cwd, string? branch, string? @base, string? path, bool? existing,
-            NewWorktreeService svc, CancellationToken ct) =>
-        {
-            var plan = await svc.PlanAsync(cwd, branch, @base, path, existing ?? false, ct);
-            return plan.Ok ? Results.Ok(plan) : Results.Json(new { error = plan.Error }, statusCode: plan.StatusCode);
-        });
-        // Create a worktree only (`agentctl run --worktree` then runs the tool in it locally). Gated like /api/sessions.
-        app.MapPost("/api/new-worktree", async (CreateWorktreeRequest body, NewWorktreeService svc, CancellationToken ct) =>
-        {
-            var r = await svc.CreateAsync(body with { Tool = body.Tool is { } t ? t[..Math.Min(t.Length, 64)] : null }, "cli", ct);
-            return r.Ok ? Results.Json(r, statusCode: 201) : Results.Json(new { error = r.Error }, statusCode: r.StatusCode);
-        });
-    }
-
     public static void MapToolEndpoints(WebApplication app)
     {
         // Known tools and whether each is installed (for the launch dialog and the Integrations view).
@@ -61,7 +35,14 @@ public static class ToolsModule
             integration = t.Adapter is null ? "generic" : "native", installed = ToolRegistry.FindExecutable(t.Command) is not null,
         })));
 
-        MapSessionEndpoints(app);
+        // Start a new session of any configured tool in a Overhive-owned terminal.
+        app.MapPost("/api/sessions", async (LaunchRequest body, SessionLauncher launcher, CancellationToken ct) =>
+        {
+            var r = await launcher.LaunchAsync(body, ct);
+            return Results.Json(r, statusCode: r.StatusCode);
+        });
+
+        MapNewWorktreeEndpoints(app);
 
         // Native hook adapters (Codex, Gemini CLI, Grok, Cursor, Copilot, …): the tool's hook POSTs its payload here.
         app.MapPost("/hooks/{tool}", async (string tool, HttpRequest req, ToolHookReceiver receiver, CancellationToken ct) =>
@@ -96,6 +77,25 @@ public static class ToolsModule
             var msgs = await inbox.TakeAsync(id, wait, ct);
             return msgs.Count == 0 ? Results.NoContent()
                 : Results.Ok(new { messages = msgs.Select(m => new { id = m.MessageId, text = m.Text, sentAt = m.QueuedAt }) });
+        });
+    }
+
+    /// <summary>"+ New session" in a new worktree and `agentctl run --worktree`. Same gates as every /api call.</summary>
+    public static void MapNewWorktreeEndpoints(IEndpointRouteBuilder app)
+    {
+        // "+ New session" → "a new worktree": branches, default base and location for a folder, and validation of the
+        // branch / base / location typed so far (read-only: runs only local git queries).
+        app.MapGet("/api/new-worktree/plan", async (string? cwd, string? branch, string? @base, string? path, bool? existing,
+            NewWorktreeService svc, CancellationToken ct) =>
+        {
+            var plan = await svc.PlanAsync(cwd, branch, @base, path, existing ?? false, ct);
+            return plan.Ok ? Results.Ok(plan) : Results.Json(new { error = plan.Error }, statusCode: plan.StatusCode);
+        });
+        // Create a worktree only (`agentctl run --worktree` then runs the tool in it locally). Gated like /api/sessions.
+        app.MapPost("/api/new-worktree", async (CreateWorktreeRequest body, NewWorktreeService svc, CancellationToken ct) =>
+        {
+            var r = await svc.CreateAsync(body with { Tool = body.Tool is { } t ? t[..Math.Min(t.Length, 64)] : null }, "cli", ct);
+            return r.Ok ? Results.Json(r, statusCode: 201) : Results.Json(new { error = r.Error }, statusCode: r.StatusCode);
         });
     }
 }
