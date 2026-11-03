@@ -159,6 +159,24 @@ curl, so neither curl nor Git Bash is needed. Claude Code needs a version with e
 move the CLI, run `overhive hooks install` again; `overhive doctor` checks the hook forwarder. Details:
 [Hooks on Windows](docs/AGENT_INTEGRATION.md#hooks-on-windows).
 
+### Approve risky actions from the dashboard (Claude Code, opt-in)
+
+Overhive can hold a Claude Code tool call until you allow or deny it in the dashboard, on the phone page or
+with `overhive approvals allow|deny <id>`. It is off by default. Turn it on in
+`~/.config/agent-mission-control/config.json`, restart `amcd`, then run `overhive hooks install` again:
+
+```json
+{ "Approvals": { "Mode": "risky", "TimeoutSeconds": 120 } }
+```
+
+`risky` holds the calls the [risk rules](docs/RISKS.md) rate warn or critical (`MinSeverity` can raise
+that to critical). `all-edits` also holds every Write, Edit, MultiEdit and NotebookEdit. Everything else
+runs as before, with no added delay. A held call shows up in **Needs you** as urgent, with the command or
+the file and a diff preview, the risk finding, and **Allow**, **Deny** (with a reason the agent sees) and
+**Allow similar for this session**. Without a decision within the timeout, or if Overhive is down, Claude
+Code asks in its terminal as usual. Overhive never allows a call on its own. Details:
+[Approvals](docs/AGENT_INTEGRATION.md#approvals-claude-code).
+
 Add a tool Overhive does not know yet:
 
 ```json
@@ -182,6 +200,7 @@ Add a tool Overhive does not know yet:
 | Risky actions (deletes outside the worktree, force-pushes, credential files, `curl \| sh`, publishes, DB drops) | Risks tab, red badge on the agent, `overhive risks` ([rules](docs/RISKS.md)) |
 | Did the agent really do what it says? ("tests pass", "committed", "created X") | Agent panel → Verification; ✗ N on the agent's card and row |
 | Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
+| Allow or deny a risky tool call before it runs (Claude Code, opt-in) | **Needs you** card, agent panel, phone page, `overhive approvals` ([details](docs/AGENT_INTEGRATION.md#approvals-claude-code)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |

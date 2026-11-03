@@ -33,6 +33,26 @@ public static class ClaudeHooksConfig
         $"curl -sf -m 3 --unix-socket {ShellQuote(socketPath)} -H 'Content-Type: application/json' " +
         $"--data-binary @- http://localhost/hooks/claude 2>/dev/null || true # {Marker}";
 
+    /// <summary>Route of the approval variant of the PreToolUse hook: the daemon may hold it for a dashboard decision.</summary>
+    public const string ApprovalRoute = "http://localhost/hooks/claude?approval=1";
+
+    /// <summary>
+    /// PreToolUse hook when approvals are on (config "Approvals", Mode != off): same as <see cref="BuildCommand"/> but on
+    /// <see cref="ApprovalRoute"/> and with <c>curl -m <paramref name="maxTimeSeconds"/></c>, so the daemon can hold a
+    /// risky call until the user decides. Still fails open: daemon down, slow beyond -m or answering with an error
+    /// means no output, exit 0 and Claude Code's normal permission flow.
+    /// </summary>
+    public static string BuildApprovalCommand(string socketPath, int maxTimeSeconds) =>
+        $"curl -sf -m {maxTimeSeconds} --unix-socket {ShellQuote(socketPath)} -H 'Content-Type: application/json' " +
+        $"--data-binary @- '{ApprovalRoute}' 2>/dev/null || true # {Marker}";
+
+    /// <summary>The Windows approval variant (exec form): agentctl hook-forward claude --approval --max-time N.</summary>
+    public static HookCommand BuildWindowsApprovalCommand(HookForwarder forwarder, string socketPath, int maxTimeSeconds) =>
+        new(forwarder.Executable, forwarder.Args("claude", null, socketPath, approvalSeconds: maxTimeSeconds));
+
+    /// <summary>The approval variant of PreToolUse and its Claude Code hook timeout (seconds).</summary>
+    public sealed record ApprovalHook(HookCommand Command, int TimeoutSeconds);
+
     /// <summary>Hook timeout for the asyncRewake waiter (seconds); the daemon releases it before this.</summary>
     public const int RewakeTimeoutSeconds = 3600;
 
@@ -111,7 +131,8 @@ public static class ClaudeHooksConfig
                          groups.Any(g => g?["hooks"] is JsonArray hs && hs.Any(IsOurs)));
 
     /// <summary>Returns a copy of <paramref name="settings"/> with our hooks installed (idempotent; replaces old versions of ours).</summary>
-    public static JsonObject Install(JsonObject settings, HookCommand command, HookCommand? rewakeCommand = null)
+    /// <param name="approval">When set (approvals on), PreToolUse runs this command with its longer timeout instead of <paramref name="command"/>.</param>
+    public static JsonObject Install(JsonObject settings, HookCommand command, HookCommand? rewakeCommand = null, ApprovalHook? approval = null)
     {
         var result = Uninstall(settings);
         var hooks = result["hooks"] as JsonObject ?? new JsonObject();
@@ -120,10 +141,10 @@ public static class ClaudeHooksConfig
         {
             var groups = hooks[ev] as JsonArray ?? new JsonArray();
             hooks[ev] = groups;
-            var group = new JsonObject
-            {
-                ["hooks"] = new JsonArray(With(command.ToJson(), ("timeout", TimeoutSeconds))),
-            };
+            var hook = ev == "PreToolUse" && approval is not null
+                ? With(approval.Command.ToJson(), ("timeout", approval.TimeoutSeconds))
+                : With(command.ToJson(), ("timeout", TimeoutSeconds));
+            var group = new JsonObject { ["hooks"] = new JsonArray(hook) };
             // Tool events take a matcher; "*" (all tools) is explicit rather than relying on omission.
             if (ev is "PreToolUse" or "PostToolUse" or "PostToolUseFailure") group["matcher"] = "*";
             groups.Add(group);

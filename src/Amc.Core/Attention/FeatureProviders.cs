@@ -128,3 +128,37 @@ public sealed class VerificationAttentionProvider : IAttentionProvider
         }
     }
 }
+
+/// <summary>
+/// Tool calls held for a decision (Approvals mode, Claude Code PreToolUse): each is urgent, carries the full
+/// card (<see cref="AttentionItem.Approval"/>) and disappears as soon as it is allowed, denied or expires.
+/// </summary>
+public sealed class ApprovalAttentionProvider : IAttentionProvider
+{
+    public string Name => "approvals";
+
+    public IEnumerable<AttentionItem> Collect(WorldState state, AttentionContext ctx)
+    {
+        foreach (var p in state.Approvals.Values)
+        {
+            var agent = p.AgentId is null ? null : state.Agents.GetValueOrDefault(p.AgentId);
+            var what = p.Command ?? p.FilePath ?? p.Tool;
+            var why = p.Findings.Count > 0 ? p.Findings[0].Explanation : "Edit (approvals for all edits are on)";
+            yield return new AttentionItem
+            {
+                Id = $"{AttentionKinds.Approval}:{p.Id}",
+                Kind = AttentionKinds.Approval,
+                Priority = AttentionPriority.Urgent,
+                AgentIds = p.AgentId is null ? [] : [p.AgentId],
+                Tool = agent?.Provider ?? "claude",
+                Title = $"Approve {p.Tool}: " + (agent is null ? p.AgentId ?? "unknown agent" : AgentAttentionProvider.DisplayName(agent)),
+                Detail = why + " · " + what,
+                Since = p.RequestedAt,
+                Evidence = Evidence.Reported,
+                Action = new AttentionAction(AttentionActions.Approve, "Review", p.Id),
+                MoreActions = p.AgentId is null ? [] : [new AttentionAction(AttentionActions.OpenAgent, "Open", p.AgentId)],
+                Approval = p,
+            };
+        }
+    }
+}

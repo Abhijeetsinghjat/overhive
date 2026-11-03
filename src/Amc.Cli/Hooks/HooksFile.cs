@@ -62,10 +62,11 @@ public static class HooksFile
         }
     }
 
-    public static HooksPlan PlanInstall(string path, ClaudeHooksConfig.HookCommand command, ClaudeHooksConfig.HookCommand? rewakeCommand = null)
+    public static HooksPlan PlanInstall(string path, ClaudeHooksConfig.HookCommand command, ClaudeHooksConfig.HookCommand? rewakeCommand = null,
+        ClaudeHooksConfig.ApprovalHook? approval = null)
     {
         var (exists, before) = Load(path);
-        var after = ClaudeHooksConfig.Install(before, command, rewakeCommand);
+        var after = ClaudeHooksConfig.Install(before, command, rewakeCommand, approval);
         return new HooksPlan(path, ResolveTarget(path), exists, before, after, Summarize(before, after));
     }
 

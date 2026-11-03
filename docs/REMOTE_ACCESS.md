@@ -50,6 +50,13 @@ restart the daemon:
 
 Then open `https://my-laptop.tail1234.ts.net/m` on the phone.
 
+## Approving tool calls from the phone
+
+With approvals on ([AGENT_INTEGRATION.md](AGENT_INTEGRATION.md#approvals-claude-code)), held Claude Code calls
+appear on `/m` with **Allow**, **Deny** and **Allow similar**. Through an SSH tunnel the phone is a local
+client. Through `tailscale serve` it is a remote one: decisions are recorded as `remote`, and
+`"Approvals": { "AllowRemote": false }` restricts deciding to local clients.
+
 ## Notifications on the phone
 
 Phone browsers often allow web notifications only for installed web apps, and only while the page runs. For

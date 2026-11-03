@@ -16,10 +16,11 @@ public static class HooksCommand
         var settingsPath = args.Opt("settings") ?? HooksFile.DefaultSettingsPath(ctx);
         var socket = Path.Combine(ctx.Settings.DataDir, ClaudeHooksConfig.SocketFileName);
         var (command, rewakeCommand) = Commands(ctx, socket);
+        var approval = ApprovalHook(ctx, socket);
         return sub switch
         {
-            "status" => await StatusAsync(ctx, args, settingsPath, command, rewakeCommand, ct),
-            "install" => Change(ctx, args, HooksFile.PlanInstall(settingsPath, command, rewakeCommand), "install"),
+            "status" => await StatusAsync(ctx, args, settingsPath, command, rewakeCommand, approval, ct),
+            "install" => Change(ctx, args, HooksFile.PlanInstall(settingsPath, command, rewakeCommand, approval), "install"),
             "uninstall" => Change(ctx, args, HooksFile.PlanUninstall(settingsPath), "uninstall"),
             _ => throw new UsageException($"unknown hooks subcommand '{sub}' (status | install | uninstall)"),
         };
@@ -33,6 +34,20 @@ public static class HooksCommand
         ctx.IsWindows
             ? (ClaudeHooksConfig.BuildWindowsCommand(ctx.Forwarder, socket), ClaudeHooksConfig.BuildWindowsRewakeCommand(ctx.Forwarder, socket))
             : (ClaudeHooksConfig.BuildCommand(socket), ClaudeHooksConfig.BuildRewakeCommand(socket));
+
+    /// <summary>
+    /// The PreToolUse hook that may wait for a dashboard decision, when config "Approvals" has Mode risky or all-edits;
+    /// null (today's 5 s hook, unchanged) when approvals are off.
+    /// </summary>
+    public static ClaudeHooksConfig.ApprovalHook? ApprovalHook(CliContext ctx, string socket)
+    {
+        var a = ctx.Settings.Approvals;
+        if (!a.Enabled) return null;
+        var cmd = ctx.IsWindows
+            ? ClaudeHooksConfig.BuildWindowsApprovalCommand(ctx.Forwarder, socket, a.TransportSeconds)
+            : (ClaudeHooksConfig.HookCommand)ClaudeHooksConfig.BuildApprovalCommand(socket, a.TransportSeconds);
+        return new ClaudeHooksConfig.ApprovalHook(cmd, a.HookTimeoutSeconds);
+    }
 
     /// <summary>What the hooks need to reach amcd: curl, or on Windows the agentctl they run (null when missing).</summary>
     public static (string Name, string? Path) Transport(CliContext ctx)
@@ -123,7 +138,8 @@ public static class HooksCommand
             : "";
 
     private static async Task<int> StatusAsync(CliContext ctx, ParsedArgs args, string settingsPath,
-        ClaudeHooksConfig.HookCommand expectedCommand, ClaudeHooksConfig.HookCommand expectedRewake, CancellationToken ct)
+        ClaudeHooksConfig.HookCommand expectedCommand, ClaudeHooksConfig.HookCommand expectedRewake, ClaudeHooksConfig.ApprovalHook? approval,
+        CancellationToken ct)
     {
         var s = ctx.Style;
         var (exists, settings) = HooksFile.Load(settingsPath);
@@ -132,8 +148,16 @@ public static class HooksCommand
             (hooks?[ev] as JsonArray)?.OfType<JsonObject>().SelectMany(g => g["hooks"] as JsonArray ?? [])
             .Where(ClaudeHooksConfig.IsOurs).ToList() ?? []);
         var installed = ClaudeHooksConfig.IsInstalled(settings);
-        var stale = perEvent.Values.SelectMany(x => x).Any(h => !expectedCommand.Matches(h) && !expectedRewake.Matches(h))
+        var stale = perEvent.Any(kv => kv.Value.Any(h => !Expected(kv.Key, h)))
                     || !ClaudeHooksConfig.IsRewakeInstalled(settings);
+        // PreToolUse must be the approval variant with its timeout exactly when approvals are on.
+        bool Expected(string ev, JsonNode? h) =>
+            expectedRewake.Matches(h) ||
+            (ev == "PreToolUse" && approval is not null
+                ? approval.Command.Matches(h) && h?["timeout"]?.GetValue<int>() == approval.TimeoutSeconds
+                : expectedCommand.Matches(h));
+        var approvalsText = approval is null ? "off"
+            : $"{ctx.Settings.Approvals.EffectiveMode} (PreToolUse waits up to {ctx.Settings.Approvals.EffectiveTimeoutSeconds} s for a dashboard decision; hook timeout {approval.TimeoutSeconds} s)";
 
         bool reachable;
         string reachDetail;
@@ -158,6 +182,7 @@ public static class HooksCommand
             {
                 ["settingsPath"] = settingsPath, ["exists"] = exists, ["installed"] = installed, ["upToDate"] = installed && !stale,
                 ["events"] = events, ["daemonReachable"] = reachable, [transport] = transportPath,
+                ["approvals"] = ctx.Settings.Approvals.EffectiveMode,
             });
             return ExitCodes.Ok;
         }
@@ -165,6 +190,7 @@ public static class HooksCommand
         ctx.Out.WriteLine($"settings   {settingsPath}{(exists ? "" : s.Dim(" (does not exist)"))}");
         ctx.Out.WriteLine($"installed  {(installed ? s.Green("yes") + (stale ? s.Yellow(" (outdated command — run `agentctl hooks install`)") : "") : perEvent.Values.Any(v => v.Count > 0) ? s.Yellow("partially") : s.Red("no"))}");
         ctx.Out.WriteLine("events     " + string.Join(" ", perEvent.Select(kv => kv.Value.Count > 0 ? s.Green(kv.Key) : s.Dim(kv.Key + "✗"))));
+        ctx.Out.WriteLine($"approvals  {approvalsText}");
         ctx.Out.WriteLine($"daemon     {s.Ok(reachable)} {reachDetail}");
         ctx.Out.WriteLine($"{transport,-10} {s.Ok(transportPath is not null)} {transportPath ?? (transport == "curl"
             ? "not found on PATH — hooks cannot reach the daemon"

@@ -16,6 +16,7 @@ public static class EntityKinds
     public const string Conflict = "conflict";
     public const string Risk = "risk";
     public const string Guard = "guard";
+    public const string Approval = "approval";
 }
 
 public readonly record struct EntityRef(string Kind, string Id);
@@ -75,6 +76,9 @@ public sealed class WorldState
     [System.Text.Json.Serialization.JsonIgnore] internal Amc.Core.Verification.VerificationDirtySet VerificationDirty { get; } = new();
     /// <summary>Active runaway-guard alerts, keyed root|rule (see Amc.Core.Guard).</summary>
     public Dictionary<string, Amc.Core.Guard.GuardAlert> GuardAlerts { get; set; } = [];
+    /// <summary>Tool calls held for a dashboard decision (see Amc.Core.Approvals); removed when resolved.</summary>
+    public Dictionary<string, Amc.Core.Approvals.PendingApproval> Approvals { get; set; } = [];
+    public const int MaxApprovals = 500;
 
     public object? Get(EntityRef r) => r.Kind switch
     {
@@ -89,6 +93,7 @@ public sealed class WorldState
         EntityKinds.Conflict => Conflicts.GetValueOrDefault(r.Id),
         EntityKinds.Risk => Risks.GetValueOrDefault(r.Id),
         EntityKinds.Guard => GuardAlerts.GetValueOrDefault(r.Id),
+        EntityKinds.Approval => Approvals.GetValueOrDefault(r.Id),
         _ => null,
     };
 

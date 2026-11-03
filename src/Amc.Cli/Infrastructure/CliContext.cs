@@ -11,6 +11,9 @@ public sealed record CliSettings(Uri DaemonUrl, int Port, string DataDir, string
 {
     public const int DefaultPort = 47821;
 
+    /// <summary>Config section "Approvals" (mode and timeout decide which PreToolUse hook `hooks install` writes).</summary>
+    public Amc.Core.Approvals.ApprovalSettings Approvals { get; init; } = new();
+
     public static CliSettings Load(Func<string, string?> env, string home, string? urlOverride = null)
     {
         var configHome = env("XDG_CONFIG_HOME") is { Length: > 0 } x ? x : Path.Combine(home, ".config");
@@ -45,7 +48,24 @@ public sealed record CliSettings(Uri DaemonUrl, int Port, string DataDir, string
         }
         else url = new Uri($"http://127.0.0.1:{port}/");
 
-        return new CliSettings(url, url.Port, dataDir, Path.Combine(dataDir, "token"), configPath, claudeHome);
+        return new CliSettings(url, url.Port, dataDir, Path.Combine(dataDir, "token"), configPath, claudeHome)
+        {
+            Approvals = LoadApprovals(env, config),
+        };
+    }
+
+    /// <summary>"Approvals" from config.json, overridden by AMC_Approvals__Mode / __TimeoutSeconds / __MinSeverity like the daemon.</summary>
+    public static Amc.Core.Approvals.ApprovalSettings LoadApprovals(Func<string, string?> env, JsonObject? config)
+    {
+        var section = config?.FirstOrDefault(kv => string.Equals(kv.Key, "Approvals", StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+        string? Get(string key) =>
+            EnvCI(env, "AMC_Approvals__" + key) ??
+            section?.FirstOrDefault(kv => string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)).Value?.ToString();
+        var a = new Amc.Core.Approvals.ApprovalSettings();
+        if (Get("Mode") is { Length: > 0 } m) a.Mode = m;
+        if (Get("MinSeverity") is { Length: > 0 } sev) a.MinSeverity = sev;
+        if (int.TryParse(Get("TimeoutSeconds"), out var t)) a.TimeoutSeconds = t;
+        return a;
     }
 
     private static string? EnvCI(Func<string, string?> env, string key) =>

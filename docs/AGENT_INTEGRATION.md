@@ -138,6 +138,69 @@ transport are reported as `unsupported`; the others as `queued` or `delivered`.
 (`/run/user/<uid>/cc-socks/*.sock`). Their protocol is undocumented and authenticated by
 per-session tokens; researching it was declined.
 
+## Approvals (Claude Code)
+
+Overhive can hold a Claude Code tool call until the user allows or denies it in the dashboard, on the phone
+page (`/m`) or with `overhive approvals allow|deny <id> [--reason TEXT] [--similar]`. It uses Claude Code's
+documented `PreToolUse` decision control: the hook answers
+
+```json
+{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow" | "deny",
+                          "permissionDecisionReason": "…" } }
+```
+
+"allow" skips Claude Code's permission prompt (deny and ask rules in the user's settings still apply);
+"deny" blocks the call and Claude sees the reason. Answering nothing (exit 0, empty output) leaves the call
+to Claude Code's normal permission flow, which is what every fallback does.
+
+**Off by default.** Config section `Approvals` in `~/.config/agent-mission-control/config.json`:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `Mode` | `off` | `off`: nothing waits and the hooks are exactly as before. `risky`: calls the risk classifier ([RISKS.md](RISKS.md)) rates at least `MinSeverity` wait. `all-edits`: also every Write / Edit / MultiEdit / NotebookEdit. |
+| `MinSeverity` | `warn` | `warn` or `critical`. Info findings never wait. |
+| `TimeoutSeconds` | `120` | How long a call waits (10 to 3000). Then Claude Code asks in its terminal as usual. |
+| `AllowRemote` | `true` | Whether clients that come through an `AllowedHosts` name (`tailscale serve`) may decide. |
+
+Bash commands are classified as a whole; file tools by their path (Write/Edit to `~/.bashrc`, a Read of
+`~/.ssh/id_ed25519`). After changing `Mode` or `TimeoutSeconds`, restart `amcd` and run `agentctl hooks
+install` again (`hooks status` reports the hook as outdated, `doctor` checks it).
+
+**The hook.** Only while `Mode` is not `off`, `hooks install` writes a different `PreToolUse` hook; every
+other hook is unchanged:
+
+| | Linux / macOS | Windows |
+|-|---------------|---------|
+| command | `curl -sf -m <T+15> … 'http://localhost/hooks/claude?approval=1' … \|\| true` | `agentctl hook-forward claude --approval --max-time <T+15> --socket …` |
+| Claude Code `timeout` | `T+30` | `T+30` |
+
+`T` is `TimeoutSeconds`. The daemon answers within `T`, the transport gives up at `T+15` and fails open (no
+output, exit 0), and Claude Code's own timeout comes last, so Claude Code never cancels a hook that is about
+to answer. The daemon holds a call only on the `?approval=1` route, so a stale 3-second hook never waits.
+
+**What happens to a held call:**
+
+| Event | Hook answer | Recorded as |
+|-------|-------------|-------------|
+| Allow (dashboard, phone page, CLI) | `permissionDecision: allow` | `approval.resolved` allow, by `local` or `remote`, latency |
+| Deny, optional reason | `permissionDecision: deny`, reason "Denied by the user in Overhive: …" | `approval.resolved` deny |
+| Allow similar for this session | allow; later calls of the same session with the same rules, severity and command prefix (first two words, e.g. `git push`) or the same file are allowed at once | `approval.resolved` by `session-rule` (in memory; cleared at `SessionEnd` and on restart) |
+| No decision within `T` | nothing (normal permission flow) | `approval.resolved` expired |
+| Claude Code cancels the hook, the transport times out | nothing | expired |
+| Daemon stops or restarts, or is down | nothing (the transport fails open) | expired (at shutdown, or on the next start) |
+| Any error in the daemon | nothing | — |
+
+Overhive never allows a call without a decision or a rule the user created. While a call waits, the session
+waits too; the terminal prompt appears only after the timeout. A held call is an urgent **Needs you** item
+(notifications included when enabled) and a card in the agent's panel: agent, tool, working directory, the
+full command or the file with a diff preview (Edit old/new strings truncated at 1,500 characters each), the
+risk findings, a countdown, and the buttons. Resolved and expired items disappear; the events stay in the
+timeline. Ids are 128-bit random and single-use: the first decision wins, later ones get 404.
+
+At most 100 calls are held at once; further calls use the normal permission flow. Only Claude Code is
+supported for now. Codex, Gemini CLI, Cursor, Copilot CLI and Grok have similar hook decisions, but they are
+not wired up yet.
+
 ## Controls
 
 | Action | Main agent | Sub-agent |

@@ -5,6 +5,20 @@ version is 0.x, minor versions may change behaviour.
 
 ## [Unreleased]
 
+### Added
+- Approve or deny Claude Code tool calls from the dashboard (opt-in, config `Approvals`, off by default).
+  `"Mode": "risky"` holds the calls the risk rules rate warn or critical; `"all-edits"` also holds every
+  Write/Edit/MultiEdit/NotebookEdit. A held call is an urgent **Needs you** card (also on the phone page and
+  in the agent panel) with the command or file and a diff preview, the risk finding, **Allow**, **Deny**
+  with a reason the agent sees, and **Allow similar for this session**. `overhive approvals` lists them and
+  `overhive approvals allow|deny <id> [--reason]` decides. Without a decision within `TimeoutSeconds`
+  (default 120), when the daemon is down or on any error, Claude Code's normal permission flow applies:
+  nothing is allowed silently. Decisions are control actions (token, Origin/Host checks, `EnableControl`,
+  plus `Approvals.AllowRemote`), ids are random and single-use, and `approval.requested` /
+  `approval.resolved` events (decision, local or remote, latency) appear in the timeline. `overhive hooks
+  install` writes a PreToolUse hook with a matching longer timeout only while approvals are on (curl on
+  Linux/macOS, `hook-forward --approval --max-time` on Windows); `hooks status` and `doctor` check it.
+
 ## [0.3.0] - 2026-11-02
 
 Still beta. First release with a native Windows build (early preview), plus a 3D dashboard, much lower

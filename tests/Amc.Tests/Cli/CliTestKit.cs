@@ -57,6 +57,8 @@ public sealed class CliHarness : IDisposable
     public bool Windows { get; set; }
     /// <summary>The agentctl Windows hooks run (a path with a space and an apostrophe, to exercise quoting).</summary>
     public Amc.Core.Providers.HookForwarder Forwarder { get; set; } = new(@"C:\Users\Jane O'Neil\AppData\Local\Overhive\agentctl.exe");
+    /// <summary>Config section "Approvals" as agentctl would read it (off by default).</summary>
+    public Amc.Core.Approvals.ApprovalSettings Approvals { get; set; } = new();
 
     public CliContext Context(string input = "", bool interactive = false) => new()
     {
@@ -74,7 +76,7 @@ public sealed class CliHarness : IDisposable
         IsWindows = Windows,
         ForwarderOverride = Forwarder,
         SettingsOverride = new CliSettings(new Uri("http://127.0.0.1:47821/"), 47821, Path.Combine(Dir, "state"),
-            Path.Combine(Dir, "state", "token"), Path.Combine(Dir, "config.json"), Path.Combine(Dir, ".claude")),
+            Path.Combine(Dir, "state", "token"), Path.Combine(Dir, "config.json"), Path.Combine(Dir, ".claude")) { Approvals = Approvals },
     };
 
     public async Task<int> Run(string input, bool interactive, params string[] argv) =>
