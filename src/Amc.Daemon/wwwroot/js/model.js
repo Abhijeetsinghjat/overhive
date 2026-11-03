@@ -233,6 +233,7 @@ export function describe(e) {
     case 'worktree.created': text = `Worktree ${d.branch || ''} at ${d.root}`; break;
     case 'worktree.changed': text = `Worktree ${d.branch || ''}: ${d.modified || 0}M ${d.added || 0}A ${d.deleted || 0}D ${d.untracked || 0}? ${d.conflicted ? d.conflicted + 'U' : ''}`; detail = d.root || ''; break;
     case 'worktree.deleted': text = `Worktree removed ${d.root || ''}`; break;
+    case 'worktree.provisioned': text = `Overhive created worktree ${d.branch || ''}${d.newBranch && d.base ? `, branched off ${d.base}` : ''}`; detail = d.root || ''; break;
     case 'test.started': text = `Tests started: ${oneLine(d.command, 140)}`; break;
     case 'test.passed': [icon, iconCls] = ICON.ok; text = `Tests passed: ${d.passed ?? '?'} passed${d.skipped ? `, ${d.skipped} skipped` : ''}`; detail = d.command || ''; break;
     case 'test.failed': [icon, iconCls] = ICON.fail; text = `Tests failed: ${d.failed ?? '?'} failed, ${d.passed ?? '?'} passed`; detail = (d.failedTests || []).join(', '); bad = true; break;

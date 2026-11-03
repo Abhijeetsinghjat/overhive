@@ -47,6 +47,7 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `git.merge` / `git.rebase` / `git.conflict` | `GitRefData` / `GitConflictData` | git dir state | observed |
 | `repository.discovered` | `RepositoryData` | workspace scan, path resolution | observed |
 | `worktree.created` / `worktree.changed` / `worktree.deleted` | `WorktreeData` | `git worktree list`, status | observed |
+| `worktree.provisioned` | `WorktreeProvisionedData` (root, branch, base, new branch?, via dashboard/cli, terminal, tool) | Overhive ran `git worktree add` for a session; sets `Worktree.Origin` | observed |
 | `test.started` / `test.passed` / `test.failed` | `TestRunData` | test command + parsed output | inferred |
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
 | `terminal.started` / `terminal.exited` | `TerminalData` | `agentctl run` | observed |

@@ -57,6 +57,7 @@ public static class EventTypes
     public const string WorktreeCreated = "worktree.created";      // WorktreeData
     public const string WorktreeChanged = "worktree.changed";      // WorktreeData
     public const string WorktreeDeleted = "worktree.deleted";      // WorktreeData
+    public const string WorktreeProvisioned = "worktree.provisioned"; // WorktreeProvisionedData — Overhive created it for a session
 
     // Tests
     public const string TestStarted = "test.started";              // TestRunData
@@ -199,6 +200,16 @@ public sealed record WorktreeData(
     int Behind = 0,
     string? Upstream = null,
     string? Operation = null);
+
+/// <summary>Overhive ran <c>git worktree add</c> to start a session there (dashboard "new worktree" or <c>run --worktree</c>).</summary>
+public sealed record WorktreeProvisionedData(
+    string Root,
+    string Branch,
+    string? Base,
+    bool NewBranch,
+    string Via,
+    string? TerminalId = null,
+    string? Tool = null);
 
 public sealed record TestRunData(
     string ToolUseId, string Runner, string Command,

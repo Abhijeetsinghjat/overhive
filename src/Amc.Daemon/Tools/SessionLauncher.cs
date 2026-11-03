@@ -7,8 +7,11 @@ using Microsoft.Extensions.Options;
 
 namespace Amc.Daemon.Tools;
 
-public sealed record LaunchRequest(string Cwd, string? Model = null, string? Prompt = null, string Tool = "claude");
-public sealed record LaunchResult(bool Ok, string Detail, string? TerminalId = null, int? Pid = null, int StatusCode = 200);
+/// <param name="Worktree">When set, a new git worktree is created from the repository at <paramref name="Cwd"/> and the tool starts there.</param>
+public sealed record LaunchRequest(string Cwd, string? Model = null, string? Prompt = null, string Tool = "claude", NewWorktreeSpec? Worktree = null);
+/// <param name="WorktreePath">The worktree created for this session (also reported when a later step failed: it is left in place).</param>
+public sealed record LaunchResult(bool Ok, string Detail, string? TerminalId = null, int? Pid = null, int StatusCode = 200,
+    string? WorktreePath = null, string? WorktreeId = null, IReadOnlyList<string>? Warnings = null);
 
 /// <summary>
 /// Starts a new interactive session of any configured AI tool inside a Overhive-owned PTY (`agentctl run`),
@@ -19,9 +22,12 @@ public sealed record LaunchResult(bool Ok, string Detail, string? TerminalId = n
 /// user's home that is a known worktree/repository or inside a workspace root.
 /// </summary>
 public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state, IEventSink sink, IOptions<AmcOptions> options,
-    ILogger<SessionLauncher> log)
+    ILogger<SessionLauncher> log, NewWorktreeService? worktrees = null)
 {
     private readonly AmcOptions _options = options.Value;
+
+    /// <summary>Test hook: the agentctl to run instead of the one next to the daemon / on PATH.</summary>
+    internal string? AgentctlOverride { get; set; }
 
     public async Task<LaunchResult> LaunchAsync(LaunchRequest req, CancellationToken ct)
     {
@@ -30,6 +36,9 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         if (tools.Get(req.Tool) is not { } tool) return new(false, $"Unknown tool '{req.Tool}'", StatusCode: 400);
         var cwd = ValidateCwd(req.Cwd, out var why);
         if (cwd is null) return new(false, why, StatusCode: 400);
+        // With a new worktree the folder above is the repository it is created from; the session runs in the worktree.
+        if (req.Worktree is not null && worktrees is null) return new(false, "Starting in a new worktree is not available", StatusCode: 501);
+        if (req.Worktree is not null && string.IsNullOrWhiteSpace(req.Worktree.Branch)) return new(false, "Enter a branch name for the new worktree", StatusCode: 400);
         if (req.Model is { Length: > 0 } m && (tool.ModelFlag is null || !AgentTool.ValidModel(m)))
             return new(false, tool.ModelFlag is null ? $"{tool.Name} is started with its default model" : "Invalid model name", StatusCode: 400);
         var prompt = req.Prompt?.Trim();
@@ -38,7 +47,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
 
         var exe = ToolRegistry.FindExecutable(tool.Command);
         if (exe is null) return new(false, $"{tool.Name} (`{tool.Command}`) is not installed or not on PATH", StatusCode: 409);
-        var agentctl = FindAgentctl();
+        var agentctl = AgentctlOverride ?? FindAgentctl();
         if (agentctl is null) return new(false, "agentctl was not found next to the daemon or on PATH (run scripts/install.sh)", StatusCode: 409);
 
         var terminalId = Ulid.NewId();
@@ -57,10 +66,28 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         psi.Environment.Remove("CLAUDECODE");                  // never look like a child of another Claude session
         psi.Environment.Remove("CLAUDE_CODE_CHILD_SESSION");
 
+        // Everything that can be checked is checked before the worktree exists. From here on a failure leaves it in
+        // place (never deleted automatically) and the result says where it is.
+        NewWorktreeResult? wt = null;
+        if (req.Worktree is { } spec)
+        {
+            wt = await worktrees!.CreateAsync(new CreateWorktreeRequest(req.Cwd, spec.Branch, spec.Base, spec.Path, spec.ExistingBranch,
+                spec.Fetch, terminalId, tool.Id), "dashboard", ct);
+            if (!wt.Ok) return new(false, wt.Error ?? "Could not create the worktree", StatusCode: wt.StatusCode);
+            cwd = NewWorktreeService.Native(wt.Path!);           // the root git reported for the new worktree
+            psi.WorkingDirectory = cwd;
+            if (spec.RunSetup)
+            {
+                var setup = await worktrees.RunSetupAsync(wt, ct);
+                if (!setup.Ok) return await FailedAfterWorktreeAsync(wt, tool, terminalId, setup.Detail, ct);
+            }
+        }
+
         Process proc;
         try { proc = Process.Start(psi) ?? throw new InvalidOperationException("process did not start"); }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            if (wt is not null) return await FailedAfterWorktreeAsync(wt, tool, terminalId, "Could not start the session: " + ex.Message, ct);
             return new(false, "Could not start the session: " + ex.Message, StatusCode: 500);
         }
         proc.StandardInput.Close();                            // no local keyboard: input comes from the dashboard
@@ -74,11 +101,28 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         await sink.PublishAsync(new AgentEvent
         {
             Type = EventTypes.AuditControl, Source = EventSources.User, Evidence = Evidence.Observed,
+            WorktreeId = wt?.WorktreeId,
             Data = Json.ToObject(new AuditData("launch", cwd, "ok",
-                $"{tool.Command}{(req.Model is { Length: > 0 } ? $" {tool.ModelFlag} {req.Model}" : "")} in terminal {terminalId}")),
+                $"{tool.Command}{(req.Model is { Length: > 0 } ? $" {tool.ModelFlag} {req.Model}" : "")} in terminal {terminalId}" +
+                (wt is not null ? $"; created {wt.Describe()}" : ""))),
         }, ct);
-        log.LogInformation("Launched {Tool} in {Cwd} (terminal {Terminal}, pid {Pid})", tool.Name, cwd, terminalId, proc.Id);
-        return new(true, $"{tool.Name} is starting in its terminal; it appears in the agent tree within a few seconds", terminalId, proc.Id, 202);
+        log.LogInformation("Launched {Tool} in {Cwd} (terminal {Terminal}, pid {Pid})", tool.Name, NewWorktreeService.LogSafe(cwd), terminalId, proc.Id);
+        var detail = $"{tool.Name} is starting in its terminal; it appears in the agent tree within a few seconds";
+        if (wt is not null) detail = $"Created {wt.Describe()}. " + detail;
+        return new(true, detail, terminalId, proc.Id, 202, wt?.Path, wt?.WorktreeId, wt?.Warnings);
+    }
+
+    /// <summary>A step after the worktree was created failed: audit it and report the worktree, which stays.</summary>
+    private async Task<LaunchResult> FailedAfterWorktreeAsync(NewWorktreeResult wt, AgentTool tool, string terminalId, string why, CancellationToken ct)
+    {
+        await sink.PublishAsync(new AgentEvent
+        {
+            Type = EventTypes.AuditControl, Source = EventSources.User, Evidence = Evidence.Observed, WorktreeId = wt.WorktreeId,
+            Data = Json.ToObject(new AuditData("launch", wt.Path!, "failed", $"{tool.Command} in terminal {terminalId}: {why}; created {wt.Describe()} (left in place)")),
+        }, ct);
+        log.LogWarning("Session start in new worktree {Path} failed: {Why}", NewWorktreeService.LogSafe(wt.Path), NewWorktreeService.LogSafe(why));
+        return new(false, $"{why}. The worktree was created and left in place: {wt.Path} (branch {wt.Branch}).", StatusCode: 500,
+            WorktreePath: wt.Path, WorktreeId: wt.WorktreeId, Warnings: wt.Warnings);
     }
 
     /// <summary>Real, existing directory under $HOME that is a known worktree/repo root or inside a workspace root.</summary>
@@ -96,7 +140,7 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { why = "Working directory is not accessible"; return null; }
         real = Path.TrimEndingDirectorySeparator(real);
         static bool Inside(string root, string p) => PathText.IsUnder(root, p);
-        if (!Inside(AmcOptions.Home, real) && !Inside(OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp", real)) { why = "Working directory must be inside your home directory"; return null; }
+        if (!NewWorktreeService.InsideAllowedRoot(real)) { why = "Working directory must be inside your home directory"; return null; }
         var known = state.Read(s => s.Worktrees.Values.Where(w => !w.Removed).Select(w => w.Root).ToList());
         if (known.Any(r => Inside(r, real)) || _options.EffectiveWorkspaceRoots.Any(r => Inside(r, real)))
             return real;

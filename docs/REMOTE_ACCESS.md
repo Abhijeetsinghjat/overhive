@@ -6,7 +6,9 @@ listens on `127.0.0.1` only. To use it from a phone, bring the phone to the daem
 Overhive never uses a vendor relay.
 
 **Read this first.** The dashboard page embeds the API token. Whoever can open the page can do everything
-you can in the dashboard: read agent output and diffs, message agents, pause or stop them. Only expose it to
+you can in the dashboard: read agent output and diffs, message agents, pause or stop them,
+start new sessions and create worktrees for them (`EnableControl: false` turns off starting sessions, worktree
+creation and process control for every client). Only expose it to
 your own devices.
 
 ## Option 1: SSH tunnel (nothing to configure in Overhive)

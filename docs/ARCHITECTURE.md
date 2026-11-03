@@ -221,6 +221,26 @@ effect); interrupt = ESC into PTY (PTY sessions only); terminate = SIGTERM
 (confirmation required). Per-sub-agent stop is not supported by Claude Code; the UI
 disables it with the reason.
 
+### Sessions in a new worktree
+
+"+ New session" can create a git worktree first (`NewWorktreeService`, daemon; pure path rules in
+`Amc.Core/Domain/NewWorktreePaths`). Order: every input is validated before anything is written: the tool and
+`agentctl` exist; the folder passes the usual session rule (inside home, a known worktree or a workspace root;
+its repository is discovered first so `agentctl run --worktree` works in a repository Overhive has not seen);
+the branch passes `git check-ref-format --branch` and does not exist (or, with "existing", exists and is not
+checked out elsewhere); the base resolves to a commit; the location is absolute, inside home, not inside or
+containing another worktree or the `.git` dir, and missing or an empty directory. Then, only if asked,
+`git fetch --no-tags <remote> <branch>` for a remote-tracking base; then `git worktree add --no-track -b <branch>
+-- <path> <base>` (or `-- <path> <branch>`), with `ArgumentList` and the usual git environment. The collector
+re-lists the repository (`DiscoverRepositoryAsync`, waits until applied), then `worktree.provisioned` records
+the origin (`Worktree.Origin`: via, branch, base, terminal id of the session, tool) and `audit.control`
+(`worktree.add`) is written. The optional `NewWorktree:SetupCommand` runs next (argument list, 15 min limit,
+last lines reported on failure), then the tool starts exactly as for any session; the launch audit records
+the worktree, branch and base. A failure after `git worktree add` never removes anything: the response and an
+`audit.control` with outcome `failed` name the worktree that was left. The CLI asks the daemon to create the
+worktree (`POST /api/new-worktree`), runs the setup command itself in the user's terminal with `--setup`, then
+runs the PTY in the worktree. Ignored files (`node_modules`, `.env`) are never copied.
+
 ## 9. Attribution, ownership & conflicts
 
 * Edit/Write/MultiEdit/NotebookEdit ⇒ `file.*` for that agent, evidence `reported`;
@@ -306,6 +326,9 @@ GET  /api/processes                  live process overlay
 POST /api/agents/{id}/messages       {text}
 POST /api/agents/{id}/control        {action, confirm}
 GET  /api/terminals/{id}/buffer
+POST /api/sessions                   {tool, cwd, model?, prompt?, worktree?: {branch, base?, path?, existingBranch, fetch, runSetup}}
+GET  /api/new-worktree/plan?cwd=&branch=&base=&path=&existing=   branches, default base/location, validation
+POST /api/new-worktree               {cwd, branch, base?, path?, existingBranch, fetch, terminalId?, tool?} (agentctl run --worktree)
 GET  /api/guard                      runaway guard: rules, live values per session, active alerts
 POST /api/guard/dismiss              {key} or {rootAgentId}
 POST /api/guard/pause                {rootAgentId}: pause the session tree

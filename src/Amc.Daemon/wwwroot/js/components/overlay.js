@@ -43,7 +43,8 @@ function restoreFocus(opener) {
  * Modal confirmation. If `typeToConfirm` is set, the confirm button only enables once the
  * user typed exactly that string. Resolves true/false.
  */
-export function confirmModal({ title, body, confirmLabel = 'Confirm', danger = false, typeToConfirm = null, wide = false }) {
+/** `onReady(okButton)` lets the body enable/disable the confirm button (e.g. while its fields are invalid). */
+export function confirmModal({ title, body, confirmLabel = 'Confirm', danger = false, typeToConfirm = null, wide = false, onReady = null }) {
   return new Promise((resolve) => {
     const opener = document.activeElement;
     const input = typeToConfirm ? h('input', { class: 'input mono', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Type to confirm' }) : null;
@@ -70,6 +71,7 @@ export function confirmModal({ title, body, confirmLabel = 'Confirm', danger = f
     document.body.appendChild(back);
     openModal = back;
     (input || ok).focus();
+    onReady?.(ok);
   });
 }
 

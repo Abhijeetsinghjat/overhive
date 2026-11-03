@@ -184,7 +184,29 @@ Add a tool Overhive does not know yet:
 | Runaway sub-agent fan-out or token burn | Runaway guard banner, agent panel, `overhive guard` ([details](docs/RUNAWAY_GUARD.md)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
+| Start an agent on its own branch in a fresh worktree | **+ New session** → Run in **a new worktree**, `overhive run --worktree <branch> -- <tool>` ([below](#a-session-in-a-new-worktree)) |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |
+
+### A session in a new worktree
+
+In **+ New session**, pick a folder inside a Git repository and choose **Run in: a new worktree**. Enter a branch
+name (or tick **Use an existing branch**), pick the base from the searchable branch list (default: the remote
+default branch such as `origin/main`, else the current branch) and check the location shown before starting.
+Overhive runs `git worktree add` and starts the tool there. From a terminal inside the repository:
+
+```
+overhive run --worktree feat/login [--base origin/main] [--path DIR] [--existing] [--fetch] [--setup] -- claude
+```
+
+* New worktrees go to `<repo-parent>/<repo>.worktrees/<branch>` (`/` in the branch becomes `-`). Change it with
+  `"NewWorktree": { "Root": "~/worktrees/{repo}" }` in `config.json`.
+* **Fetch the base first** (`--fetch`) is off by default: Overhive does no network actions unless you ask.
+* A new worktree is a fresh checkout: ignored files such as `node_modules` or `.env` are **not** there. Optionally
+  set a per-repository setup command, offered in the dialog (off by default) and run with `--setup`:
+  `"NewWorktree": { "SetupCommand": { "my-app": ["npm", "ci"] } }` (key: repository folder name or main worktree
+  path; an argument list, never a shell line).
+* Nothing is deleted automatically: if the tool or the setup command fails to start, the worktree stays and its
+  path is reported. Worktrees created this way are marked "created by Overhive" in the worktree panel.
 
 Every status, file attribution, test result and reply carries an evidence label: **observed** (the
 OS or Git saw it), **reported** (the tool said so) or **inferred** (correlation). Overhive never shows
