@@ -6,6 +6,20 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Clean up a worktree after its PR merges. Linked worktrees whose branch is merged are detected through the
+  user's own `gh` CLI when installed and authenticated (observed; matched by branch name and by the worktree's
+  HEAD being part of the PR head, so a branch reused after the merge is not merged) or, without gh, from git
+  alone without fetching ("likely merged", inferred). Default mode `suggest`: a **Merged — clean up** badge and
+  button, a low-priority "Needs you" item, and a confirm dialog listing what will be removed and every safety
+  check. Removal is `git worktree remove` (never `--force`) plus `git branch -d` (`-D` only for a squash merge
+  whose tip gh confirmed as the PR head); the remote branch is deleted only with `DeleteRemoteBranch` and only
+  when its tip is the PR head. Blocked for the main or a locked worktree, uncommitted or untracked files,
+  unpushed commits, an active agent, an open Overhive terminal or any process with its current directory
+  inside; all re-checked right before removal. Ignored files that are not regenerable (`.env`, keys, local
+  config; `RegenerableIgnored` lists the safe ones such as `node_modules`, `bin`, `dist`) block auto mode and
+  need an extra confirmation (`confirmIgnored`, `--include-ignored`) for a manual cleanup. `Mode: "auto"` removes after a 30 min grace period. New
+  events `worktree.merged` and `worktree.cleaned` (timeline), `GET/POST /api/worktrees/{id}/cleanup`,
+  `POST /api/worktrees/check-merged`, and `overhive worktrees clean [<path>] [--dry-run] [--yes]`. `Reducer.Version` 15.
 - **Start a session in a new worktree**: **+ New session** offers *Run in: this folder | a new worktree* once
   the folder is inside a Git repository. Enter a branch name (validated with `git check-ref-format`, refused
   if it exists unless *Use an existing branch* is ticked), pick the base from a searchable list of local and

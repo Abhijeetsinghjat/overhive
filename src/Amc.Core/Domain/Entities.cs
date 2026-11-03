@@ -179,6 +179,13 @@ public sealed class Worktree
     /// <summary>Agents that touched this worktree, with last touch time.</summary>
     public Dictionary<string, DateTimeOffset> Agents { get; set; } = [];
     /// <summary>
+    /// The branch's pull request is merged (observed via gh) or the branch is likely merged (inferred from git), for
+    /// exactly the branch and HEAD recorded in it. Cleared as soon as the worktree's branch or HEAD moves.
+    /// </summary>
+    public WorktreeMerge? Merged { get; set; }
+    /// <summary>Last cleanup attempt that did not remove the worktree (blocked, failed, partial). Null otherwise.</summary>
+    public WorktreeCleanupRecord? LastCleanup { get; set; }
+    /// <summary>
     /// Set when Overhive itself created this worktree to start a session in it ("+ New session" → a new worktree, or
     /// <c>agentctl run --worktree</c>); null for worktrees found by discovery. Kept after the worktree is removed.
     /// </summary>
@@ -193,6 +200,35 @@ public sealed class Worktree
         Dirty ? "dirty" :
         Agents.Count > 0 ? "assigned" : "clean";
 }
+
+/// <summary>Where a merged status comes from: GitHub through the gh CLI (observed) or git alone (inferred, "likely merged").</summary>
+public static class MergeSources
+{
+    public const string GitHub = "gh";
+    public const string Git = "git";
+}
+
+/// <summary>Merged status of a worktree's branch (see <see cref="Worktree.Merged"/>).</summary>
+public sealed record WorktreeMerge(
+    string Source,
+    string Branch,
+    string Head,
+    Evidence Evidence,
+    DateTimeOffset DetectedAt,
+    int? Pr = null,
+    string? Url = null,
+    /// <summary>Head commit of the merged pull request as GitHub reports it (gh only).</summary>
+    string? PrHeadOid = null,
+    DateTimeOffset? MergedAt = null,
+    /// <summary>Why git alone considers the branch merged (git source only).</summary>
+    string? Reason = null)
+{
+    /// <summary>Inferred from git only: shown as "likely merged".</summary>
+    public bool Likely => Source != MergeSources.GitHub;
+}
+
+/// <summary>Outcome of the last cleanup attempt of a worktree that is still there.</summary>
+public sealed record WorktreeCleanupRecord(DateTimeOffset At, string Outcome, bool Auto, string? Detail = null);
 
 /// <summary>How and for which session Overhive created a worktree (see <see cref="Worktree.Origin"/>).</summary>
 public sealed class WorktreeOrigin

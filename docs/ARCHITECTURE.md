@@ -26,6 +26,8 @@ Every fact the system displays carries an **evidence level**:
 | Dirty files, +/- lines             | `git status --porcelain=v2`, `git diff --numstat` | observed | high |
 | Commits, branch switches           | HEAD/ref changes + `git log old..new`     | observed  | high |
 | Merge/rebase conflicts             | unmerged entries, `MERGE_HEAD`/`rebase-merge` | observed | high |
+| Branch's PR merged                 | `gh pr list --state merged` (user's own gh) | observed  | high |
+| Branch likely merged (no gh)       | `merge-base --is-ancestor` / `[gone]` + `git cherry` vs origin's default branch | inferred | medium |
 | **C. Filesystem-observable** | | | |
 | A file changed (that it changed)   | git status refresh after triggers         | observed  | high |
 | *Who* changed it                   | — (filesystem has no actor)               | —         | **not observable** |
@@ -296,6 +298,58 @@ a commit/file claim, `VerificationMonitor` publishes `verification.settled` (obs
 the claimed path exists (existence only, never contents, only inside the agent's worktrees). Until
 then such claims stay unverified rather than "contradicted" too early.
 
+### Worktree cleanup
+
+Overhive's first action that changes a repository (`Amc.Daemon/Worktrees`, configuration section `WorktreeCleanup`).
+
+**Detection** (`MergeDetector`, every minute; GitHub at most every `PollMinutes`, default 10, per repository and
+only while there are candidates: linked, non-detached worktrees on a branch other than origin's default branch):
+
+* *Observed via gh*, for repositories whose origin is on GitHub, when `gh` is installed and authenticated (Overhive
+  only runs it; it never reads or stores a token): `gh pr list --state merged --json number,headRefName,headRefOid,mergedAt,url
+  --limit 100`, plus `--head <branch>` for up to 5 candidates not in that list. A PR matches when its head branch is
+  the worktree's branch **and** the worktree's HEAD equals the PR head or is an ancestor of it. A branch reused after
+  the merge (new commits) therefore does not match. If gh is missing, unauthenticated or fails, it is not tried again
+  for 10 minutes and git alone is used.
+* *Inferred from git* ("likely merged"), never fetching: the branch has commits of its own (its reflog's first
+  entry is not HEAD, so a fresh branch is never "merged"), and either HEAD is an ancestor of origin's default branch
+  (`refs/remotes/origin/HEAD`, else `origin/main`/`origin/master`), or the upstream is `[gone]` and `git cherry`
+  finds every commit in it by patch id.
+
+A match publishes `worktree.merged` (evidence observed / inferred). The reducer keeps it as `Worktree.Merged` for
+that exact branch and HEAD and drops it as soon as either moves.
+
+**Cleanup** (`WorktreeCleaner`; one at a time). Immediately before removal every check is re-run live, not taken
+from state: cleanup enabled and repository not excluded; merged status present; git still lists the worktree;
+not the main worktree; not locked; HEAD and branch unchanged since detection; `git status --porcelain` empty
+(uncommitted changes, untracked non-ignored files); no merge/rebase in progress; no unpushed work (HEAD contained
+in the merged PR head, or with git-only evidence `git rev-list HEAD --not --remotes` empty, which also covers a
+detached HEAD); no non-terminal agent attributed to it or with its cwd inside; no open Overhive terminal there; no
+process whose current directory is inside (all processes the process source can read: `/proc`, libproc, the
+Windows PEB; best effort); no ignored files that are not regenerable (`git ls-files --others --ignored
+--exclude-standard --directory`, a collapsed directory that is not regenerable listed file by file; regenerable =
+any path segment or `*.ext` in `RegenerableIgnored`, default `node_modules`, `bin`, `obj`, `dist`, `build`, `target`,
+caches, virtualenvs …). That last check blocks auto mode; a manual cleanup shows the paths and needs
+`confirmIgnored: true` (CLI `--include-ignored`, dashboard: type `delete ignored files`). Then, run from the main worktree with git's normal locking (`GitCli` `mutating: true`:
+no `GIT_OPTIONAL_LOCKS=0`, still `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`):
+
+1. `git worktree remove <path>` (never `--force`);
+2. `git branch -d <branch>`; only if it refuses as "not fully merged" and gh confirmed the PR with a head oid equal to
+   the local branch tip (squash or rebase merge): `git branch -D <branch>`;
+3. only with `DeleteRemoteBranch` (default off, GitHub usually deletes it) and gh evidence: `git ls-remote` and,
+   if origin's branch tip equals the PR head, `git push origin --delete <branch>`.
+
+Every attempt (removed / partial / failed / blocked) is a `worktree.cleaned` event with the checks and steps, plus an
+`audit.control` entry (`cleanup-worktree`); the collector then re-lists the repository (`worktree.deleted`).
+Failed and partial cleanups are not retried automatically.
+
+**Modes**: `suggest` (default) shows **Merged — clean up** on the worktree and a low-priority attention item (also in
+`auto` mode, for worktrees it may not remove); the
+dialog shows the plan (`GET /api/worktrees/{id}/cleanup`) and needs confirmation (`POST … {confirm:true}`). `auto`
+cleans worktrees merged via gh `GracePeriodMinutes` (default 30) after detection when every check passes (with
+`AutoRemoveLikelyMerged` also git-inferred ones), source `system`. `off` disables detection and cleanup.
+`ExcludeRepositories` lists repository names or paths to leave alone.
+
 ## 10. Persistence (SQLite, WAL)
 
 ```
@@ -334,6 +388,9 @@ POST /api/guard/dismiss              {key} or {rootAgentId}
 POST /api/guard/pause                {rootAgentId}: pause the session tree
 GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
 POST /api/attention/dismiss|snooze|restore   {id, minutes?}
+GET  /api/worktrees/{id}/cleanup     cleanup plan + live safety checks (read-only)
+POST /api/worktrees/{id}/cleanup     {confirm, dryRun, confirmIgnored}: remove a merged worktree (see "Worktree cleanup")
+POST /api/worktrees/check-merged     run merge detection now
 POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
 ```
 
@@ -363,7 +420,7 @@ closes the socket, so a sleeping phone behind `tailscale serve` does not hold a 
   with realpath and must stay inside a known worktree root.
 * Redaction at ingest (tokens, keys, passwords, `Authorization:` headers, private
   keys); environment shown as allow-listed names only.
-* Dangerous actions (terminate, kill, remove worktree) require `confirm: true`
+* Dangerous actions (terminate, kill, worktree cleanup) require `confirm: true`
   plus an explicit UI confirmation dialog; every control action is an `audit.*` event.
 
 ## 13. UI architecture

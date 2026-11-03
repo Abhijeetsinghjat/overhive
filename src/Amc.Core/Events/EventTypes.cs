@@ -57,6 +57,8 @@ public static class EventTypes
     public const string WorktreeCreated = "worktree.created";      // WorktreeData
     public const string WorktreeChanged = "worktree.changed";      // WorktreeData
     public const string WorktreeDeleted = "worktree.deleted";      // WorktreeData
+    public const string WorktreeMerged = "worktree.merged";        // WorktreeMergedData (observed via gh / inferred from git)
+    public const string WorktreeCleaned = "worktree.cleaned";      // WorktreeCleanedData (every cleanup attempt: steps and outcome)
     public const string WorktreeProvisioned = "worktree.provisioned"; // WorktreeProvisionedData — Overhive created it for a session
 
     // Tests
@@ -201,6 +203,46 @@ public sealed record WorktreeData(
     string? Upstream = null,
     string? Operation = null);
 
+/// <summary>The branch checked out in a worktree is merged (<see cref="MergeSources"/>), for this exact branch and HEAD.</summary>
+public sealed record WorktreeMergedData(
+    string Root,
+    string Branch,
+    string Head,
+    string Source,
+    int? Pr = null,
+    string? Url = null,
+    string? PrHeadOid = null,
+    DateTimeOffset? MergedAt = null,
+    string? Reason = null);
+
+/// <summary>One safety check run immediately before a worktree cleanup.</summary>
+public sealed record CleanupCheck(string Name, bool Ok, string Detail);
+
+/// <summary>One step of a worktree cleanup. <paramref name="Outcome"/>: ok, failed or skipped.</summary>
+public sealed record CleanupStep(string Name, string Command, string Outcome, string? Detail = null);
+
+/// <summary>Worktree cleanup outcomes.</summary>
+public static class CleanupOutcomes
+{
+    /// <summary>Worktree removed and every enabled branch step succeeded or was skipped for a stated reason.</summary>
+    public const string Removed = "removed";
+    /// <summary>Worktree removed, but deleting a branch failed.</summary>
+    public const string Partial = "partial";
+    /// <summary>`git worktree remove` failed; nothing was deleted.</summary>
+    public const string Failed = "failed";
+    /// <summary>A safety check failed; nothing was run.</summary>
+    public const string Blocked = "blocked";
+}
+
+/// <summary>A worktree cleanup attempt (manual or automatic): the checks, the steps run and the outcome.</summary>
+public sealed record WorktreeCleanedData(
+    string Root,
+    string? Branch,
+    string Outcome,
+    bool Auto,
+    IReadOnlyList<CleanupStep> Steps,
+    IReadOnlyList<CleanupCheck> Checks,
+    string? Detail = null);
 /// <summary>Overhive ran <c>git worktree add</c> to start a session there (dashboard "new worktree" or <c>run --worktree</c>).</summary>
 public sealed record WorktreeProvisionedData(
     string Root,

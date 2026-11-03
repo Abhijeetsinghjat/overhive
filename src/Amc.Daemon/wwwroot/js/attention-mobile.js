@@ -20,7 +20,8 @@ initEffects(); // amc.effects3d set in the dashboard also applies here
 
 function dashboardLink(action) {
   if (action.kind === 'open-risks') return '/#' + new URLSearchParams({ tab: 'risks' }).toString();
-  const sel = action.kind === 'open-conflict' ? 'conflict:' + action.target : 'agent:' + action.target;
+  const sel = action.kind === 'open-conflict' ? 'conflict:' + action.target
+    : action.kind === 'open-worktree' ? 'worktree:' + action.target : 'agent:' + action.target;
   const drawer = action.kind === 'open-terminal' ? '&drawer=terminal' : '';
   return '/#' + new URLSearchParams({ tab: 'graph', sel }).toString() + drawer;
 }
