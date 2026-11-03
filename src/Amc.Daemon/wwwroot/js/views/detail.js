@@ -537,10 +537,19 @@ function worktreeDetail(w) {
       ['Changes', `${w.modified || 0} modified · ${w.added || 0} added · ${w.deletedFiles || 0} deleted · ${w.untracked || 0} untracked · ${w.conflicted || 0} conflicted`],
       ['Lifecycle', w.lifecycle],
       ['Flags', [w.locked && 'locked', w.prunable && 'prunable', w.removed && 'removed'].filter(Boolean).join(', ') || null],
+      ['Created by', originText(w.origin)],
     ])),
     section('w-agents', 'Agents', agents.length, agents.length ? agents.map(([id, ts]) => h('div', { class: 'ov-item' }, agentLink(id), h('span', { class: 'muted small' }, ' · last touch ', agoEl(ts), ' ', evBadge('inferred', 'Worktree attribution is inferred from tool-call paths')))) : h('div', { class: 'muted small' }, 'No agent activity seen in this worktree.')),
     section('w-files', 'Files', files.length, files.length ? files.map((f) => fileLine(f, null)) : h('div', { class: 'muted small' }, 'No tracked changes.')),
     commits.length ? section('w-commits', 'Commits', commits.length, commits.slice(0, 20).map(commitItem)) : null);
+}
+
+/** "Overhive (dashboard) for <agent>, new branch from origin/main" for worktrees Overhive created for a session. */
+function originText(o) {
+  if (!o) return null;
+  const agentId = o.terminalId ? get('terminal', o.terminalId)?.agentId : null;
+  return h('span', null, `Overhive (${o.via}) for `, agentId ? agentLink(agentId) : (o.tool || 'a session'),
+    o.newBranch ? `, new branch off ${o.base || '?'} · ` : ', existing branch · ', agoEl(o.createdAt));
 }
 
 function repoDetail(r) {

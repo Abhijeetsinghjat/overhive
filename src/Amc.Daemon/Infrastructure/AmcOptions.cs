@@ -33,6 +33,8 @@ public sealed class AmcOptions
     public Amc.Core.State.StateRetention StateRetention { get; set; } = new();
     /// <summary>Extra or overriding AI tool definitions (merged with the built-in catalog).</summary>
     public List<Amc.Core.Domain.AgentTool> Tools { get; set; } = [];
+    /// <summary>"+ New session" in a new git worktree: default location and per-repository setup command (section "NewWorktree").</summary>
+    public Amc.Daemon.Tools.NewWorktreeSettings NewWorktree { get; set; } = new();
     public int IngestQueueCapacity { get; set; } = 20_000;
     /// <summary>When true, a clearly-labelled simulated agent is started (demo/test mode only).</summary>
     public bool Simulate { get; set; }

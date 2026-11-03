@@ -19,7 +19,22 @@ version is 0.x, minor versions may change behaviour.
   config; `RegenerableIgnored` lists the safe ones such as `node_modules`, `bin`, `dist`) block auto mode and
   need an extra confirmation (`confirmIgnored`, `--include-ignored`) for a manual cleanup. `Mode: "auto"` removes after a 30 min grace period. New
   events `worktree.merged` and `worktree.cleaned` (timeline), `GET/POST /api/worktrees/{id}/cleanup`,
-  `POST /api/worktrees/check-merged`, and `overhive worktrees clean [<path>] [--dry-run] [--yes]`.
+  `POST /api/worktrees/check-merged`, and `overhive worktrees clean [<path>] [--dry-run] [--yes]`. `Reducer.Version` 15.
+- **Start a session in a new worktree**: **+ New session** offers *Run in: this folder | a new worktree* once
+  the folder is inside a Git repository. Enter a branch name (validated with `git check-ref-format`, refused
+  if it exists unless *Use an existing branch* is ticked), pick the base from a searchable list of local and
+  remote branches (default: the remote default branch, e.g. `origin/main`, else the current branch) and check
+  the full location before starting (default `<repo-parent>/<repo>.worktrees/<branch>`, configurable with
+  `NewWorktree:Root` and a `{repo}` placeholder; long-path warning on Windows). Overhive runs
+  `git worktree add --no-track -b <branch> <path> <base>` (argument list, no shell) and starts the tool there.
+  Optional, off by default: *fetch the base first*, and a per-repository `NewWorktree:SetupCommand` (e.g.
+  `npm ci`) run before the agent starts, because ignored files are not in a new worktree. A failure after
+  the worktree exists leaves it in place and reports its path; nothing is deleted automatically.
+  CLI: `overhive run --worktree <branch> [--base REF] [--path DIR] [--existing] [--fetch] [--setup] -- <tool>`.
+  API: `GET /api/new-worktree/plan`, `POST /api/new-worktree`, and `worktree` in `POST /api/sessions`.
+  Such worktrees are marked in state (`Worktree.Origin`, event `worktree.provisioned`: branch, base, session
+  terminal, tool) and in the worktree panel, so cleanup after merge can be offered later. `Reducer.Version` 14
+  (snapshots from older versions are discarded and the log replayed once).
 
 ## [0.3.0] - 2026-11-02
 

@@ -59,6 +59,7 @@ public static class EventTypes
     public const string WorktreeDeleted = "worktree.deleted";      // WorktreeData
     public const string WorktreeMerged = "worktree.merged";        // WorktreeMergedData (observed via gh / inferred from git)
     public const string WorktreeCleaned = "worktree.cleaned";      // WorktreeCleanedData (every cleanup attempt: steps and outcome)
+    public const string WorktreeProvisioned = "worktree.provisioned"; // WorktreeProvisionedData — Overhive created it for a session
 
     // Tests
     public const string TestStarted = "test.started";              // TestRunData
@@ -242,6 +243,15 @@ public sealed record WorktreeCleanedData(
     IReadOnlyList<CleanupStep> Steps,
     IReadOnlyList<CleanupCheck> Checks,
     string? Detail = null);
+/// <summary>Overhive ran <c>git worktree add</c> to start a session there (dashboard "new worktree" or <c>run --worktree</c>).</summary>
+public sealed record WorktreeProvisionedData(
+    string Root,
+    string Branch,
+    string? Base,
+    bool NewBranch,
+    string Via,
+    string? TerminalId = null,
+    string? Tool = null);
 
 public sealed record TestRunData(
     string ToolUseId, string Runner, string Command,

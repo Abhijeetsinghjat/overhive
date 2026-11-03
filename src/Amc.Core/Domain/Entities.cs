@@ -185,6 +185,11 @@ public sealed class Worktree
     public WorktreeMerge? Merged { get; set; }
     /// <summary>Last cleanup attempt that did not remove the worktree (blocked, failed, partial). Null otherwise.</summary>
     public WorktreeCleanupRecord? LastCleanup { get; set; }
+    /// <summary>
+    /// Set when Overhive itself created this worktree to start a session in it ("+ New session" → a new worktree, or
+    /// <c>agentctl run --worktree</c>); null for worktrees found by discovery. Kept after the worktree is removed.
+    /// </summary>
+    public WorktreeOrigin? Origin { get; set; }
 
     [JsonIgnore] public bool Dirty => Modified + Added + DeletedFiles + Untracked + Conflicted > 0;
 
@@ -224,6 +229,23 @@ public sealed record WorktreeMerge(
 
 /// <summary>Outcome of the last cleanup attempt of a worktree that is still there.</summary>
 public sealed record WorktreeCleanupRecord(DateTimeOffset At, string Outcome, bool Auto, string? Detail = null);
+
+/// <summary>How and for which session Overhive created a worktree (see <see cref="Worktree.Origin"/>).</summary>
+public sealed class WorktreeOrigin
+{
+    /// <summary>"dashboard" or "cli".</summary>
+    public required string Via { get; init; }
+    public required string Branch { get; init; }
+    /// <summary>The ref the new branch was created from; null when an existing branch was checked out.</summary>
+    public string? Base { get; init; }
+    /// <summary>True when the branch was created with the worktree (false: an existing branch was checked out).</summary>
+    public bool NewBranch { get; init; }
+    /// <summary>Terminal of the session started in it (its agent is <c>Terminals[TerminalId].AgentId</c> once known).</summary>
+    public string? TerminalId { get; init; }
+    /// <summary>Tool id of the session (claude, codex, …) or the command run by the CLI.</summary>
+    public string? Tool { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+}
 
 public sealed class FileChange
 {
