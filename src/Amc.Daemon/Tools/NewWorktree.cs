@@ -95,7 +95,7 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
         // The same rule as any session start: inside the home directory, a known repository/worktree or a workspace
         // root. A repository under a workspace root that discovery has not listed yet (e.g. just cloned) is found by
         // rescanning the configured roots; the request's path itself is never handed to git.
-        var dir = SessionLauncher.ValidateCwd(cwd, state, _options, out var why);
+        var dir = ValidateFolder(cwd, out var why);
         if (dir is null) return Fail(why, 400);
         if (state.Resolver.Resolve(PathText.Normalize(dir)) is not { Worktree.Removed: false })
         {
@@ -317,7 +317,7 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
     {
         var real = GitPaths.RealPath(Native(target));
         if (real is null) return "The location cannot be resolved";
-        if (!SessionLauncher.InsideAllowedRoot(target) || !SessionLauncher.InsideAllowedRoot(real))
+        if (!InsideAllowedRoot(target) || !InsideAllowedRoot(real))
             return "The location must be inside your home directory";
         var roots = state.Read(s => s.Worktrees.Values.Where(w => !w.Removed).Select(w => w.Root).ToList());
         if (roots.FirstOrDefault(r => PathText.IsUnder(r, target) || PathText.IsUnder(r, real)) is { } inside)
@@ -362,6 +362,40 @@ public sealed class NewWorktreeService(GitCli git, GitCollector collector, State
     /// <summary>Readable form of an argument list ("npm ci", quoting arguments with spaces).</summary>
     internal static string Display(IEnumerable<string> args) =>
         string.Join(' ', args.Select(a => a.Length > 0 && !a.Any(c => char.IsWhiteSpace(c) || c is '"' or '\'') ? a : "\"" + a.Replace("\"", "\\\"") + "\""));
+
+    /// <summary>
+    /// The folder a new worktree is created from: the same rule as for starting a session (SessionLauncher): an
+    /// existing directory inside home (or temp) that is a known worktree or inside a workspace root.
+    /// </summary>
+    private string? ValidateFolder(string? raw, out string why)
+    {
+        why = "";
+        if (string.IsNullOrWhiteSpace(raw) || raw.Contains('\0') || !PathText.IsAbsolute(raw)) { why = "Working directory must be an absolute path"; return null; }
+        string real;
+        try
+        {
+            var di = new DirectoryInfo(raw);
+            if (!di.Exists) { why = "Working directory does not exist"; return null; }
+            real = (di.ResolveLinkTarget(returnFinalTarget: true) as DirectoryInfo)?.FullName ?? di.FullName;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { why = "Working directory is not accessible"; return null; }
+        real = Path.TrimEndingDirectorySeparator(real);
+        if (!InsideAllowedRoot(real)) { why = "Working directory must be inside your home directory"; return null; }
+        var known = state.Read(s => s.Worktrees.Values.Where(w => !w.Removed).Select(w => w.Root).ToList());
+        if (known.Any(r => PathText.IsUnder(r, real)) || _options.EffectiveWorkspaceRoots.Any(r => PathText.IsUnder(r, real)))
+            return real;
+        why = "Working directory must be a known repository/worktree or inside a workspace root";
+        return null;
+    }
+
+    /// <summary>Inside the user's home directory or the temp directory (the only places sessions and new worktrees may live).</summary>
+    internal static bool InsideAllowedRoot(string path)
+    {
+        if (PathText.IsUnder(AmcOptions.Home, path)) return true;
+        if (!OperatingSystem.IsWindows() && PathText.IsUnder("/tmp", path)) return true;
+        var temp = Path.TrimEndingDirectorySeparator(Path.GetTempPath());
+        return PathText.IsUnder(temp, path) || GitPaths.RealPath(temp) is { } realTemp && PathText.IsUnder(realTemp, path);
+    }
 
     /// <summary>A value for a log line: no line breaks (log forging).</summary>
     internal static string LogSafe(string? s) => (s ?? "").Replace("\r", " ").Replace("\n", " ");

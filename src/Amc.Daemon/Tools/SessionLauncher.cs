@@ -34,18 +34,11 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         if (!_options.EnableControl) return new(false, "Launching sessions is disabled (EnableControl=false)", StatusCode: 403);
 
         if (tools.Get(req.Tool) is not { } tool) return new(false, $"Unknown tool '{req.Tool}'", StatusCode: 400);
-        string? cwd;
-        if (req.Worktree is null)
-        {
-            cwd = ValidateCwd(req.Cwd, state, _options, out var why);
-            if (cwd is null) return new(false, why, StatusCode: 400);
-        }
-        else
-        {
-            if (worktrees is null) return new(false, "Starting in a new worktree is not available", StatusCode: 501);
-            if (string.IsNullOrWhiteSpace(req.Worktree.Branch)) return new(false, "Enter a branch name for the new worktree", StatusCode: 400);
-            cwd = null; // the new worktree (validated with the repository folder by NewWorktreeService)
-        }
+        var cwd = ValidateCwd(req.Cwd, out var why);
+        if (cwd is null) return new(false, why, StatusCode: 400);
+        // With a new worktree the folder above is the repository it is created from; the session runs in the worktree.
+        if (req.Worktree is not null && worktrees is null) return new(false, "Starting in a new worktree is not available", StatusCode: 501);
+        if (req.Worktree is not null && string.IsNullOrWhiteSpace(req.Worktree.Branch)) return new(false, "Enter a branch name for the new worktree", StatusCode: 400);
         if (req.Model is { Length: > 0 } m && (tool.ModelFlag is null || !AgentTool.ValidModel(m)))
             return new(false, tool.ModelFlag is null ? $"{tool.Name} is started with its default model" : "Invalid model name", StatusCode: 400);
         var prompt = req.Prompt?.Trim();
@@ -73,7 +66,6 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
                 if (!setup.Ok) return await FailedAfterWorktreeAsync(wt, tool, terminalId, setup.Detail, ct);
             }
         }
-        if (cwd is null) throw new InvalidOperationException("no working directory");
         var psi = new ProcessStartInfo(agentctl)
         {
             WorkingDirectory = cwd, UseShellExecute = false,
@@ -131,17 +123,8 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
             WorktreePath: wt.Path, WorktreeId: wt.WorktreeId, Warnings: wt.Warnings);
     }
 
-    /// <summary>Inside the user's home directory or the temp directory (the only places sessions and new worktrees may live).</summary>
-    internal static bool InsideAllowedRoot(string path)
-    {
-        if (PathText.IsUnder(AmcOptions.Home, path)) return true;
-        if (!OperatingSystem.IsWindows() && PathText.IsUnder("/tmp", path)) return true;
-        var temp = Path.TrimEndingDirectorySeparator(Path.GetTempPath());
-        return PathText.IsUnder(temp, path) || Collectors.Git.GitPaths.RealPath(temp) is { } realTemp && PathText.IsUnder(realTemp, path);
-    }
-
     /// <summary>Real, existing directory under $HOME that is a known worktree/repo root or inside a workspace root.</summary>
-    internal static string? ValidateCwd(string? raw, StateStore state, AmcOptions options, out string why)
+    private string? ValidateCwd(string? raw, out string why)
     {
         why = "";
         if (string.IsNullOrWhiteSpace(raw) || raw.Contains('\0') || !PathText.IsAbsolute(raw)) { why = "Working directory must be an absolute path"; return null; }
@@ -155,9 +138,9 @@ public sealed partial class SessionLauncher(ToolRegistry tools, StateStore state
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { why = "Working directory is not accessible"; return null; }
         real = Path.TrimEndingDirectorySeparator(real);
         static bool Inside(string root, string p) => PathText.IsUnder(root, p);
-        if (!InsideAllowedRoot(real)) { why = "Working directory must be inside your home directory"; return null; }
+        if (!NewWorktreeService.InsideAllowedRoot(real)) { why = "Working directory must be inside your home directory"; return null; }
         var known = state.Read(s => s.Worktrees.Values.Where(w => !w.Removed).Select(w => w.Root).ToList());
-        if (known.Any(r => Inside(r, real)) || options.EffectiveWorkspaceRoots.Any(r => Inside(r, real)))
+        if (known.Any(r => Inside(r, real)) || _options.EffectiveWorkspaceRoots.Any(r => Inside(r, real)))
             return real;
         why = "Working directory must be a known repository/worktree or inside a workspace root";
         return null;
