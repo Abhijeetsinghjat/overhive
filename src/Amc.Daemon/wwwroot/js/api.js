@@ -70,6 +70,7 @@ export const api = {
   launchSession: (body) => request('POST', '/api/sessions', body),
   newWorktreePlan: (params) => request('GET', '/api/new-worktree/plan?' + qs(params)),
   agentDiff: (id) => request('GET', `/api/agents/${encodeURIComponent(id)}/diff`),
+  decideApproval: (id, decision, body) => request('POST', `/api/approvals/${encodeURIComponent(id)}/${['allow', 'ask'].includes(decision) ? decision : 'deny'}`, body || {}),
 };
 
 /** Builds a query string; arrays become repeated keys, null/'' are skipped. */

@@ -4,7 +4,9 @@ AI coding agents have run `rm -rf ~/`, force-pushed over `main`, wiped directori
 credential files. Each vendor's sandbox only covers its own tool; Overhive sees the commands of
 every tool on the machine. The flight recorder checks each of them against a small set of
 explainable rules and lists what it finds in the **Risks** tab, in `overhive risks` and at
-`GET /api/risks`. It records; it does not block anything.
+`GET /api/risks`. It records; it does not block anything. To hold such calls for a decision before they run
+(Claude Code only, opt-in), see [Approvals](AGENT_INTEGRATION.md#approvals-claude-code): the same rules decide
+which calls wait.
 
 ## What is checked
 

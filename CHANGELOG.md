@@ -6,6 +6,21 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Approve or deny Claude Code tool calls from the dashboard (opt-in, config `Approvals`, off by default).
+  `"Mode": "risky"` holds the calls the risk rules rate warn or critical; `"all-edits"` also holds every
+  Write/Edit/MultiEdit/NotebookEdit. A held call is an urgent **Needs you** card (also on the phone page and
+  in the agent panel) with the command or file and a diff preview, the risk finding, **Allow**, **Deny**
+  with a reason the agent sees, **Ask in terminal** (hands the call to Claude Code's own prompt at once)
+  and, except for critical findings, **Allow this command for this session** (exact command, same
+  directory) or **Allow edits to this file for this session**. The risk recorder's finding for the same
+  call is merged into that card rather than raising a second item. `overhive approvals` lists them and
+  `overhive approvals allow|deny|ask <id> [--reason] [--similar]` decides. Without a decision within `TimeoutSeconds`
+  (default 120), when the daemon is down or on any error, Claude Code's normal permission flow applies:
+  nothing is allowed silently. Decisions are control actions (token, Origin/Host checks, `EnableControl`,
+  plus `Approvals.AllowRemote`), ids are random and single-use, and `approval.requested` /
+  `approval.resolved` events (decision, local or remote, latency) appear in the timeline. `overhive hooks
+  install` writes a PreToolUse hook with a matching longer timeout only while approvals are on (curl on
+  Linux/macOS, `hook-forward --approval --max-time` on Windows); `hooks status` and `doctor` check it.
 - Clean up a worktree after its PR merges. Linked worktrees whose branch is merged are detected through the
   user's own `gh` CLI when installed and authenticated (observed; matched by branch name and by the worktree's
   HEAD being part of the PR head, so a branch reused after the merge is not merged) or, without gh, from git

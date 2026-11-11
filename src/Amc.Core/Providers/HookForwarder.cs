@@ -24,11 +24,14 @@ public sealed record HookForwarder(string Executable, IReadOnlyList<string> Lead
     /// Argument vector after <see cref="Executable"/>. The trailing <c>--tag</c> carries
     /// <see cref="ClaudeHooksConfig.Marker"/> so install/uninstall recognise the entry; the forwarder ignores it.
     /// </summary>
-    public IReadOnlyList<string> Args(string tool, string? evt, string socketPath, bool wait = false)
+    /// <param name="approvalSeconds">Set for Claude Code's approval variant of PreToolUse: <c>--approval --max-time N</c>
+    /// (the daemon may hold the request for a dashboard decision; the forwarder fails open after N seconds).</param>
+    public IReadOnlyList<string> Args(string tool, string? evt, string socketPath, bool wait = false, int? approvalSeconds = null)
     {
         var args = new List<string>(LeadingArgs) { Subcommand, tool };
         if (evt is not null) args.AddRange(["--event", evt]);
         if (wait) args.Add("--wait");
+        if (approvalSeconds is { } secs) args.AddRange(["--approval", "--max-time", secs.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         args.AddRange(["--socket", socketPath, "--tag", ClaudeHooksConfig.Marker]);
         return args;
     }

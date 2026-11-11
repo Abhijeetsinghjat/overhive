@@ -17,6 +17,7 @@ import { verificationSection, verificationSig } from './verification.js';
 import { guardSection, guardSigForAgent } from './guard.js';
 import { attentionOverview, attentionSig } from './attention.js';
 import { attention } from '../attention-store.js';
+import { approvalCard } from '../components/approval-card.js';
 import { cleanupButton, mergedSummary, isMerged } from './cleanup.js';
 
 const caps = new Map();       // agentId → { data, error, loading, sig }
@@ -30,7 +31,7 @@ export function initDetail() {
   const right = document.getElementById('right');
   let lastSig = null;
   register({
-    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'guard', 'guard-live', 'attention'],
+    name: 'detail', deps: ['selection', 'agent', 'worktree', 'file', 'message', 'test', 'commit', 'conflict', 'repository', 'terminal', 'detail', 'follow', 'events', 'guard', 'guard-live', 'attention', 'approval'],
     render(d) {
       const sel = ui.selection;
       const ent = sel ? get(sel.kind, sel.id) : null;
@@ -73,6 +74,7 @@ function sigFor(sel, ent) {
     const lt = store.lastTool.get(sel.id); parts.push(lt?.seq);
     parts.push(verificationSig(sel.id));
     parts.push(guardSigForAgent(ent));
+    for (const p of store.e.approval.values()) if (p.agentId === sel.id) parts.push(p.id);
   }
   if (sel.kind === 'file') { const hst = history.get(sel.id); parts.push(hst?.at, hst?.loading); }
   if (sel.kind === 'worktree' || sel.kind === 'repository') parts.push(store.e.file.size, store.e.commit.size, store.e.agent.size);
@@ -414,6 +416,7 @@ function agentDetail(a) {
       st === 'blocked' ? h('div', { class: 'needs-input' }, '⚠ Needs your input — ', a.terminalId ? 'answer in its terminal (Terminal button) or send a message.' : 'answer in the terminal where this Claude Code session runs.') : null,
       a.description && !isMain ? h('div', { class: 'd-desc' }, a.description) : null),
     controlsRow(a, c),
+    approvalsSection(a),
     guardSection(a, section),
     actions,
     section('a-where', 'Location', null, locationOf(a, wt)),
@@ -674,3 +677,10 @@ function conflictDetail(c) {
       btn('Diff', '', () => openDrawer('diff', { kind: 'file', worktreeId: c.worktreeId || c.worktreeIds[0], path: c.path, title: c.path }))) : null);
 }
 
+
+/** Tool calls of this agent waiting for the user's decision (Approvals mode). */
+function approvalsSection(a) {
+  const pending = all('approval').filter((p) => p.agentId === a.id).sort((x, y) => String(x.requestedAt).localeCompare(String(y.requestedAt)));
+  if (!pending.length) return null;
+  return section('a-approvals', 'Waiting for your approval', pending.length, pending.map((p) => approvalCard(p)));
+}

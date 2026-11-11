@@ -54,6 +54,8 @@ public sealed class AmcOptions
     public Amc.Core.Guard.GuardSettings Guard { get; set; } = new();
     /// <summary>Attention notifications: desktop and self-hosted ntfy, both off by default (docs/NOTIFICATIONS.md).</summary>
     public Amc.Daemon.Attention.NotificationOptions Notifications { get; set; } = new();
+    /// <summary>Approve or deny Claude Code tool calls from the dashboard (section "Approvals"; off by default).</summary>
+    public Amc.Core.Approvals.ApprovalSettings Approvals { get; set; } = new();
     /// <summary>Detect worktrees whose branch is merged and offer (or, in "auto" mode, perform) their cleanup (section "WorktreeCleanup").</summary>
     public Amc.Daemon.Worktrees.WorktreeCleanupOptions WorktreeCleanup { get; set; } = new();
     /// <summary>

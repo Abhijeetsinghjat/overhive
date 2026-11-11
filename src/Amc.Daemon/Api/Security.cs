@@ -66,6 +66,9 @@ public sealed class SecurityMiddleware(RequestDelegate next, ApiToken token, ILo
     private static bool RequiresToken(PathString p) =>
         p.StartsWithSegments("/api") || p.StartsWithSegments("/ws") || p.StartsWithSegments("/hooks") || p.StartsWithSegments("/pty");
 
+    /// <summary>True for a loopback Host (localhost, 127.0.0.1, ::1 …); false for an AllowedHosts name (remote access).</summary>
+    public static bool IsLoopbackHost(string host) => LoopbackHosts.Contains(host) || IsLoopbackAddress(host);
+
     private static bool IsLoopbackAddress(string host) =>
         IPAddress.TryParse(host.Trim('[', ']'), out var ip) && IPAddress.IsLoopback(ip);
 

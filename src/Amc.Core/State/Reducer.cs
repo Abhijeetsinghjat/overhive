@@ -202,6 +202,10 @@ public static class Reducer
             case EventTypes.GuardDismissed:
                 Guard.GuardReducer.Apply(s, e, changed);
                 break;
+            case EventTypes.ApprovalRequested:
+            case EventTypes.ApprovalResolved:
+                Approvals.ApprovalReducer.Apply(s, e, changed);
+                break;
         }
         VerificationFold.Apply(s, e); // claimed vs observed (Amc.Core/Verification)
     }
@@ -210,7 +214,8 @@ public static class Reducer
         type is not (EventTypes.AgentCreated or EventTypes.ProcessExited or EventTypes.AuditControl or EventTypes.GitFileStatus
             or EventTypes.WorktreeChanged or EventTypes.AgentStatusChanged or EventTypes.MessageSent
             or EventTypes.MessageFailed or EventTypes.AgentUpdated or EventTypes.RiskDetected
-            or EventTypes.GuardAlert or EventTypes.GuardCleared or EventTypes.GuardDismissed);
+            or EventTypes.GuardAlert or EventTypes.GuardCleared or EventTypes.GuardDismissed
+            or EventTypes.ApprovalRequested or EventTypes.ApprovalResolved);
 
     // ---- agents ---------------------------------------------------------------
 

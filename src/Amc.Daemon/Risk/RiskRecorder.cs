@@ -197,6 +197,13 @@ public sealed class RiskRecorder : BackgroundService
         };
     }
 
+    /// <summary>The classifier context for one agent's action (approvals use the same context the recorder uses).</summary>
+    public static (RiskContext Context, Worktree? Worktree) ContextFor(WorldState s, string agentId, string? cwd, RiskEnvironment env)
+    {
+        var c = Context(s, agentId, cwd, null, env);
+        return (c.Context, c.Worktree);
+    }
+
     private sealed record Ctx(RiskContext Context, Worktree? Worktree)
     {
         public static implicit operator RiskContext(Ctx c) => c.Context;

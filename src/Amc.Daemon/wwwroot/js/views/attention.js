@@ -82,6 +82,7 @@ export function runAction(action, item) {
     case 'reply': select('agent', target); openDrawer('messages', { agentId: target }); break;
     case 'open-conflict': select('conflict', target); break;
     case 'open-risks': setTab('risks'); break;
+    case 'approve': if (panel.hidden) toggleAttentionPanel(); return; // the card in the panel has Allow / Deny
     case 'open-worktree': select('worktree', target); break;
     default: if (target) select('agent', target);
   }

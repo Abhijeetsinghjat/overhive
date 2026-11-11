@@ -110,6 +110,8 @@ public sealed class Risk
     public string? Origin { get; set; }
     public string? SourceType { get; set; }
     public long? SourceSeq { get; set; }
+    /// <summary>Tool call the finding came from (hooks, transcripts), when known.</summary>
+    public string? ToolUseId { get; set; }
     public int? Pid { get; set; }
     public DateTimeOffset At { get; set; }
 }

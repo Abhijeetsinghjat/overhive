@@ -19,6 +19,7 @@ public static class AttentionKinds
     public const string GuardAlert = "guard.alert";
     public const string Risk = "risk";
     public const string ClaimContradicted = "claim.contradicted";
+    public const string Approval = "approval";
     public const string WorktreeMerged = "worktree.merged";
 }
 
@@ -35,6 +36,8 @@ public static class AttentionActions
     public const string OpenConflict = "open-conflict";
     /// <summary>Open the Risks tab (Target unused).</summary>
     public const string OpenRisks = "open-risks";
+    /// <summary>Allow or deny a held tool call (Target = approval id; the card is built from <see cref="AttentionItem.Approval"/>).</summary>
+    public const string Approve = "approve";
     /// <summary>Select the worktree (Target = worktree id); its panel offers the cleanup.</summary>
     public const string OpenWorktree = "open-worktree";
 }
@@ -69,4 +72,6 @@ public sealed record AttentionItem
     public DateTimeOffset? SnoozedUntil { get; init; }
     /// <summary>Set by the daemon's inbox when the user dismissed the item (only present in "all" listings).</summary>
     public bool? Dismissed { get; init; }
+    /// <summary>The held tool call, for approval items (already redacted in the state).</summary>
+    public Amc.Core.Approvals.PendingApproval? Approval { get; init; }
 }

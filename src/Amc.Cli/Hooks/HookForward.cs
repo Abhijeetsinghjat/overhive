@@ -18,15 +18,20 @@ namespace Amc.Cli.Hooks;
 public static class HookForward
 {
     /// <summary>One forward: the daemon route is derived from tool, event and wait.</summary>
-    public sealed record Request(string Tool, string? Event, bool Wait, string SocketPath)
+    /// <param name="ApprovalSeconds">Set for Claude Code's approval variant of PreToolUse (<c>--approval --max-time N</c>).</param>
+    public sealed record Request(string Tool, string? Event, bool Wait, string SocketPath, int? ApprovalSeconds = null)
     {
         /// <summary>Same routes the curl commands use.</summary>
         public string PathAndQuery =>
-            Tool == "claude" ? (Wait ? "/hooks/claude/wait" : "/hooks/claude")
+            Tool == "claude" ? (Wait ? "/hooks/claude/wait" : ApprovalSeconds is not null ? "/hooks/claude?approval=1" : "/hooks/claude")
             : $"/hooks/{Tool}?e={Uri.EscapeDataString(Event ?? "")}";
 
-        /// <summary>curl's -m: 3 s per hook; the waiter is released by the daemon before Claude Code's hook timeout.</summary>
-        public TimeSpan Timeout => Wait ? TimeSpan.FromSeconds(ClaudeHooksConfig.RewakeTimeoutSeconds - 60) : TimeSpan.FromSeconds(3);
+        /// <summary>
+        /// curl's -m: 3 s per hook; the approval variant waits up to --max-time (the daemon answers before it); the waiter is
+        /// released by the daemon before Claude Code's hook timeout.
+        /// </summary>
+        public TimeSpan Timeout => Wait ? TimeSpan.FromSeconds(ClaudeHooksConfig.RewakeTimeoutSeconds - 60)
+            : ApprovalSeconds is { } a ? TimeSpan.FromSeconds(a) : TimeSpan.FromSeconds(3);
     }
 
     private static readonly Regex ToolName = new("^[a-z0-9][a-z0-9-]{0,31}$", RegexOptions.CultureInvariant);
@@ -37,8 +42,9 @@ public static class HookForward
     /// </summary>
     public static Request? Parse(IReadOnlyList<string> argv, Func<string?> defaultSocket)
     {
-        string? tool = null, evt = null, socket = null;
+        string? tool = null, evt = null, socket = null, maxTime = null;
         var wait = false;
+        var approval = false;
         for (var i = 0; i < argv.Count; i++)
         {
             var a = argv[i];
@@ -49,6 +55,8 @@ public static class HookForward
                 case "--socket": socket = Next(); break;
                 case "--tag": Next(); break;
                 case "--wait": wait = true; break;
+                case "--approval": approval = true; break;
+                case "--max-time": maxTime = Next(); break;
                 default:
                     if (!a.StartsWith('-') && tool is null) tool = a;
                     break;
@@ -56,7 +64,11 @@ public static class HookForward
         }
         if (tool is null || !ToolName.IsMatch(tool)) return null;
         socket ??= defaultSocket();
-        return socket is { Length: > 0 } ? new Request(tool, evt, wait, socket) : null;
+        // A missing or odd --max-time falls back to the plain 3 s hook: never wait longer than asked.
+        int? approvalSeconds = approval && !wait && tool == "claude"
+            && int.TryParse(maxTime, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var secs)
+            && secs is >= 1 and <= Amc.Core.Approvals.ApprovalSettings.MaxTimeoutSeconds + 60 ? secs : null;
+        return socket is { Length: > 0 } ? new Request(tool, evt, wait, socket, approvalSeconds) : null;
     }
 
     /// <summary>Process entry (called before any other CLI setup): never throws, exit 0 unless a waiter wakes Claude.</summary>

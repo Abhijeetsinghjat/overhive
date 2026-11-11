@@ -388,10 +388,12 @@ POST /api/guard/dismiss              {key} or {rootAgentId}
 POST /api/guard/pause                {rootAgentId}: pause the session tree
 GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
 POST /api/attention/dismiss|snooze|restore   {id, minutes?}
+GET  /api/approvals                  tool calls held for a decision (Approvals mode) + mode, timeout
+POST /api/approvals/{id}/allow|deny|ask  {reason?, allowSimilar?, client?}: a control action (gated like /control)
 GET  /api/worktrees/{id}/cleanup     cleanup plan + live safety checks (read-only)
 POST /api/worktrees/{id}/cleanup     {confirm, dryRun, confirmIgnored}: remove a merged worktree (see "Worktree cleanup")
 POST /api/worktrees/check-merged     run merge detection now
-POST /hooks/claude                   Claude Code hook receiver (mailbox replies)
+POST /hooks/claude                   Claude Code hook receiver (mailbox replies); ?approval=1 may hold PreToolUse
 ```
 
 WebSocket `/ws?since=<seq>`:

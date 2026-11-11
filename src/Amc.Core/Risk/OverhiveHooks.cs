@@ -30,13 +30,15 @@ public static class OverhiveHooks
 
         Regex Template(string command) => new(
             "^" + Regex.Escape(command).Replace(quotedLog, Quoted).Replace(quotedSocket, Quoted)
-                .Replace("TOOLX", "[a-z][a-z0-9-]*").Replace("EVENTX", "[A-Za-z]+") + "$",
+                .Replace("TOOLX", "[a-z][a-z0-9-]*").Replace("EVENTX", "[A-Za-z]+")
+                .Replace("987654321", "[0-9]{1,5}") + "$",
             RegexOptions.CultureInvariant);
 
         return
         [
             Template(ClaudeHooksConfig.BuildCommand(socket)),
             Template(ClaudeHooksConfig.BuildRewakeCommand(socket)),
+            Template(ClaudeHooksConfig.BuildApprovalCommand(socket, 987654321)),
             Template(ToolHooksConfig.BuildCommand(socket, "TOOLX", "EVENTX")),
         ];
     }
@@ -60,7 +62,7 @@ public static class OverhiveHooks
     private static bool MatchesTemplate(string script) => Templates.Any(t => t.IsMatch(script));
 
     /// <summary>
-    /// The Windows hook: <c>agentctl hook-forward &lt;tool&gt; [--event E] [--wait] --socket S --tag agent-mission-control</c>
+    /// The Windows hook: <c>agentctl hook-forward &lt;tool&gt; [--event E] [--wait] [--approval --max-time N] --socket S --tag agent-mission-control</c>
     /// (exec form, cmd.exe line, or PowerShell <c>&amp; 'agentctl.exe' …</c>; also under the dotnet host with agentctl.dll).
     /// </summary>
     private static bool IsForwarder(string text)
@@ -79,8 +81,8 @@ public static class OverhiveHooks
             var ok = w.Count >= i + 4 && w[^2] == "--tag" && w[^1] == ClaudeHooksConfig.Marker;
             for (var j = i; ok && j < w.Count - 2; j++)
             {
-                if (w[j] is "--event" or "--socket" && j + 1 < w.Count - 2) j++;
-                else if (w[j] != "--wait") ok = false;
+                if (w[j] is "--event" or "--socket" or "--max-time" && j + 1 < w.Count - 2) j++;
+                else if (w[j] is not ("--wait" or "--approval")) ok = false;
             }
             if (ok) return true;
         }
