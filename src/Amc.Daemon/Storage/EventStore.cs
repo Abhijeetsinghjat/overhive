@@ -199,6 +199,42 @@ public sealed class EventStore : IDisposable
     }
 
     /// <summary>Streams all events after <paramref name="afterSeq"/> in order (used for replay on startup).</summary>
+    /// <summary>
+    /// One row per model response (agent + message id) whose first usage record lies in [from, to): token counts are the
+    /// response's maximum (streamed records grow), so this matches what the reducer counts. Read on its own connection.
+    /// </summary>
+    public List<Amc.Core.Usage.UsageResponse> UsageResponses(DateTimeOffset from, DateTimeOffset to)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        // Records of one response span seconds; the slack lets a response that started just before `from` be excluded
+        // by its true first record instead of being counted from a later one.
+        cmd.CommandText = """
+            SELECT agent_id, MAX(json_extract(data,'$.model')), MIN(ts_ms),
+                   MAX(json_extract(data,'$.input')), MAX(json_extract(data,'$.output')),
+                   MAX(json_extract(data,'$.cacheWrite')), MAX(json_extract(data,'$.cacheRead')),
+                   MAX(json_extract(data,'$.cacheWrite1h')), MAX(json_extract(data,'$.speed')), MAX(json_extract(data,'$.geo'))
+            FROM events
+            WHERE type = $type AND ts_ms >= $slack AND ts_ms < $to
+            GROUP BY agent_id, json_extract(data,'$.messageId')
+            HAVING MIN(ts_ms) >= $from
+            """;
+        cmd.Parameters.AddWithValue("$type", EventTypes.AgentUsage);
+        cmd.Parameters.AddWithValue("$from", from.ToUnixTimeMilliseconds());
+        cmd.Parameters.AddWithValue("$slack", from.ToUnixTimeMilliseconds() - (long)TimeSpan.FromHours(1).TotalMilliseconds);
+        cmd.Parameters.AddWithValue("$to", to.ToUnixTimeMilliseconds());
+        var list = new List<Amc.Core.Usage.UsageResponse>();
+        using var r = cmd.ExecuteReader();
+        static long L(SqliteDataReader r, int i) => r.IsDBNull(i) ? 0 : r.GetInt64(i);
+        while (r.Read())
+            list.Add(new Amc.Core.Usage.UsageResponse(
+                r.IsDBNull(0) ? null : r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1),
+                DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64(2)),
+                L(r, 3), L(r, 4), L(r, 5), L(r, 6),
+                r.IsDBNull(7) ? null : r.GetInt64(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
+        return list;
+    }
+
     public IEnumerable<AgentEvent> ReadAll(long afterSeq)
     {
         using var c = Open();

@@ -12,6 +12,9 @@ public static class Api
     public static Task<List<Repository>> Repositories(CliContext ctx, CancellationToken ct) => ctx.Client.GetAsync<List<Repository>>("api/repositories", ct);
     public static Task<List<Conflict>> Conflicts(CliContext ctx, CancellationToken ct) => ctx.Client.GetAsync<List<Conflict>>("api/conflicts", ct);
     public static Task<JsonNode> Health(CliContext ctx, CancellationToken ct) => ctx.Client.GetNodeAsync("api/health", ct);
+    public static Task<Amc.Core.Usage.UsageReportResult> UsageReport(CliContext ctx, string range, string? bucket, CancellationToken ct) =>
+        ctx.Client.GetAsync<Amc.Core.Usage.UsageReportResult>(
+            $"api/usage/report?range={Uri.EscapeDataString(range)}" + (bucket is null ? "" : "&bucket=" + bucket) + "&tz=" + Uri.EscapeDataString(TimeZoneInfo.Local.Id), ct);
 
     public static Task<List<FileChange>> Files(CliContext ctx, string? agentId, string? worktreeId, CancellationToken ct) =>
         ctx.Client.GetAsync<List<FileChange>>("api/files" + AmcClient.Query(("agent", agentId), ("worktree", worktreeId)), ct);

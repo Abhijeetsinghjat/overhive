@@ -536,8 +536,13 @@ public sealed partial class TranscriptIngestor
     {
         if (msg["usage"] is not JsonObject u || ClaudeEventMapper.Str(msg, "id") is not { Length: > 0 } id) return null;
         long L(string k) => u[k] is JsonValue v && v.TryGetValue<long>(out var n) ? n : 0;
+        // Cost-only details (docs/USAGE.md): 1-hour cache writes, fast mode, US-only inference. Absent → null.
+        long? cw1h = u["cache_creation"] is JsonObject cc && cc["ephemeral_1h_input_tokens"] is JsonValue h && h.TryGetValue<long>(out var n1h) ? n1h : null;
+        var speed = ClaudeEventMapper.Str(u, "speed") is { Length: > 0 } sp && sp != "standard" ? sp : null;
+        var geo = ClaudeEventMapper.Str(u, "inference_geo") is { Length: > 0 } g && g != "global" ? g : null;
         var d = new UsageData(id, ClaudeEventMapper.Str(msg, "model") is { } m && !m.StartsWith('<') ? m : null,
-            L("input_tokens"), L("output_tokens"), L("cache_creation_input_tokens"), L("cache_read_input_tokens"));
+            L("input_tokens"), L("output_tokens"), L("cache_creation_input_tokens"), L("cache_read_input_tokens"),
+            cw1h, speed, geo);
         if (d.Input + d.Output + d.CacheWrite + d.CacheRead == 0) return null;
         return ClaudeEventMapper.New(o, EventTypes.AgentUsage, d, $"usage:{id}:{d.Input}:{d.Output}:{d.CacheWrite}:{d.CacheRead}");
     }

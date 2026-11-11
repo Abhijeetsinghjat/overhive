@@ -384,6 +384,8 @@ POST /api/sessions                   {tool, cwd, model?, prompt?, worktree?: {br
 GET  /api/new-worktree/plan?cwd=&branch=&base=&path=&existing=   branches, default base/location, validation
 POST /api/new-worktree               {cwd, branch, base?, path?, existingBranch, fetch, terminalId?, tool?} (agentctl run --worktree)
 GET  /api/guard                      runaway guard: rules, live values per session, active alerts
+GET  /api/usage/report               ?range=48h|30d|all&bucket=hour|day&tz=: usage over time + estimated API cost (docs/USAGE.md)
+GET  /api/pricing                    price table in use (built-in list prices + config "Pricing")
 POST /api/guard/dismiss              {key} or {rootAgentId}
 POST /api/guard/pause                {rootAgentId}: pause the session tree
 GET  /api/attention[?all=true]       "needs you" queue (derived; see NOTIFICATIONS.md)
