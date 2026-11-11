@@ -150,7 +150,8 @@ public sealed partial class ProtocolReceiver(ToolRegistry tools, IEventSink sink
             case "usage" when Str(d, "id") is { } mid:
             {
                 long L(string k) => Num(d[k]) ?? 0;
-                var u = new UsageData(mid, Str(d, "model"), L("input"), L("output"), L("cacheWrite"), L("cacheRead"));
+                var u = new UsageData(mid, Str(d, "model"), L("input"), L("output"), L("cacheWrite"), L("cacheRead"),
+                    Num(d["cacheWrite1h"]) is >= 0 and var cw1h ? cw1h : null, Token(Str(d, "speed")), Token(Str(d, "geo")));
                 events.Add(E(EventTypes.AgentUsage, u, $"usage:{id}:{mid}:{u.Input}:{u.Output}:{u.CacheWrite}:{u.CacheRead}"));
                 break;
             }
@@ -179,6 +180,10 @@ public sealed partial class ProtocolReceiver(ToolRegistry tools, IEventSink sink
         ? v.TryGetValue<long>(out var l) ? l : v.TryGetValue<int>(out var i) ? i : v.TryGetValue<double>(out var dbl) ? (long)dbl
         : v.TryGetValue<string>(out var s) && long.TryParse(s, out var p) ? p : null
         : null;
+
+    /// <summary>A short lowercase word ("fast", "us"), else null: usage modifiers are matched, never displayed as free text.</summary>
+    private static string? Token(string? s) =>
+        s is { Length: <= 16 } && s.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_') ? s.ToLowerInvariant() : null;
 
     private static string? Str(JsonNode? n, string k) => n?[k] is JsonValue v && v.TryGetValue<string>(out var s) && s.Length > 0 ? s : null;
 

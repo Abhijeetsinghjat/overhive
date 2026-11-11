@@ -128,8 +128,14 @@ public sealed record AgentUpdatedData(
 
 public sealed record AgentTextData(string Text, string? Kind = null);
 
-/// <summary>Token usage of one model response (cumulative values as recorded for that message id).</summary>
-public sealed record UsageData(string MessageId, string? Model, long Input, long Output, long CacheWrite, long CacheRead);
+/// <summary>
+/// Token usage of one model response (cumulative values as recorded for that message id). The optional fields only
+/// refine the cost estimate (docs/USAGE.md): <paramref name="CacheWrite1h"/> is the part of <paramref name="CacheWrite"/>
+/// written with the 1-hour cache lifetime, <paramref name="Speed"/> is "fast" for fast mode and <paramref name="Geo"/>
+/// is the inference geography ("us" for US-only inference). Absent when the provider does not report them.
+/// </summary>
+public sealed record UsageData(string MessageId, string? Model, long Input, long Output, long CacheWrite, long CacheRead,
+    long? CacheWrite1h = null, string? Speed = null, string? Geo = null);
 
 public sealed record MessageData(string MessageId, string Text, string Transport, string? Author = null);
 public sealed record MessageStatusData(string MessageId, string Transport, string? Detail = null);

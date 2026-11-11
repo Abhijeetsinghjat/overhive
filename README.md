@@ -195,6 +195,7 @@ Add a tool Overhive does not know yet:
 | Check agents from a phone | `/m` through your own SSH tunnel or `tailscale serve` ([how](docs/REMOTE_ACCESS.md)) |
 | Everything at a glance, in 3D | **Hive** tab (default when the browser has WebGL): each session is a honeycomb cell with its sub-agents around it, grouped by repository worktree; glow = status, height = tokens, red arcs = conflicts. Drag to orbit, click to open, **2D** switches to the Graph tab |
 | Agent → sub-agent hierarchy, models, token usage | Hive or Graph tab, Usage tab, `overhive usage` |
+| Usage over time and what it would cost at API prices | Usage tab (**Over time** chart, **Est. cost** columns), `overhive usage --history` ([details](docs/USAGE.md)) |
 | Repo / worktree / branch / HEAD per agent | Agent panel → Location, Worktrees & Files tab |
 | Files changed, by whom, with diffs | Worktrees & Files tab, `overhive files`, `overhive diff <agent>` |
 | Commits with links to your Git host | Commits tab |
@@ -263,6 +264,7 @@ false), `ExcludeRepositories` (names or paths), `RegenerableIgnored` (ignored pa
 - [Architecture](docs/ARCHITECTURE.md): system design, including what can and can't be known about an agent
 - [Agent integration](docs/AGENT_INTEGRATION.md): how each tool is discovered and tracked
 - [Open protocol](docs/PROTOCOL.md): let any tool or script report to Overhive
+- [Usage and estimated API cost](docs/USAGE.md): usage over time, list prices, your own prices
 - [Runaway guard](docs/RUNAWAY_GUARD.md): warnings (and an optional automatic pause) for sub-agent fan-out and token burn
 - [Attention queue and notifications](docs/NOTIFICATIONS.md), [Phone access](docs/REMOTE_ACCESS.md)
 - [Event model](docs/EVENT_MODEL.md), [Security](docs/SECURITY.md), [Risky-action rules](docs/RISKS.md), [Dependencies](docs/DEPENDENCIES.md)
