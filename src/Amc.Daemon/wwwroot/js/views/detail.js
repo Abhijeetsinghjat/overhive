@@ -17,6 +17,7 @@ import { verificationSection, verificationSig } from './verification.js';
 import { guardSection, guardSigForAgent } from './guard.js';
 import { attentionOverview, attentionSig } from './attention.js';
 import { attention } from '../attention-store.js';
+import { cleanupButton, mergedSummary, isMerged } from './cleanup.js';
 
 const caps = new Map();       // agentId → { data, error, loading, sig }
 const history = new Map();    // fileKey → { events, error, loading, at }
@@ -524,7 +525,9 @@ function worktreeDetail(w) {
     h('div', { class: 'd-actions' },
       btn('Diff', 'git diff of this worktree', () => openDrawer('diff', { kind: 'worktree', worktreeId: w.id, title: worktreeLabel(w) })),
       btn('Log', 'git log', () => openDrawer('diff', { kind: 'log', worktreeId: w.id, title: worktreeLabel(w) })),
-      btn('Events', 'Timeline for this worktree', () => { setFilter('worktree', w.id); setTab('timeline'); })),
+      btn('Events', 'Timeline for this worktree', () => { setFilter('worktree', w.id); setTab('timeline'); }),
+      cleanupButton(w, 'btn btn-sm')),
+    isMerged(w) ? section('w-merged', 'Merged', null, h('div', { class: 'small' }, mergedSummary(w))) : null,
     conflictsFor((c) => c.worktreeId === w.id || (c.worktreeIds || []).includes(w.id)).length ? section('w-conf', 'Conflicts', null, conflictsFor((c) => c.worktreeId === w.id || (c.worktreeIds || []).includes(w.id))) : null,
     section('w-info', 'Git', null, kv([
       ['Repository', repoLink(w.repositoryId)],

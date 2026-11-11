@@ -54,6 +54,8 @@ public sealed class AmcOptions
     public Amc.Core.Guard.GuardSettings Guard { get; set; } = new();
     /// <summary>Attention notifications: desktop and self-hosted ntfy, both off by default (docs/NOTIFICATIONS.md).</summary>
     public Amc.Daemon.Attention.NotificationOptions Notifications { get; set; } = new();
+    /// <summary>Detect worktrees whose branch is merged and offer (or, in "auto" mode, perform) their cleanup (section "WorktreeCleanup").</summary>
+    public Amc.Daemon.Worktrees.WorktreeCleanupOptions WorktreeCleanup { get; set; } = new();
     /// <summary>
     /// Extra Host names accepted besides loopback, e.g. the name `tailscale serve` forwards with. Exact names only:
     /// no wildcards, no IP ranges. The daemon still listens on 127.0.0.1 only. Empty by default.

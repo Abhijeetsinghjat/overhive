@@ -47,6 +47,8 @@ API response is derived from it (`Reducer.Apply` in `Amc.Core/State/Reducer.cs`)
 | `git.merge` / `git.rebase` / `git.conflict` | `GitRefData` / `GitConflictData` | git dir state | observed |
 | `repository.discovered` | `RepositoryData` | workspace scan, path resolution | observed |
 | `worktree.created` / `worktree.changed` / `worktree.deleted` | `WorktreeData` | `git worktree list`, status | observed |
+| `worktree.merged` | `WorktreeMergedData` (branch, head, source `gh`/`git`, PR number/url/head oid, reason) | `MergeDetector` | observed (gh) / inferred (git) |
+| `worktree.cleaned` | `WorktreeCleanedData` (outcome removed/partial/failed/blocked, auto, checks, steps) | worktree cleanup (user or auto mode) | observed |
 | `worktree.provisioned` | `WorktreeProvisionedData` (root, branch, base, new branch?, via dashboard/cli, terminal, tool) | Overhive ran `git worktree add` for a session; sets `Worktree.Origin` | observed |
 | `test.started` / `test.passed` / `test.failed` | `TestRunData` | test command + parsed output | inferred |
 | `task.updated` | `TaskListData` | TodoWrite / task tools (full list snapshot) | reported |
@@ -67,6 +69,7 @@ prompt:<session>:<prompt_id>  spawn:<agent_id>            end:<agent_id>
 test:<tool_use_id>:start      test:<tool_use_id>:end      commit:<worktree>:<sha>
 proc:<pid>:<procStart>:exit   msg:<message_id>:delivered      verify:<claim_id>
 risk:<agent>:<rule>:<evidence>:<hash of target or matched command>
+merged:<worktree>:<head>:<source>:<pr>
 ```
 
 ## Derived state (not events)
