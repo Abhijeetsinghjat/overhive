@@ -11,7 +11,7 @@ namespace Amc.Core.State;
 public static class Reducer
 {
     /// <summary>Bump whenever folding semantics change: snapshots from another version are discarded and the log is replayed.</summary>
-    public const int Version = 13;
+    public const int Version = 15;
 
     public static HashSet<EntityRef> ApplyBatch(WorldState s, IEnumerable<AgentEvent> events)
     {
@@ -130,6 +130,9 @@ public static class Reducer
             case EventTypes.WorktreeChanged:
                 OnWorktree(s, e, changed);
                 break;
+            case EventTypes.WorktreeProvisioned:
+                OnWorktreeProvisioned(s, e, changed);
+                break;
             case EventTypes.WorktreeDeleted:
                 if (e.WorktreeId is not null && s.Worktrees.TryGetValue(e.WorktreeId, out var gone))
                 {
@@ -138,11 +141,23 @@ public static class Reducer
                     changed.Add(new(EntityKinds.Worktree, gone.Id));
                 }
                 break;
+            case EventTypes.WorktreeMerged:
+                OnWorktreeMerged(s, e, changed);
+                break;
+            case EventTypes.WorktreeCleaned:
+                if (e.WorktreeId is not null && s.Worktrees.TryGetValue(e.WorktreeId, out var cw) && e.Payload<WorktreeCleanedData>() is { } cd)
+                {
+                    cw.LastCleanup = cd.Outcome == CleanupOutcomes.Removed ? null : new WorktreeCleanupRecord(e.Ts, cd.Outcome, cd.Auto, cd.Detail);
+                    cw.UpdatedAt = e.Ts;
+                    changed.Add(new(EntityKinds.Worktree, cw.Id));
+                }
+                break;
             case EventTypes.GitBranchChanged:
             case EventTypes.GitCheckout:
                 if (e.WorktreeId is not null && s.Worktrees.TryGetValue(e.WorktreeId, out var wtb) && e.Payload<GitRefData>() is { } r)
                 {
                     wtb.Branch = r.Branch; wtb.Head = r.Head ?? wtb.Head; wtb.Detached = r.Branch is null; wtb.UpdatedAt = e.Ts;
+                    ClearStaleMerge(wtb);
                     changed.Add(new(EntityKinds.Worktree, wtb.Id));
                 }
                 break;
@@ -560,11 +575,58 @@ public static class Reducer
         wt.Root = w.Root;
         wt.RepositoryId = w.RepositoryId;
         wt.Branch = w.Branch; wt.Head = w.Head; wt.Detached = w.Detached; wt.IsMain = w.IsMain;
-        if (wt.Removed) s.ConflictDirtyWorktrees.Add(wt.Id);
+        if (wt.Removed) { s.ConflictDirtyWorktrees.Add(wt.Id); wt.Origin = null; } // a new worktree at a reused path
         wt.Locked = w.Locked; wt.Prunable = w.Prunable; wt.Removed = false;
         wt.Modified = w.Modified; wt.Added = w.Added; wt.DeletedFiles = w.Deleted; wt.Untracked = w.Untracked;
         wt.Conflicted = w.Conflicted; wt.Ahead = w.Ahead; wt.Behind = w.Behind; wt.Upstream = w.Upstream;
         wt.Operation = w.Operation;
+        wt.UpdatedAt = e.Ts;
+        ClearStaleMerge(wt);
+        changed.Add(new(EntityKinds.Worktree, wt.Id));
+    }
+
+    /// <summary>A merged status holds for one branch and HEAD only: new commits on a reused branch are not merged.</summary>
+    private static void ClearStaleMerge(Worktree wt)
+    {
+        if (wt.Merged is { } m && (m.Branch != wt.Branch || m.Head != wt.Head || wt.Detached)) wt.Merged = null;
+        if (wt.Merged is null) wt.LastCleanup = null;
+    }
+
+    private static void OnWorktreeMerged(WorldState s, AgentEvent e, HashSet<EntityRef> changed)
+    {
+        if (e.WorktreeId is null || !s.Worktrees.TryGetValue(e.WorktreeId, out var wt) || wt.Removed) return;
+        if (e.Payload<WorktreeMergedData>() is not { } d || d.Branch != wt.Branch || d.Head != wt.Head || wt.Detached) return;
+        // Evidence from GitHub is never replaced by the weaker git inference.
+        if (wt.Merged is { Source: MergeSources.GitHub } && d.Source != MergeSources.GitHub) return;
+        wt.Merged = new WorktreeMerge(d.Source, d.Branch, d.Head, e.Evidence, wt.Merged is { } prev && prev.Head == d.Head && prev.Source == d.Source ? prev.DetectedAt : e.Ts,
+            d.Pr, d.Url, d.PrHeadOid, d.MergedAt, d.Reason);
+        wt.UpdatedAt = e.Ts;
+        changed.Add(new(EntityKinds.Worktree, wt.Id));
+    }
+
+    /// <summary>
+    /// Marks a worktree Overhive created for a session. Normally the worktree is already known (the launcher discovers
+    /// it first); otherwise a minimal entry is created that the next worktree.created/changed completes.
+    /// </summary>
+    private static void OnWorktreeProvisioned(WorldState s, AgentEvent e, HashSet<EntityRef> changed)
+    {
+        if (e.WorktreeId is null || e.Payload<WorktreeProvisionedData>() is not { } p) return;
+        if (!s.Worktrees.TryGetValue(e.WorktreeId, out var wt))
+        {
+            if (e.RepositoryId is null) return;
+            s.Worktrees[e.WorktreeId] = wt = new Worktree { Id = e.WorktreeId, Root = p.Root, RepositoryId = e.RepositoryId, CreatedAt = e.Ts, Branch = p.Branch };
+        }
+        else if (wt.Removed)
+        {
+            // A worktree removed earlier at the same path: this is a new one.
+            s.ConflictDirtyWorktrees.Add(wt.Id);
+            wt.Removed = false; wt.Branch = p.Branch; wt.Detached = false; wt.Operation = null;
+            wt.Modified = wt.Added = wt.DeletedFiles = wt.Untracked = wt.Conflicted = 0;
+        }
+        wt.Origin = new WorktreeOrigin
+        {
+            Via = p.Via, Branch = p.Branch, Base = p.Base, NewBranch = p.NewBranch, TerminalId = p.TerminalId, Tool = p.Tool, CreatedAt = e.Ts,
+        };
         wt.UpdatedAt = e.Ts;
         changed.Add(new(EntityKinds.Worktree, wt.Id));
     }

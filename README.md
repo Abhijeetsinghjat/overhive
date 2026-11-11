@@ -206,11 +206,57 @@ Add a tool Overhive does not know yet:
 | Allow or deny a risky tool call before it runs (Claude Code, opt-in) | **Needs you** card, agent panel, phone page, `overhive approvals` ([details](docs/AGENT_INTEGRATION.md#approvals-claude-code)) |
 | Message an agent, pause, resume, stop | Agent panel, `overhive message <agent> "…"`, `overhive pause <agent>` |
 | Start a new session of any tool | **+ New session** (key `n`), `overhive run -- <tool>` |
+| Clean up a worktree after its PR merged | **Merged — clean up** on the worktree card / panel and in "Needs you", `overhive worktrees clean` ([below](#cleaning-up-merged-worktrees)) |
+| Start an agent on its own branch in a fresh worktree | **+ New session** → Run in **a new worktree**, `overhive run --worktree <branch> -- <tool>` ([below](#a-session-in-a-new-worktree)) |
 | Is Overhive itself healthy? | Health tab, `overhive status`, `overhive doctor` |
+
+### A session in a new worktree
+
+In **+ New session**, pick a folder inside a Git repository and choose **Run in: a new worktree**. Enter a branch
+name (or tick **Use an existing branch**), pick the base from the searchable branch list (default: the remote
+default branch such as `origin/main`, else the current branch) and check the location shown before starting.
+Overhive runs `git worktree add` and starts the tool there. From a terminal inside the repository:
+
+```
+overhive run --worktree feat/login [--base origin/main] [--path DIR] [--existing] [--fetch] [--setup] -- claude
+```
+
+* New worktrees go to `<repo-parent>/<repo>.worktrees/<branch>` (`/` in the branch becomes `-`). Change it with
+  `"NewWorktree": { "Root": "~/worktrees/{repo}" }` in `config.json`.
+* **Fetch the base first** (`--fetch`) is off by default: Overhive does no network actions unless you ask.
+* A new worktree is a fresh checkout: ignored files such as `node_modules` or `.env` are **not** there. Optionally
+  set a per-repository setup command, offered in the dialog (off by default) and run with `--setup`:
+  `"NewWorktree": { "SetupCommand": { "my-app": ["npm", "ci"] } }` (key: repository folder name or main worktree
+  path; an argument list, never a shell line).
+* Nothing is deleted automatically: if the tool or the setup command fails to start, the worktree stays and its
+  path is reported. Worktrees created this way are marked "created by Overhive" in the worktree panel.
 
 Every status, file attribution, test result and reply carries an evidence label: **observed** (the
 OS or Git saw it), **reported** (the tool said so) or **inferred** (correlation). Overhive never shows
 an agent as working, or as changing a file, without evidence.
+
+### Cleaning up merged worktrees
+
+Overhive notices when a linked worktree's branch is merged: through your own `gh` CLI when it is installed
+and signed in (*observed*: the PR is merged and the worktree's HEAD is part of it), otherwise from git alone
+without fetching (*inferred*, shown as "likely merged"). By default it only **suggests**: the worktree gets a
+**Merged — clean up** button and a low-priority "Needs you" item; one click shows exactly what would be removed
+and the result of every safety check, and asks before running `git worktree remove` (never `--force`) and
+`git branch -d`. Nothing is removed while the worktree has uncommitted or untracked files, unpushed commits, is
+locked or the main worktree, or while an agent, an Overhive terminal or any process is working inside it.
+Ignored files that cannot be regenerated (`.env`, keys, local config; unlike `node_modules`, `bin`, `dist` …) are
+listed and need a second confirmation (`--include-ignored`), and auto mode never deletes them.
+
+```
+overhive worktrees                       # list, with merged status
+overhive worktrees clean                 # dry run: what would be removed and why / why not
+overhive worktrees clean <path> --yes    # remove (add --include-ignored to also delete listed .env etc.)
+```
+
+Configure in `config.json`: `{"WorktreeCleanup": {"Mode": "suggest"}}` (`"auto"` removes after
+`GracePeriodMinutes`, default 30, when every check passes; `"off"` disables it), `DeleteRemoteBranch` (default
+false), `ExcludeRepositories` (names or paths), `RegenerableIgnored` (ignored paths safe to delete). Details: [ARCHITECTURE.md](docs/ARCHITECTURE.md#worktree-cleanup),
+[SECURITY.md](docs/SECURITY.md).
 
 ## Documentation
 

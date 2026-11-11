@@ -164,3 +164,33 @@ public sealed class ApprovalAttentionProvider : IAttentionProvider
         }
     }
 }
+
+/// <summary>
+/// Linked worktrees whose branch is merged ("Merged — clean up"), low priority. Registered by the daemon only when
+/// worktree cleanup runs in "suggest" mode. A new HEAD on the branch clears the merged status and with it the item.
+/// </summary>
+public sealed class MergedWorktreeAttentionProvider : IAttentionProvider
+{
+    public string Name => "worktree-cleanup";
+
+    public IEnumerable<AttentionItem> Collect(WorldState state, AttentionContext ctx)
+    {
+        foreach (var w in state.Worktrees.Values)
+        {
+            if (w.Removed || w.IsMain || w.Merged is not { } m) continue;
+            var name = System.IO.Path.GetFileName(w.Root.TrimEnd('/'));
+            yield return new AttentionItem
+            {
+                Id = $"{AttentionKinds.WorktreeMerged}:{w.Id}:{m.Head}",
+                Kind = AttentionKinds.WorktreeMerged,
+                Priority = AttentionPriority.Low,
+                Title = (m.Likely ? "Likely merged — clean up: " : "Merged — clean up: ") + m.Branch + (name.Length > 0 ? $" ({name})" : ""),
+                Detail = (m.Pr is { } pr ? $"PR #{pr} merged (observed via gh). " : $"Inferred from git: {m.Reason}. ")
+                    + (w.LastCleanup is { } lc ? $"Last cleanup {lc.Outcome}: {lc.Detail}" : $"Worktree {w.Root}"),
+                Since = m.DetectedAt,
+                Evidence = m.Evidence,
+                Action = new AttentionAction(AttentionActions.OpenWorktree, "Clean up…", w.Id),
+            };
+        }
+    }
+}

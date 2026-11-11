@@ -18,6 +18,7 @@ import { guardSection, guardSigForAgent } from './guard.js';
 import { attentionOverview, attentionSig } from './attention.js';
 import { attention } from '../attention-store.js';
 import { approvalCard } from '../components/approval-card.js';
+import { cleanupButton, mergedSummary, isMerged } from './cleanup.js';
 
 const caps = new Map();       // agentId → { data, error, loading, sig }
 const history = new Map();    // fileKey → { events, error, loading, at }
@@ -527,7 +528,9 @@ function worktreeDetail(w) {
     h('div', { class: 'd-actions' },
       btn('Diff', 'git diff of this worktree', () => openDrawer('diff', { kind: 'worktree', worktreeId: w.id, title: worktreeLabel(w) })),
       btn('Log', 'git log', () => openDrawer('diff', { kind: 'log', worktreeId: w.id, title: worktreeLabel(w) })),
-      btn('Events', 'Timeline for this worktree', () => { setFilter('worktree', w.id); setTab('timeline'); })),
+      btn('Events', 'Timeline for this worktree', () => { setFilter('worktree', w.id); setTab('timeline'); }),
+      cleanupButton(w, 'btn btn-sm')),
+    isMerged(w) ? section('w-merged', 'Merged', null, h('div', { class: 'small' }, mergedSummary(w))) : null,
     conflictsFor((c) => c.worktreeId === w.id || (c.worktreeIds || []).includes(w.id)).length ? section('w-conf', 'Conflicts', null, conflictsFor((c) => c.worktreeId === w.id || (c.worktreeIds || []).includes(w.id))) : null,
     section('w-info', 'Git', null, kv([
       ['Repository', repoLink(w.repositoryId)],
@@ -537,10 +540,19 @@ function worktreeDetail(w) {
       ['Changes', `${w.modified || 0} modified · ${w.added || 0} added · ${w.deletedFiles || 0} deleted · ${w.untracked || 0} untracked · ${w.conflicted || 0} conflicted`],
       ['Lifecycle', w.lifecycle],
       ['Flags', [w.locked && 'locked', w.prunable && 'prunable', w.removed && 'removed'].filter(Boolean).join(', ') || null],
+      ['Created by', originText(w.origin)],
     ])),
     section('w-agents', 'Agents', agents.length, agents.length ? agents.map(([id, ts]) => h('div', { class: 'ov-item' }, agentLink(id), h('span', { class: 'muted small' }, ' · last touch ', agoEl(ts), ' ', evBadge('inferred', 'Worktree attribution is inferred from tool-call paths')))) : h('div', { class: 'muted small' }, 'No agent activity seen in this worktree.')),
     section('w-files', 'Files', files.length, files.length ? files.map((f) => fileLine(f, null)) : h('div', { class: 'muted small' }, 'No tracked changes.')),
     commits.length ? section('w-commits', 'Commits', commits.length, commits.slice(0, 20).map(commitItem)) : null);
+}
+
+/** "Overhive (dashboard) for <agent>, new branch from origin/main" for worktrees Overhive created for a session. */
+function originText(o) {
+  if (!o) return null;
+  const agentId = o.terminalId ? get('terminal', o.terminalId)?.agentId : null;
+  return h('span', null, `Overhive (${o.via}) for `, agentId ? agentLink(agentId) : (o.tool || 'a session'),
+    o.newBranch ? `, new branch off ${o.base || '?'} · ` : ', existing branch · ', agoEl(o.createdAt));
 }
 
 function repoDetail(r) {

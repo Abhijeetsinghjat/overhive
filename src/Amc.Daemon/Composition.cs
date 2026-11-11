@@ -6,6 +6,7 @@ using Amc.Daemon.Guard;
 using Amc.Daemon.Infrastructure;
 using Amc.Daemon.Providers.Claude;
 using Amc.Daemon.Tools;
+using Amc.Daemon.Worktrees;
 
 namespace Amc.Daemon;
 
@@ -30,6 +31,7 @@ public static class Composition
         services.AddApprovals();
         services.AddConflicts();
         services.AddGuard();
+        services.AddWorktreeCleanup(options);
         services.AddAttention(options);
         return services;
     }
@@ -46,6 +48,7 @@ public static class Composition
         app.MapConflictEndpoints();
         app.MapGuardEndpoints();
         AttentionModule.MapAttentionEndpoints(app);
+        app.MapWorktreeCleanupEndpoints();
         return app;
     }
 }

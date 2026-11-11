@@ -21,6 +21,35 @@ version is 0.x, minor versions may change behaviour.
   `approval.resolved` events (decision, local or remote, latency) appear in the timeline. `overhive hooks
   install` writes a PreToolUse hook with a matching longer timeout only while approvals are on (curl on
   Linux/macOS, `hook-forward --approval --max-time` on Windows); `hooks status` and `doctor` check it.
+- Clean up a worktree after its PR merges. Linked worktrees whose branch is merged are detected through the
+  user's own `gh` CLI when installed and authenticated (observed; matched by branch name and by the worktree's
+  HEAD being part of the PR head, so a branch reused after the merge is not merged) or, without gh, from git
+  alone without fetching ("likely merged", inferred). Default mode `suggest`: a **Merged — clean up** badge and
+  button, a low-priority "Needs you" item, and a confirm dialog listing what will be removed and every safety
+  check. Removal is `git worktree remove` (never `--force`) plus `git branch -d` (`-D` only for a squash merge
+  whose tip gh confirmed as the PR head); the remote branch is deleted only with `DeleteRemoteBranch` and only
+  when its tip is the PR head. Blocked for the main or a locked worktree, uncommitted or untracked files,
+  unpushed commits, an active agent, an open Overhive terminal or any process with its current directory
+  inside; all re-checked right before removal. Ignored files that are not regenerable (`.env`, keys, local
+  config; `RegenerableIgnored` lists the safe ones such as `node_modules`, `bin`, `dist`) block auto mode and
+  need an extra confirmation (`confirmIgnored`, `--include-ignored`) for a manual cleanup. `Mode: "auto"` removes after a 30 min grace period. New
+  events `worktree.merged` and `worktree.cleaned` (timeline), `GET/POST /api/worktrees/{id}/cleanup`,
+  `POST /api/worktrees/check-merged`, and `overhive worktrees clean [<path>] [--dry-run] [--yes]`. `Reducer.Version` 15.
+- **Start a session in a new worktree**: **+ New session** offers *Run in: this folder | a new worktree* once
+  the folder is inside a Git repository. Enter a branch name (validated with `git check-ref-format`, refused
+  if it exists unless *Use an existing branch* is ticked), pick the base from a searchable list of local and
+  remote branches (default: the remote default branch, e.g. `origin/main`, else the current branch) and check
+  the full location before starting (default `<repo-parent>/<repo>.worktrees/<branch>`, configurable with
+  `NewWorktree:Root` and a `{repo}` placeholder; long-path warning on Windows). Overhive runs
+  `git worktree add --no-track -b <branch> <path> <base>` (argument list, no shell) and starts the tool there.
+  Optional, off by default: *fetch the base first*, and a per-repository `NewWorktree:SetupCommand` (e.g.
+  `npm ci`) run before the agent starts, because ignored files are not in a new worktree. A failure after
+  the worktree exists leaves it in place and reports its path; nothing is deleted automatically.
+  CLI: `overhive run --worktree <branch> [--base REF] [--path DIR] [--existing] [--fetch] [--setup] -- <tool>`.
+  API: `GET /api/new-worktree/plan`, `POST /api/new-worktree`, and `worktree` in `POST /api/sessions`.
+  Such worktrees are marked in state (`Worktree.Origin`, event `worktree.provisioned`: branch, base, session
+  terminal, tool) and in the worktree panel, so cleanup after merge can be offered later. `Reducer.Version` 14
+  (snapshots from older versions are discarded and the log replayed once).
 
 ## [0.3.0] - 2026-11-02
 

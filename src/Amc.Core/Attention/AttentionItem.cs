@@ -20,6 +20,7 @@ public static class AttentionKinds
     public const string Risk = "risk";
     public const string ClaimContradicted = "claim.contradicted";
     public const string Approval = "approval";
+    public const string WorktreeMerged = "worktree.merged";
 }
 
 /// <summary>What the primary button of an item does. The UI maps these to existing panels and endpoints.</summary>
@@ -37,6 +38,8 @@ public static class AttentionActions
     public const string OpenRisks = "open-risks";
     /// <summary>Allow or deny a held tool call (Target = approval id; the card is built from <see cref="AttentionItem.Approval"/>).</summary>
     public const string Approve = "approve";
+    /// <summary>Select the worktree (Target = worktree id); its panel offers the cleanup.</summary>
+    public const string OpenWorktree = "open-worktree";
 }
 
 public sealed record AttentionAction(string Kind, string Label, string? Target);

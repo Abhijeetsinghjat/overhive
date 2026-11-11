@@ -62,6 +62,7 @@ function actionTitle(a) {
     case 'reply': return 'Send a message through the agent\'s message transport';
     case 'open-conflict': return 'Show the conflict details';
     case 'approve': return 'Allow or deny this tool call';
+    case 'open-worktree': return 'Open the worktree: review the safety checks and clean it up';
     default: return 'Open this agent';
   }
 }

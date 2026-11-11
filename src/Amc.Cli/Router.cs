@@ -17,7 +17,9 @@ public static class Router
         new("inspect", "inspect <agent> [--json]", "Full detail of one agent", InspectCommand.RunAsync, 1, 1),
         new("conflicts", "conflicts [warn <n|key>] [--yes] [--json]", "Conflicts with compared line ranges; 'warn' messages the involved agents",
             ConflictsCommand.RunAsync, 0, 2, Flags: ["yes"]),
-        new("worktrees", "worktrees [--all] [--json]", "Repositories' worktrees, state and owners", WorktreesCommand.RunAsync, Flags: ["all"]),
+        new("worktrees", "worktrees [--all] [--json] | worktrees clean [<path>] [--dry-run] [--yes] [--include-ignored] [--json]",
+            "Repositories' worktrees, state, owners and merged status; 'clean' removes merged worktrees (dry run unless --yes)",
+            WorktreesCommand.RunAsync, 0, 2, Flags: ["all", "yes", "dry-run", "include-ignored"]),
         new("emit", "emit <kind> --tool T --agent ID [--parent ID] [--title X] [--cwd DIR] [--pid N] [--model M] [--data JSON | stdin]",
             "Report an agent event through the open protocol (for any AI tool's hooks or wrappers)", EmitCommand.RunAsync, 1, 1,
             Values: ["tool", "agent", "parent", "title", "cwd", "pid", "model", "type", "data", "status", "text", "path", "change", "reason"]),
@@ -50,8 +52,9 @@ public static class Router
             "Forward a hook payload to amcd's private socket; what installed hooks run on Windows. Always exits 0 (fails open)",
             HookForwardAsync, 0, 1, Flags: ["wait", "approval"], Values: ["event", "socket", "tag", "max-time"]),
         new("doctor", "doctor [--settings PATH] [--json]", "Diagnose the installation", DoctorCommand.RunAsync, Values: ["settings"]),
-        new("run", "run [--id ID] [--cols N] [--rows N] -- <cmd> [args...]", "Run an agent under a PTY owned by Overhive", RunAsync,
-            AcceptsRest: true, Values: ["id", "cols", "rows"]),
+        new("run", "run [--id ID] [--cols N] [--rows N] [--worktree BRANCH [--base REF] [--path DIR] [--existing] [--fetch] [--setup]] -- <cmd> [args...]",
+            "Run an agent under a PTY owned by Overhive (--worktree: in a new git worktree of the current repository)", RunAsync,
+            AcceptsRest: true, Flags: ["existing", "fetch", "setup"], Values: ["id", "cols", "rows", "worktree", "base", "path"]),
         new("help", "help [command]", "Show help", HelpAsync, 0, 1),
         new("version", "version", "Print the version", VersionAsync),
     ];
@@ -124,6 +127,13 @@ public static class Router
             options.TerminalId = System.Text.RegularExpressions.Regex.IsMatch(id, "^[A-Za-z0-9_-]{1,64}$") ? id : throw new UsageException("invalid --id");
         if (args.Opt("cols") is { } c) options.Cols = int.TryParse(c, out var cols) && cols is > 10 and < 1000 ? cols : throw new UsageException("invalid --cols");
         if (args.Opt("rows") is { } r) options.Rows = int.TryParse(r, out var rows) && rows is > 5 and < 500 ? rows : throw new UsageException("invalid --rows");
+        if (args.Opt("worktree") is not null)
+        {
+            options.TerminalId ??= Amc.Core.Events.Ulid.NewId();
+            options.Cwd = await Run.WorktreeRun.PrepareAsync(ctx, args, options.TerminalId, ct);
+        }
+        else if (args.Opt("base") is not null || args.Opt("path") is not null || args.Flag("existing") || args.Flag("fetch") || args.Flag("setup"))
+            throw new UsageException("--base, --path, --existing, --fetch and --setup need --worktree BRANCH");
         return await Run.RunCommand.RunAsync(args.Rest.ToArray(), options, ct);
     }
 

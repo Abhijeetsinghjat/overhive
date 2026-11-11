@@ -1,12 +1,18 @@
+using System.Text.Json.Nodes;
 using Amc.Cli.Infrastructure;
 using Amc.Core.Domain;
 
 namespace Amc.Cli.Commands;
 
-public static class WorktreesCommand
+public static partial class WorktreesCommand
 {
     public static async Task<int> RunAsync(CliContext ctx, ParsedArgs args, CancellationToken ct)
     {
+        if (args.Positionals.Count > 0)
+        {
+            if (args.Positionals[0] != "clean") throw new UsageException("usage: agentctl worktrees [--all] | worktrees clean [<path>] [--dry-run] [--yes]");
+            return await CleanAsync(ctx, args, args.Positionals.Count > 1 ? args.Positionals[1] : null, ct);
+        }
         if (args.Json)
         {
             Api.PrintJson(ctx, (await ctx.Client.GetAsync("api/worktrees", ct)).Body);
@@ -27,7 +33,7 @@ public static class WorktreesCommand
     public static TextTable Build(IEnumerable<Worktree> worktrees, IReadOnlyDictionary<string, Repository> repos,
         IReadOnlyDictionary<string, Agent> agents, Style s, string home, bool includeRemoved)
     {
-        var t = new TextTable("REPO", "ROOT", "BRANCH", "HEAD", "STATE", "M/A/D/?/U", "↑↓", "AGENTS");
+        var t = new TextTable("REPO", "ROOT", "BRANCH", "HEAD", "STATE", "M/A/D/?/U", "↑↓", "MERGED", "AGENTS");
         foreach (var w in worktrees.Where(w => includeRemoved || !w.Removed)
                      .OrderBy(w => repos.GetValueOrDefault(w.RepositoryId)?.Name, StringComparer.Ordinal).ThenBy(w => !w.IsMain).ThenBy(w => w.Root, StringComparer.Ordinal))
         {
@@ -55,9 +61,82 @@ public static class WorktreesCommand
                 state,
                 w.Conflicted > 0 ? s.Red(counts) : w.Dirty ? s.Yellow(counts) : s.Dim(counts),
                 w.Ahead + w.Behind > 0 ? $"{w.Ahead}↑{w.Behind}↓" : "",
+                MergedLabel(w, s),
                 string.Join(",", owners));
         }
         return t;
+    }
+}
+
+public static partial class WorktreesCommand
+{
+    /// <summary>"PR #12 (gh)", "likely (git)", the last failed cleanup, or empty.</summary>
+    public static string MergedLabel(Worktree w, Style s)
+    {
+        if (w.Removed || w.Merged is not { } m) return "";
+        var label = m.Pr is { } pr ? s.Green($"PR #{pr} (gh)") : s.Yellow("likely (git)");
+        return w.LastCleanup is { } lc ? label + " " + s.Red(lc.Outcome) : label;
+    }
+
+    /// <summary>
+    /// `worktrees clean [path]`: for one worktree, or every merged one, prints what would be removed and the result of every
+    /// safety check. Nothing is removed without --yes (and never with --dry-run).
+    /// </summary>
+    public static async Task<int> CleanAsync(CliContext ctx, ParsedArgs args, string? query, CancellationToken ct)
+    {
+        var s = ctx.Style;
+        var worktrees = await Api.Worktrees(ctx, ct);
+        var targets = query is not null
+            ? [WorktreeRef.Resolve(worktrees, query, ctx.Cwd)]
+            : worktrees.Where(w => !w.Removed && !w.IsMain && w.Merged is not null).OrderBy(w => w.Root, StringComparer.Ordinal).ToList();
+        var apply = args.Flag("yes") && !args.Flag("dry-run");
+        var results = new JsonArray();
+        if (targets.Count == 0 && !args.Json) ctx.Out.WriteLine("No merged worktrees to clean up.");
+        var failed = 0;
+        foreach (var w in targets)
+        {
+            var path = $"api/worktrees/{w.Id}/cleanup"; // ids ("wt:<hex>") are safe path segments
+            var res = await ctx.Client.SendAsync(HttpMethod.Post, path, new { confirm = apply, dryRun = !apply, confirmIgnored = apply && args.Flag("include-ignored") }, ct);
+            if (res.Status == 401) throw AmcClient.ToException(res, "worktrees clean");
+            var node = res.Node as JsonObject;
+            if (node is not null) results.Add(node.DeepClone());
+            if (!res.Success) failed++;
+            if (args.Json) continue;
+
+            var plan = node?["plan"] as JsonObject;
+            var canRemove = plan?["checks"] is JsonArray checks && checks.All(c => c?["ok"]?.GetValue<bool>() == true || c?["name"]?.ToString() == "ignored-files");
+            var verb = !apply ? (canRemove ? s.Green("would remove") : s.Yellow("would keep")) : res.Success ? s.Green("removed") : s.Red(node?["outcome"]?.ToString() ?? "failed");
+            ctx.Out.WriteLine($"{s.Bold(Fmt.HomeRelative(w.Root, ctx.Home))}  {verb}");
+            if (plan is not null)
+            {
+                ctx.Out.WriteLine($"  worktree       {plan["root"]}");
+                if (plan["branch"] is { } b) ctx.Out.WriteLine($"  local branch   {b}");
+                if (plan["remoteBranch"] is { } rb) ctx.Out.WriteLine($"  remote branch  {rb}");
+                if (plan["ignoredFiles"] is JsonArray { Count: > 0 } ig)
+                {
+                    var total = plan["ignoredTotal"]?.GetValue<int>() ?? ig.Count;
+                    ctx.Out.WriteLine(s.Yellow(s.Bold($"  ⚠ also deletes {total} ignored path(s) that are not regenerable:")));
+                    foreach (var p in ig) ctx.Out.WriteLine(s.Yellow($"      {p}"));
+                    if (total > ig.Count) ctx.Out.WriteLine(s.Yellow($"      … and {total - ig.Count} more"));
+                    ctx.Out.WriteLine(s.Yellow("    removing needs --yes --include-ignored"));
+                }
+                foreach (var c in (plan["checks"] as JsonArray ?? []).OfType<JsonObject>())
+                {
+                    var ok = c["ok"]?.GetValue<bool>() == true;
+                    ctx.Out.WriteLine($"  {(ok ? s.Green("✓") : s.Red("✗"))} {c["name"],-15}{(ok ? s.Dim(c["detail"]?.ToString() ?? "") : c["detail"]?.ToString())}");
+                }
+            }
+            foreach (var st in (node?["steps"] as JsonArray ?? []).OfType<JsonObject>())
+            {
+                var o = st["outcome"]?.ToString();
+                ctx.Out.WriteLine($"  {(o == "ok" ? s.Green("✓") : o == "skipped" ? s.Dim("–") : s.Red("✗"))} $ {st["command"]}" + (st["detail"] is { } d ? s.Dim(" — " + d) : ""));
+            }
+            var detail = node?["detail"]?.ToString() ?? node?["error"]?.ToString() ?? res.ErrorText();
+            (res.Success ? ctx.Out : ctx.Err).WriteLine("  " + detail);
+        }
+        if (args.Json) Api.PrintJson(ctx, results);
+        else if (!apply && targets.Count > 0) ctx.Out.WriteLine(s.Dim("Dry run: nothing was removed. Run with --yes to remove the worktrees marked 'would remove'."));
+        return failed == 0 ? ExitCodes.Ok : ExitCodes.Error;
     }
 }
 

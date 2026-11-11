@@ -4,6 +4,7 @@ import { store, register, get, all } from '../store.js';
 import { ui, select, isSelected, setWt } from '../ui.js';
 import { agentName, statusMeta, agentColor, evBadge, fileStatusLetter, worktreeLabel, repoName } from '../model.js';
 import { filterCtx, worktreePasses, agentPasses, filePasses } from '../filters.js';
+import { cleanupButton } from './cleanup.js';
 
 export function initWorktrees() {
   const root = document.getElementById('view-worktrees');
@@ -86,7 +87,7 @@ export function initWorktrees() {
 
       // Worktrees
       const wts = all('worktree').filter((w) => !w.removed || ui.wt.allWorktrees).filter((w) => worktreePasses(w, ctx))
-        .filter((w) => ui.wt.allWorktrees || Object.keys(w.agents || {}).length || fileNodes.some((n) => n.f.worktreeId === w.id) || dirtyCount(w))
+        .filter((w) => ui.wt.allWorktrees || Object.keys(w.agents || {}).length || fileNodes.some((n) => n.f.worktreeId === w.id) || dirtyCount(w) || (w.merged && !w.removed))
         .sort((a, b) => repoName(a.repositoryId).localeCompare(repoName(b.repositoryId)) || (b.isMain - a.isMain) || a.root.localeCompare(b.root));
       const wtSet = new Set(wts.map((w) => w.id));
       const shownFiles = fileNodes.filter((n) => wtSet.has(n.f.worktreeId));
@@ -168,7 +169,7 @@ function hover(el, key, highlight) {
 }
 
 function wtSig(w) {
-  return JSON.stringify([w.branch, w.head, w.modified, w.added, w.deletedFiles, w.untracked, w.conflicted, w.ahead, w.behind, w.operation, w.removed, w.locked,
+  return JSON.stringify([w.branch, w.head, w.modified, w.added, w.deletedFiles, w.untracked, w.conflicted, w.ahead, w.behind, w.operation, w.removed, w.locked, w.merged, w.lastCleanup,
     Object.keys(w.agents || {}).length, isSelected('worktree', w.id), filesIn(w.id), commitsIn(w.id)]);
 }
 const filesIn = (id) => { let n = 0; for (const f of store.e.file.values()) if (f.worktreeId === id) n++; return n; };
@@ -189,7 +190,8 @@ function wtCard(w, highlight) {
       h('span', { class: 'tag' + (w.isMain ? ' tag-main' : '') }, w.isMain ? 'main worktree' : 'linked worktree'),
       w.operation ? h('span', { class: 'tag tag-bad' }, w.operation) : null,
       w.locked ? h('span', { class: 'tag' }, 'locked') : null,
-      w.removed ? h('span', { class: 'tag tag-bad' }, 'removed') : null),
+      w.removed ? h('span', { class: 'tag tag-bad' }, 'removed') : null,
+      w.lastCleanup ? h('span', { class: 'tag tag-bad', title: w.lastCleanup.detail || '' }, 'cleanup ' + w.lastCleanup.outcome) : null),
     h('div', { class: 'wc-path mono', title: w.root }, '\u200e' + w.root),
     h('div', { class: 'wc-row small' },
       h('span', { class: 'muted' }, repoName(w.repositoryId)),
@@ -198,7 +200,8 @@ function wtCard(w, highlight) {
     h('div', { class: 'wc-row small' },
       dirty ? h('span', { class: 'wc-dirty' }, `${dirty} uncommitted`) : h('span', { class: 'wc-clean' }, '✓ clean'),
       ...chips),
-    h('div', { class: 'wc-row small muted' }, `${commitsIn(w.id)} commits · ${filesIn(w.id)} files · ${nAgents} agent${nAgents === 1 ? '' : 's'}`));
+    h('div', { class: 'wc-row small muted' }, `${commitsIn(w.id)} commits · ${filesIn(w.id)} files · ${nAgents} agent${nAgents === 1 ? '' : 's'}`),
+    w.merged && !w.removed && !w.isMain ? h('div', { class: 'wc-row small' }, cleanupButton(w, 'btn btn-sm')) : null);
   el.addEventListener('click', () => select('worktree', w.id));
   hover(el, 'w:' + w.id, highlight);
   return el;
