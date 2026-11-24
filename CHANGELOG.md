@@ -6,6 +6,19 @@ version is 0.x, minor versions may change behaviour.
 ## [Unreleased]
 
 ### Added
+- **Usage over time and estimated API cost** ([docs/USAGE.md](docs/USAGE.md)). The Usage tab gets an
+  **Over time** chart (stacked bars per hour or day by model, last 48 hours to everything kept, **Est. cost** or
+  **Tokens**, chart or table) and **Est. cost** columns per session (with sub-agents) and per model;
+  `overhive usage` adds an `EST. COST` column and `overhive usage --history [--by day|hour] [--range 30d]`
+  prints one row per day or hour. The estimate is what the tokens would cost at the provider's API list prices
+  (not a subscription's price), labelled **inferred**. Each response is priced on its own: 5-minute vs 1-hour
+  cache writes, Claude Haiku 5.5's long-prompt prices, fast mode and US-only inference. Anthropic's list prices
+  are built in (as of 2026-11-11); other models are added in config `Pricing` (`*` prefix wildcards), and a
+  model without a price is shown as "not priced" and left out of the total (marked `+`), never counted as zero.
+  Usage recorded before this version has no cache lifetime and is priced at the 5-minute rate, shown as a lower
+  bound. Computed on request from the existing event log (no new tables, no background work):
+  `GET /api/usage/report`, `GET /api/pricing`. Usage events and the open protocol's `usage` report gain the
+  optional `cacheWrite1h`, `speed` and `geo` fields. `"Pricing": {"Enabled": false}` hides every cost.
 - Approve or deny Claude Code tool calls from the dashboard (opt-in, config `Approvals`, off by default).
   `"Mode": "risky"` holds the calls the risk rules rate warn or critical; `"all-edits"` also holds every
   Write/Edit/MultiEdit/NotebookEdit. A held call is an urgent **Needs you** card (also on the phone page and

@@ -56,6 +56,8 @@ public sealed class AmcOptions
     public Amc.Daemon.Attention.NotificationOptions Notifications { get; set; } = new();
     /// <summary>Approve or deny Claude Code tool calls from the dashboard (section "Approvals"; off by default).</summary>
     public Amc.Core.Approvals.ApprovalSettings Approvals { get; set; } = new();
+    /// <summary>Estimated API cost of token usage: built-in Anthropic list prices plus your own entries (section "Pricing").</summary>
+    public Amc.Core.Usage.PricingSettings Pricing { get; set; } = new();
     /// <summary>Detect worktrees whose branch is merged and offer (or, in "auto" mode, perform) their cleanup (section "WorktreeCleanup").</summary>
     public Amc.Daemon.Worktrees.WorktreeCleanupOptions WorktreeCleanup { get; set; } = new();
     /// <summary>

@@ -33,7 +33,7 @@ From a shell, `agentctl emit` and `agentctl inbox` do this for you.
 | `tool_start` | `{ "id", "name", "summary"?, "path"?, "command"? }` (`command` marks a shell command) |
 | `tool_end` | `{ "id", "name"?, "command"?, "exitCode"?, "error"?, "output"? }` (`error` or non-zero `exitCode` = failed) |
 | `file` | `{ "path" (absolute), "change": "created" \| "modified" \| "deleted", "toolId"? }` |
-| `usage` | `{ "id" (model response id), "model"?, "input", "output", "cacheRead"?, "cacheWrite"? }` (repeat with growing values; only the increase is counted) |
+| `usage` | `{ "id" (model response id), "model"?, "input", "output", "cacheRead"?, "cacheWrite"?, "cacheWrite1h"?, "speed"?, "geo"? }` (repeat with growing values; only the increase is counted). The last three only refine the [cost estimate](USAGE.md): the part of `cacheWrite` written with a 1-hour cache lifetime, `"fast"` for fast mode, `"us"` for US-only inference |
 | `end` | `{ "status"?: "completed" \| "failed", "reason"? }` |
 
 Everything reported is shown with the evidence label **reported**. File changes are also confirmed by Git

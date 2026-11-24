@@ -67,6 +67,8 @@ export const api = {
   worktreeFile: (id, path) => request('GET', `/api/worktrees/${encodeURIComponent(id)}/file?` + qs({ path })),
   worktreeLog: (id, path, limit = 50) => request('GET', `/api/worktrees/${encodeURIComponent(id)}/log?` + qs({ path, limit })),
   tools: () => request('GET', '/api/tools'),
+  usageReport: (params) => request('GET', '/api/usage/report?' + qs(params)),
+  pricing: () => request('GET', '/api/pricing'),
   launchSession: (body) => request('POST', '/api/sessions', body),
   newWorktreePlan: (params) => request('GET', '/api/new-worktree/plan?' + qs(params)),
   agentDiff: (id) => request('GET', `/api/agents/${encodeURIComponent(id)}/diff`),

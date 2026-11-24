@@ -681,6 +681,42 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .usage-summary .stat { background: var(--panel); border: 1px solid var(--border); padding: 12px 14px; box-shadow: var(--shadow-sm); }
 .usage-summary .stat-v { font-size: 22px; }
 .usage-summary .stat-l { color: var(--muted); font-size: 12px; }
+/* Usage over time (components/usage-chart.js). Series slots: the dataviz reference categorical palette, validated
+   (lightness, chroma, adjacent CVD and normal-vision separation) against --panel in each theme. Light-mode slots 3-5
+   are below 3:1 on white, so the chart always offers the Table view. */
+:root { --u-s1: #3987e5; --u-s2: #d95926; --u-s3: #199e70; --u-s4: #c98500; --u-s5: #d55181; --u-other: #7b8494; }
+:root[data-theme="light"] { --u-s1: #2a78d6; --u-s2: #eb6834; --u-s3: #1baf7a; --u-s4: #eda100; --u-s5: #e87ba4; --u-other: #9aa2af; }
+.usage-body > * { flex: none; } /* sections keep their height; the body scrolls */
+.usage-over { background: var(--panel); border: 1px solid var(--border); padding: 10px 14px 12px; box-shadow: var(--shadow-sm); min-width: 0; }
+.usage-over-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.usage-over-head .section-title { margin: 0; }
+.usage-over-sum { flex: 1 1 260px; text-align: right; }
+.u-seg { display: inline-flex; border: 1px solid var(--border2); border-radius: var(--r-pill, 10px); overflow: hidden; }
+.u-seg-b { background: transparent; border: 0; color: var(--text2); font: inherit; font-size: 12px; padding: 2px 10px; cursor: pointer; }
+.u-seg-b + .u-seg-b { border-left: 1px solid var(--border2); }
+.u-seg-b.on { background: var(--panel3); color: var(--text); font-weight: 600; }
+.u-seg-b:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.uc { position: relative; min-width: 0; }
+.uc-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 6px; font-size: 12px; color: var(--text2); }
+.uc-key { display: inline-flex; align-items: center; gap: 6px; }
+.uc-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.uc-plot { position: relative; }
+.uc-svg { display: block; overflow: visible; }
+.uc-grid { stroke: var(--border); stroke-width: 1; }
+.uc-base { stroke: var(--border2); stroke-width: 1; }
+.uc-axis { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.uc-hit { fill: transparent; cursor: default; outline: none; }
+.uc-hit.on { fill: color-mix(in srgb, var(--text) 6%, transparent); }
+.uc-tip { position: absolute; pointer-events: none; z-index: 5; min-width: 170px; max-width: 280px; background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: var(--shadow-sm); }
+.uc-tip-title { color: var(--muted); font-size: 11px; }
+.uc-tip-total { margin: 1px 0 3px; }
+.uc-tip-row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.uc-tip-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.uc-tip-note { color: var(--muted); font-size: 11px; margin-top: 3px; white-space: normal; }
+.uc-empty { padding: 28px 8px; }
+.uc-table-wrap { max-height: 320px; overflow: auto; }
+.usage-summary .stat-cost .stat-v { color: var(--text); }
 .usage-table { width: 100%; }
 .usage-table td, .usage-table th { padding: 7px 10px; }
 .usage-table .num, .usage-mini .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
